@@ -17,14 +17,6 @@ This project is being developed with the assistance of an AI agent.
 
 *(Instructions on how to build the project from source will be added here.)*
 
-```bash
-# Example build steps
-git clone [https://github.com/your-repo/cognitive-pipeline-application.git](https://github.com/your-repo/cognitive-pipeline-application.git)
-cd cognitive-pipeline-application
-cmake .
-cmake --build .
-````
-
 ## Usage
 
 *(Instructions on how to use the application will be added here.)*
