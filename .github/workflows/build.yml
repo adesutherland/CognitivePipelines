@@ -35,6 +35,8 @@ jobs:
       - name: Setup vcpkg [Ubuntu]
         if: startsWith(matrix.os, 'ubuntu')
         uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '1b47e0242236a0a75d713c2c5b16c14c5c163b6d'
 
       - name: Install Boost and cpr [Ubuntu]
         if: startsWith(matrix.os, 'ubuntu')
@@ -44,6 +46,8 @@ jobs:
       - name: Setup vcpkg [Windows]
         if: startsWith(matrix.os, 'windows')
         uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '1b47e0242236a0a75d713c2c5b16c14c5c163b6d'
 
       - name: Install Boost and cpr [Windows]
         if: startsWith(matrix.os, 'windows')
