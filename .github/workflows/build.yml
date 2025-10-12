@@ -40,9 +40,9 @@ jobs:
         if: startsWith(matrix.os, 'macos')
         run: brew install boost cpr
 
-      - name: Set up vcpkg (Windows)
+      - name: Setup vcpkg
         if: startsWith(matrix.os, 'windows')
-        uses: actions/setup-vcpkg@v1
+        uses: lukka/run-vcpkg@v11
 
       - name: Install Boost and cpr on Windows
         if: startsWith(matrix.os, 'windows')
