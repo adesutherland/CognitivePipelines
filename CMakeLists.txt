@@ -15,6 +15,7 @@ set(CMAKE_AUTORCC ON)
 
 # Find Qt6 components
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+# Require Boost headers (Boost.Process is header-only in this usage)
 find_package(Boost 1.70 REQUIRED COMPONENTS headers)
 
 # Fetch cpr via FetchContent
@@ -27,13 +28,6 @@ FetchContent_Declare(
 # Ensure transitive dependencies are made available
 FetchContent_MakeAvailable(cpr)
 
-# Vendor Boost headers to ensure Boost.Process API availability (header-only)
-# This provides a consistent header set independent of the system installation.
-FetchContent_Declare(
-    boost_headers
-    URL https://archives.boost.io/release/1.82.0/source/boost_1_82_0.zip
-)
-FetchContent_MakeAvailable(boost_headers)
 
 
 # Sources
@@ -47,10 +41,6 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/PythonScriptConnector.h
 )
 
-# Include vendored Boost headers if available
-if (boost_headers_SOURCE_DIR)
-    target_include_directories(CognitivePipelines PRIVATE ${boost_headers_SOURCE_DIR})
-endif()
 
 # Link libraries
 target_link_libraries(CognitivePipelines PRIVATE
@@ -60,15 +50,9 @@ target_link_libraries(CognitivePipelines PRIVATE
     cpr::cpr
 )
 
-# Boost headers (header-only Boost.Process)
-# Prefer linking the Boost::headers target if available, but always add include dirs
-if (TARGET Boost::headers)
-    target_link_libraries(CognitivePipelines PRIVATE Boost::headers)
-endif()
-# Ensure headers are on the include path regardless of imported target availability
-if (Boost_INCLUDE_DIRS)
-    target_include_directories(CognitivePipelines PRIVATE ${Boost_INCLUDE_DIRS})
-endif()
+# Boost headers (required)
+# Link against Boost::headers target provided by find_package(Boost)
+target_link_libraries(CognitivePipelines PRIVATE Boost::headers)
 
 # On macOS and Windows, optionally create a GUI app without console if needed
 if(WIN32)
