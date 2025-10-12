@@ -26,6 +26,12 @@ jobs:
           version: ${{ matrix.qt-version }}
           cache: true
 
+      - name: Install build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config autoconf-archive
+
       # macOS uses Homebrew (unchanged)
       - name: Install Boost and cpr on macOS
         if: startsWith(matrix.os, 'macos')
