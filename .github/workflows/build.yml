@@ -26,30 +26,42 @@ jobs:
           version: ${{ matrix.qt-version }}
           cache: true
 
-      - name: Install Linux build dependencies
+      - name: Install Linux build essentials (apt)
         if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libgl1-mesa-dev libcpr-dev libssl-dev zlib1g-dev
+          sudo apt-get install -y build-essential libgl1-mesa-dev libssl-dev zlib1g-dev
 
-      - name: Install Boost on Ubuntu
+      - name: Setup vcpkg (Ubuntu)
         if: startsWith(matrix.os, 'ubuntu')
-        run: sudo apt-get update && sudo apt-get install -y libboost-all-dev
+        uses: actions/setup-vcpkg@v1
+
+      - name: Install Boost and cpr via vcpkg (Ubuntu)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: vcpkg install boost:x64-linux cpr:x64-linux
 
       - name: Install Boost and cpr on macOS
         if: startsWith(matrix.os, 'macos')
         run: brew install boost cpr
 
-      - name: Setup vcpkg
+      - name: Setup vcpkg (Windows)
         if: startsWith(matrix.os, 'windows')
-        uses: lukka/run-vcpkg@v11
+        uses: actions/setup-vcpkg@v1
 
       - name: Install Boost and cpr on Windows
         if: startsWith(matrix.os, 'windows')
         run: vcpkg install boost:x64-windows cpr:x64-windows
 
-      - name: Configure (CMake) [non-Windows]
-        if: ${{ !startsWith(matrix.os, 'windows') }}
+      - name: Configure (CMake) [Ubuntu]
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          cmake -S . -B build \
+                -DCMAKE_BUILD_TYPE=Release \
+                -D CMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
+                -D CMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake"
+
+      - name: Configure (CMake) [macOS]
+        if: startsWith(matrix.os, 'macos')
         run: |
           cmake -S . -B build \
                 -DCMAKE_BUILD_TYPE=Release \
