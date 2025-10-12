@@ -13,20 +13,13 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-# Find Qt6 components
+# Dependencies resolved from the system (no FetchContent)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
-# Require Boost headers (Boost.Process is header-only in this usage)
-find_package(Boost 1.70 REQUIRED COMPONENTS headers)
-
-# Fetch cpr via FetchContent
-include(FetchContent)
-FetchContent_Declare(
-    cpr
-    GIT_REPOSITORY https://github.com/libcpr/cpr.git
-    GIT_TAG 1.10.5
-)
-# Ensure transitive dependencies are made available
-FetchContent_MakeAvailable(cpr)
+find_package(Boost 1.70 REQUIRED)
+find_package(cpr REQUIRED)
+# Explicitly find transitive dependencies as good practice
+find_package(ZLIB REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 
 
@@ -47,12 +40,9 @@ target_link_libraries(CognitivePipelines PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Boost::boost
     cpr::cpr
 )
-
-# Boost headers (required)
-# Link against Boost::headers target provided by find_package(Boost)
-target_link_libraries(CognitivePipelines PRIVATE Boost::headers)
 
 # On macOS and Windows, optionally create a GUI app without console if needed
 if(WIN32)

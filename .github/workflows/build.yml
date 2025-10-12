@@ -30,23 +30,23 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libgl1-mesa-dev
+          sudo apt-get install -y build-essential libgl1-mesa-dev libcpr-dev libssl-dev zlib1g-dev
 
       - name: Install Boost on Ubuntu
         if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install -y libboost-all-dev
 
-      - name: Install Boost on macOS
+      - name: Install Boost and cpr on macOS
         if: startsWith(matrix.os, 'macos')
-        run: brew install boost
+        run: brew install boost cpr
 
       - name: Set up vcpkg (Windows)
         if: startsWith(matrix.os, 'windows')
         uses: microsoft/setup-vcpkg@v1
 
-      - name: Install Boost on Windows
+      - name: Install Boost and cpr on Windows
         if: startsWith(matrix.os, 'windows')
-        run: vcpkg install boost:x64-windows
+        run: vcpkg install boost:x64-windows cpr:x64-windows
 
       - name: Configure (CMake) [non-Windows]
         if: ${{ !startsWith(matrix.os, 'windows') }}

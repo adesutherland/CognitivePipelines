@@ -38,12 +38,10 @@
 #include <QPointer>
 #include <QPromise>
 
-#include <boost/process.hpp>
+#include <QProcess>
 #include <thread>
 #include <mutex>
 #include <sstream>
-
-namespace bp = boost::process;
 
 // ---------------- IToolConnector implementation ----------------
 
@@ -223,89 +221,48 @@ QFuture<IToolConnector::OutputMap> PythonScriptConnector::executeAsync(const Inp
             }
             const QByteArray jsonBytes = QJsonDocument(jsonObj).toJson(QJsonDocument::Compact);
 
-            // Setup pipes
-            bp::ipstream outStream;
-            bp::ipstream errStream;
-            bp::opstream inStream;
+            // Run the Python process via QProcess
+            QProcess proc;
+            proc.setProgram(pyExe);
+            proc.setArguments({ scriptPath });
+            // Use separate channels to capture both
+            proc.setProcessChannelMode(QProcess::SeparateChannels);
+            proc.start();
 
-            std::error_code ec;
-            bp::child child(
-                pyExe.toStdString(),
-                scriptPath.toStdString(),
-                bp::std_in < inStream,
-                bp::std_out > outStream,
-                bp::std_err > errStream,
-                ec
-            );
-
-            if (ec) {
-                promise.addResult(makeErrorResult(QStringLiteral("Failed to start process: ") + QString::fromStdString(ec.message()), -1, {}, {}));
+            if (!proc.waitForStarted()) {
+                promise.addResult(makeErrorResult(QStringLiteral("Failed to start process: ") + proc.errorString(), -1, {}, {}));
                 promise.finish();
                 return;
             }
 
-            // Write stdin asynchronously (here in the same worker thread is fine)
-            inStream << jsonBytes.constData() << std::endl;
-            inStream.flush();
-            // Close stdin to signal EOF to the script
-#if defined(_MSC_VER)
-            inStream.pipe().close();
-#else
-            inStream.pipe().close();
-#endif
-
-            // Capture stdout/stderr concurrently to avoid pipe blocking
-            std::string stdoutStr;
-            std::string stderrStr;
-            std::mutex mtx;
-
-            std::thread tOut([&]() {
-                std::string line;
-                while (std::getline(outStream, line)) {
-                    std::scoped_lock lk(mtx);
-                    stdoutStr += line;
-                    stdoutStr += '\n';
-                }
-            });
-            std::thread tErr([&]() {
-                std::string line;
-                while (std::getline(errStream, line)) {
-                    std::scoped_lock lk(mtx);
-                    stderrStr += line;
-                    stderrStr += '\n';
-                }
-            });
+            // Write stdin payload
+            proc.write(jsonBytes);
+            proc.closeWriteChannel();
 
             bool finished = true;
             if (timeoutMs > 0) {
-                finished = child.wait_for(std::chrono::milliseconds(timeoutMs));
+                finished = proc.waitForFinished(timeoutMs);
             } else {
-                child.wait();
+                finished = proc.waitForFinished(-1);
             }
 
             if (!finished) {
-                // Timeout
-                child.terminate();
-                if (tOut.joinable()) tOut.join();
-                if (tErr.joinable()) tErr.join();
+                proc.kill();
+                proc.waitForFinished();
                 promise.addResult(makeErrorResult(QStringLiteral("Execution timed out."), -1,
-                                                  QString::fromStdString(stdoutStr),
-                                                  QString::fromStdString(stderrStr)));
+                                                  QString::fromUtf8(proc.readAllStandardOutput()),
+                                                  QString::fromUtf8(proc.readAllStandardError())));
                 promise.finish();
                 return;
             }
 
-            // Ensure IO readers are done
-            if (tOut.joinable()) tOut.join();
-            if (tErr.joinable()) tErr.join();
-
-            const int code = child.exit_code();
+            const int code = proc.exitCode();
+            const QString stdoutQt = QString::fromUtf8(proc.readAllStandardOutput());
+            const QString stderrQt = QString::fromUtf8(proc.readAllStandardError());
 
             OutputMap out;
             out.insert(QStringLiteral("exit_code"), code);
-            out.insert(QStringLiteral("stderr"), QString::fromStdString(stderrStr));
-
-            const QString stdoutQt = QString::fromStdString(stdoutStr);
+            out.insert(QStringLiteral("stderr"), stderrQt);
 
             // Try to parse stdout as JSON
             QJsonParseError parseErr{};

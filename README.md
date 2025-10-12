@@ -13,9 +13,41 @@ This project is being developed with the assistance of an AI agent.
 * **LLM Integration:** Core functionality includes sending prompts to and receiving responses from LLM APIs.
 * *(More features to be added)*
 
+## Dependencies
+
+This project relies on system package managers to provide all third-party libraries. Install the following before configuring with CMake:
+
+- Qt 6 (Core, Gui, Widgets)
+- Boost (1.70 or newer)
+- cpr (C++ Requests)
+- OpenSSL (development headers)
+- Zlib (development headers)
+
+macOS (Homebrew):
+
+    brew update
+    brew install qt boost cpr
+
+Ubuntu (apt):
+
+    sudo apt-get update
+    sudo apt-get install -y build-essential cmake qt6-base-dev libboost-all-dev libcpr-dev libssl-dev zlib1g-dev
+
+Windows (vcpkg, x64 triplet):
+
+    # One-time clone/setup if needed
+    git clone https://github.com/microsoft/vcpkg.git
+    .\vcpkg\bootstrap-vcpkg.bat
+    # Install deps
+    vcpkg install boost:x64-windows cpr:x64-windows
+
+When configuring with CMake on Windows, pass the vcpkg toolchain file:
+
+    -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\\scripts\\buildsystems\\vcpkg.cmake"
+
 ## Installation
 
-*(Instructions on how to build the project from source will be added here.)*
+Build with CMake as usual after installing dependencies. On macOS, ensure Qt is discoverable via CMAKE_PREFIX_PATH if needed (e.g., /opt/homebrew/opt/qt).
 
 ## Usage
 
