@@ -31,28 +31,23 @@ jobs:
         if: startsWith(matrix.os, 'macos')
         run: brew install boost cpr
 
-      # Linux: install dependencies via vcpkg (unify with Windows)
-      - name: Install dependencies (Boost, cpr) [Ubuntu]
+      # Linux: setup vcpkg and install dependencies
+      - name: Setup vcpkg [Ubuntu]
         if: startsWith(matrix.os, 'ubuntu')
         uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '1b47e0242236a0a75d713c2c5b16c14c5c163b6d'
-          vcpkgTriplet: 'x64-linux'
-          appendedCacheKey: ${{ hashFiles('**/CMakeLists.txt') }}
-          packages: |
-            boost
-            cpr
 
-      # Windows: install dependencies via vcpkg
-      - name: Install dependencies (Boost, cpr) [Windows]
+      - name: Install Boost and cpr [Ubuntu]
+        if: startsWith(matrix.os, 'ubuntu')
+        run: vcpkg install boost cpr
+
+      # Windows: setup vcpkg and install dependencies
+      - name: Setup vcpkg [Windows]
         if: startsWith(matrix.os, 'windows')
         uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: '1b47e0242236a0a75d713c2c5b16c14c5c163b6d'
-          appendedCacheKey: ${{ hashFiles('**/CMakeLists.txt') }}
-          packages: |
-            boost
-            cpr
+
+      - name: Install Boost and cpr [Windows]
+        if: startsWith(matrix.os, 'windows')
+        run: vcpkg install boost cpr
 
       # Configure steps
       - name: Configure (CMake) [Ubuntu]
