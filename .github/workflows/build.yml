@@ -26,39 +26,41 @@ jobs:
           version: ${{ matrix.qt-version }}
           cache: true
 
-      - name: Install Linux build essentials (apt)
-        if: startsWith(matrix.os, 'ubuntu')
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libgl1-mesa-dev libssl-dev zlib1g-dev
-
-      - name: Setup vcpkg (Ubuntu)
-        if: startsWith(matrix.os, 'ubuntu')
-        uses: actions/setup-vcpkg@v1
-
-      - name: Install Boost and cpr via vcpkg (Ubuntu)
-        if: startsWith(matrix.os, 'ubuntu')
-        run: vcpkg install boost:x64-linux cpr:x64-linux
-
+      # macOS uses Homebrew (unchanged)
       - name: Install Boost and cpr on macOS
         if: startsWith(matrix.os, 'macos')
         run: brew install boost cpr
 
-      - name: Setup vcpkg (Windows)
-        if: startsWith(matrix.os, 'windows')
-        uses: actions/setup-vcpkg@v1
+      # Linux: install dependencies via vcpkg (unify with Windows)
+      - name: Install dependencies (Boost, cpr) [Ubuntu]
+        if: startsWith(matrix.os, 'ubuntu')
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '1b47e0242236a0a75d713c2c5b16c14c5c163b6d'
+          vcpkgTriplet: 'x64-linux'
+          appendedCacheKey: ${{ hashFiles('**/CMakeLists.txt') }}
+          packages: |
+            boost
+            cpr
 
-      - name: Install Boost and cpr on Windows
+      # Windows: install dependencies via vcpkg
+      - name: Install dependencies (Boost, cpr) [Windows]
         if: startsWith(matrix.os, 'windows')
-        run: vcpkg install boost:x64-windows cpr:x64-windows
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '1b47e0242236a0a75d713c2c5b16c14c5c163b6d'
+          appendedCacheKey: ${{ hashFiles('**/CMakeLists.txt') }}
+          packages: |
+            boost
+            cpr
 
+      # Configure steps
       - name: Configure (CMake) [Ubuntu]
         if: startsWith(matrix.os, 'ubuntu')
-        run: |
-          cmake -S . -B build \
-                -DCMAKE_BUILD_TYPE=Release \
-                -D CMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
-                -D CMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake"
+        run: >
+          cmake -B ${{ github.workspace }}/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
 
       - name: Configure (CMake) [macOS]
         if: startsWith(matrix.os, 'macos')
@@ -69,7 +71,16 @@ jobs:
 
       - name: Configure (CMake) [Windows]
         if: startsWith(matrix.os, 'windows')
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -D CMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}\\scripts\\buildsystems\\vcpkg.cmake"
+        run: >
+          cmake -B ${{ github.workspace }}/build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
 
-      - name: Build (Release)
+      # Build steps
+      - name: Build (Release) [Ubuntu/Windows]
+        if: startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'windows')
+        run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines -j 2
+
+      - name: Build (Release) [macOS]
+        if: startsWith(matrix.os, 'macos')
         run: cmake --build build --config Release --target CognitivePipelines -j 2
