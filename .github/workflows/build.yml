@@ -42,7 +42,7 @@ jobs:
 
       - name: Set up vcpkg (Windows)
         if: startsWith(matrix.os, 'windows')
-        uses: microsoft/setup-vcpkg@v1
+        uses: actions/setup-vcpkg@v1
 
       - name: Install Boost and cpr on Windows
         if: startsWith(matrix.os, 'windows')
