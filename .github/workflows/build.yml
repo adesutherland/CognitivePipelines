@@ -41,6 +41,7 @@ jobs:
         run: >
           cmake -S . -B ${{ github.workspace }}/build
           -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
           -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
 
       - name: Build (Release)
