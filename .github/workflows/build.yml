@@ -32,48 +32,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y autoconf automake libtool pkg-config autoconf-archive
 
-      # macOS uses Homebrew (unchanged)
-      - name: Install Boost and cpr on macOS
-        if: startsWith(matrix.os, 'macos')
-        run: brew install boost cpr
-
-      # Linux: setup vcpkg and install dependencies
-      - name: Install dependencies via vcpkg [Ubuntu]
-        if: startsWith(matrix.os, 'ubuntu')
+      - name: Install dependencies via vcpkg
         uses: lukka/run-vcpkg@v11
+        with:
+          appendedCacheKey: ${{ hashFiles('**/vcpkg.json', '**/vcpkg-configuration.json') }}
 
-      # Windows: setup vcpkg and install dependencies
-      - name: Install dependencies via vcpkg [Windows]
-        if: startsWith(matrix.os, 'windows')
-        uses: lukka/run-vcpkg@v11
-
-      # Configure steps
-      - name: Configure (CMake) [Ubuntu]
-        if: startsWith(matrix.os, 'ubuntu')
+      - name: Configure (CMake)
         run: >
-          cmake -B ${{ github.workspace }}/build
+          cmake -S . -B ${{ github.workspace }}/build
           -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
+          -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
 
-      - name: Configure (CMake) [macOS]
-        if: startsWith(matrix.os, 'macos')
-        run: |
-          cmake -S . -B build \
-                -DCMAKE_BUILD_TYPE=Release \
-                -D CMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
-
-      - name: Configure (CMake) [Windows]
-        if: startsWith(matrix.os, 'windows')
-        run: >
-          cmake -B ${{ github.workspace }}/build
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
-
-      # Build steps
-      - name: Build (Release) [Ubuntu/Windows]
-        if: startsWith(matrix.os, 'ubuntu') || startsWith(matrix.os, 'windows')
+      - name: Build (Release)
         run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines -j 2
-
-      - name: Build (Release) [macOS]
-        if: startsWith(matrix.os, 'macos')
-        run: cmake --build build --config Release --target CognitivePipelines -j 2
