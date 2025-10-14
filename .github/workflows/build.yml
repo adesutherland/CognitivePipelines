@@ -38,7 +38,7 @@ jobs:
 
       - name: Link macOS dependencies
         if: runner.os == 'macOS'
-        run: echo "/opt/homebrew/opt/gettext/bin" >> $GITHUB_ENV
+        run: echo "/opt/homebrew/opt/gettext/bin" >> $GITHUB_PATH
 
       - name: Install dependencies via vcpkg
         uses: lukka/run-vcpkg@v11
