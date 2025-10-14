@@ -34,21 +34,25 @@ jobs:
 
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install autoconf automake libtool pkg-config gettext
-
-      - name: Link macOS dependencies
-        if: runner.os == 'macOS'
-        run: echo "/opt/homebrew/opt/gettext/bin" >> $GITHUB_PATH
+        run: |
+          brew update
+          brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja
+          # Ensure gettext tools (autopoint, msg*) are visible
+          echo "$(brew --prefix)/opt/gettext/bin" >> $GITHUB_PATH
+          # Ensure aclocal can see Homebrew macro dirs (gettext & general)
+          echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
 
       - name: Install dependencies via vcpkg
         uses: lukka/run-vcpkg@v11
         env:
           VCPKG_BINARY_SOURCES: "clear;nuget,GitHub,readwrite"
           NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+          VCPKG_KEEP_ENV_VARS: "ACLOCAL_PATH,PATH"
 
       - name: Configure (CMake)
         run: >
           cmake -S . -B ${{ github.workspace }}/build
+          -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
           -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
