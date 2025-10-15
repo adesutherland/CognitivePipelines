@@ -45,17 +45,24 @@ jobs:
       - name: Install dependencies via vcpkg
         uses: lukka/run-vcpkg@v11
         env:
-          VCPKG_BINARY_SOURCES: "clear;nuget,GitHub,readwrite"
-          NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
-          VCPKG_KEEP_ENV_VARS: "ACLOCAL_PATH,PATH"
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+          VCPKG_FEATURE_FLAGS: "binarycaching"
 
       - name: Configure (CMake)
-        run: >
-          cmake -S . -B ${{ github.workspace }}/build
-          -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
-          -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cmake -S . -B "${{ github.workspace }}/build" \
+              -G "Visual Studio 17 2022" -A x64 \
+              -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+          else
+            cmake -S . -B "${{ github.workspace }}/build" \
+              -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+          fi
 
       - name: Build (Release)
         run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines -j 2
