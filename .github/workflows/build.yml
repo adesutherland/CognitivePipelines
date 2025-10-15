@@ -44,6 +44,8 @@ jobs:
 
       - name: Install dependencies via vcpkg
         uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
         env:
           VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
           VCPKG_FEATURE_FLAGS: "binarycaching"
