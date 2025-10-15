@@ -29,6 +29,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/main.cpp
     ${SRC_DIR}/mainwindow.cpp
     ${SRC_DIR}/mainwindow.h
+    ${SRC_DIR}/about_dialog.cpp
+    ${SRC_DIR}/about_dialog.h
     ${SRC_DIR}/IToolConnector.h
     ${SRC_DIR}/PythonScriptConnector.cpp
     ${SRC_DIR}/PythonScriptConnector.h
@@ -42,6 +44,30 @@ target_link_libraries(CognitivePipelines PRIVATE
     Qt6::Widgets
     Boost::boost
     cpr::cpr
+)
+
+# Define build information macros for use in C++
+# Capture short git commit hash (fallback to "unknown" if not available)
+set(APP_VERSION "${PROJECT_VERSION}")
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_COMMIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT GIT_COMMIT_HASH)
+    set(GIT_COMMIT_HASH "unknown")
+endif()
+
+# Pass definitions to the target as string literals
+# Quotes are embedded so they become proper C string literals
+string(REPLACE "\"" "\\\"" APP_VERSION_ESCAPED "${APP_VERSION}")
+string(REPLACE "\"" "\\\"" GIT_HASH_ESCAPED "${GIT_COMMIT_HASH}")
+
+target_compile_definitions(CognitivePipelines PRIVATE
+    APP_VERSION="${APP_VERSION_ESCAPED}"
+    GIT_COMMIT_HASH="${GIT_HASH_ESCAPED}"
 )
 
 # On macOS and Windows, optionally create a GUI app without console if needed

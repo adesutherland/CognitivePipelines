@@ -35,6 +35,9 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override = default;
 
+private slots:
+    void onAbout();
+
 private:
     void createActions();
     void createMenus();
@@ -45,4 +48,5 @@ private:
     QAction* openAction {nullptr};
     QAction* saveAction {nullptr};
     QAction* exitAction {nullptr};
+    QAction* aboutAction {nullptr};
 };

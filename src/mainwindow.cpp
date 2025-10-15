@@ -23,6 +23,7 @@
 //
 
 #include "mainwindow.h"
+#include "about_dialog.h"
 
 #include <QAction>
 #include <QApplication>
@@ -59,6 +60,9 @@ void MainWindow::createActions() {
     exitAction->setShortcuts(QKeySequence::Quit);
     exitAction->setStatusTip(tr("Exit the application"));
 
+    aboutAction = new QAction(tr("&About..."), this);
+    aboutAction->setStatusTip(tr("About this application"));
+
     // Modern signal-slot connections using function pointers / lambdas
     connect(openAction, &QAction::triggered, this, [this]() {
         const QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"));
@@ -78,6 +82,8 @@ void MainWindow::createActions() {
         // Close the main window (equivalent to quitting when it's the main window)
         close();
     });
+
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::onAbout);
 }
 
 void MainWindow::createMenus() {
@@ -86,6 +92,9 @@ void MainWindow::createMenus() {
     fileMenu->addAction(saveAction);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAction);
+
+    QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
+    helpMenu->addAction(aboutAction);
 }
 
 void MainWindow::createToolBar() {
@@ -104,4 +113,9 @@ void MainWindow::createCentralPlaceholder() {
     // A simple placeholder widget for now
     QWidget* placeholder = new QWidget(this);
     setCentralWidget(placeholder);
+}
+
+void MainWindow::onAbout() {
+    AboutDialog dlg(this);
+    dlg.exec();
 }
