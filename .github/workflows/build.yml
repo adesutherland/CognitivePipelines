@@ -57,11 +57,18 @@ jobs:
           brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja mono
           echo "$(brew --prefix)/opt/gettext/bin" >> $GITHUB_PATH
           echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
+          echo "$(brew --prefix)/bin" >> $GITHUB_PATH
 
       - name: Install dependencies via vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
+
+      - name: Allow vcpkg to download helper tools (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "VCPKG_FORCE_SYSTEM_BINARIES=" >> "$GITHUB_ENV"
 
       - name: Configure NuGet (Windows)
         if: runner.os == 'Windows'
@@ -117,12 +124,15 @@ jobs:
               -G "Visual Studio 17 2022" -A x64 \
               -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
               -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
-          else
-            cmake -S . -B "${{ github.workspace }}/build" \
-              -G Ninja \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
-              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+          else         
+              if [[ "${{ runner.os }}" != "Windows" ]]; then
+                unset VCPKG_FORCE_SYSTEM_BINARIES
+              fi
+              cmake -S . -B "${{ github.workspace }}/build" \
+                -G Ninja \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+                -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
           fi
 
       - name: Build (Release)
