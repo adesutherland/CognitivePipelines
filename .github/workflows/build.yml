@@ -87,8 +87,18 @@ jobs:
         env:
           USERNAME: ${{ github.repository_owner }}
           FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-        run: |          
-          nuget_exe="$("${VCPKG_ROOT}/vcpkg" fetch nuget)"  
+        run: |      
+          # Let vcpkg download helper tools (needed on macOS runners)
+          unset VCPKG_FORCE_SYSTEM_BINARIES 
+          # Get a clean path to nuget.exe (last line of stdout)
+          nuget_exe="$("${VCPKG_ROOT}/vcpkg" fetch nuget 2>/dev/null | tail -n1)"
+          # Guardrail: bail with a clear error if we didn't get a file path
+          if [ ! -f "$nuget_exe" ]; then
+          echo "::error::vcpkg fetch nuget did not return a usable path. Got: '$nuget_exe'"
+          "${VCPKG_ROOT}/vcpkg" fetch nuget || true
+          exit 1
+          fi
+          # Preconfigure the GitHub Packages source using the CI token (non-interactive)
           mono "$nuget_exe" sources remove -Name GitHubPackages -NonInteractive >/dev/null 2>&1 || true
           mono "$nuget_exe" sources add \
             -Source "${FEED_URL}" \
