@@ -6,22 +6,35 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# Ensure the token can publish to GitHub Packages (NuGet) and allow cache saves.
+permissions:
+  contents: read
+  packages: write
+  actions: write
+
 jobs:
   build:
     name: ${{ matrix.os }} • Qt ${{ matrix.qt-version }}
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ ubuntu-latest, macos-latest, windows-latest ]
         qt-version: [ "6.6.3" ]
+    runs-on: ${{ matrix.os }}
+
+    # Cross-OS environment for vcpkg binary caching via GitHub Packages (NuGet)
+    env:
+      FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VCPKG_FEATURE_FLAGS: binarycaching
+      VCPKG_BINARY_SOURCES: clear;nuget,${{ env.FEED_URL }},readwrite
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Qt ${{ matrix.qt-version }}
-        uses: jurplel/install-qt-action@v3
+        uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt-version }}
           cache: true
@@ -37,18 +50,13 @@ jobs:
         run: |
           brew update
           brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja
-          # Ensure gettext tools (autopoint, msg*) are visible
           echo "$(brew --prefix)/opt/gettext/bin" >> $GITHUB_PATH
-          # Ensure aclocal can see Homebrew macro dirs (gettext & general)
           echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
 
       - name: Install dependencies via vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
-        env:
-          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-          VCPKG_FEATURE_FLAGS: "binarycaching"
 
       - name: Configure (CMake)
         shell: bash
