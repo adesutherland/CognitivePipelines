@@ -58,6 +58,11 @@ jobs:
           echo "$(brew --prefix)/opt/gettext/bin" >> $GITHUB_PATH
           echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
 
+      - name: Install dependencies via vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
+
       - name: Configure NuGet (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -68,12 +73,12 @@ jobs:
           $nuget = & "${Env:VCPKG_ROOT}\vcpkg.exe" fetch nuget
           & $nuget sources remove -Name GitHubPackages -NonInteractive 2>$null | Out-Null
           & $nuget sources add `
-              -Source "$Env:FEED_URL" `
-              -Name GitHubPackages `
-              -UserName "$Env:USERNAME" `
-              -Password "${Env:NUGET_AUTH_TOKEN}" `
-              -StorePasswordInClearText `
-              -NonInteractive
+            -Source "$Env:FEED_URL" `
+            -Name GitHubPackages `
+            -UserName "${Env:GITHUB_REPOSITORY_OWNER}" `
+            -Password "${Env:NUGET_AUTH_TOKEN}" `
+            -StorePasswordInClearText `
+            -NonInteractive
           & $nuget setapikey "${Env:NUGET_AUTH_TOKEN}" -Source "$Env:FEED_URL" -NonInteractive
 
       - name: Configure NuGet (Linux / macOS)
@@ -82,22 +87,17 @@ jobs:
         env:
           USERNAME: ${{ github.repository_owner }}
           FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
-        run: |
-          nuget_exe="$(${VCPKG_ROOT}/vcpkg fetch nuget)"
+        run: |          
+          nuget_exe="$("${VCPKG_ROOT}/vcpkg" fetch nuget)"  
           mono "$nuget_exe" sources remove -Name GitHubPackages -NonInteractive >/dev/null 2>&1 || true
           mono "$nuget_exe" sources add \
             -Source "${FEED_URL}" \
             -Name GitHubPackages \
-            -UserName "${USERNAME}" \
+            -UserName "${GITHUB_REPOSITORY_OWNER}" \
             -Password "${NUGET_AUTH_TOKEN}" \
             -StorePasswordInClearText \
             -NonInteractive
           mono "$nuget_exe" setapikey "${NUGET_AUTH_TOKEN}" -Source "${FEED_URL}" -NonInteractive
-
-      - name: Install dependencies via vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
 
       - name: Configure (CMake)
         shell: bash
