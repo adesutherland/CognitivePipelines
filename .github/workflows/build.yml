@@ -29,6 +29,9 @@ jobs:
       VCPKG_FEATURE_FLAGS: binarycaching
       VCPKG_BINARY_SOURCES: >-
         clear;nuget,https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json,readwrite
+      NUGET_CREDENTIALPROVIDERS_PATH: ''
+      NUGET_PLUGIN_PATHS: ''
+      VCPKG_NUGET_EXTRA_ARGS: "-NonInteractive -ForceEnglishOutput -Verbosity detailed -Timeout 600"
 
     steps:
       - name: Checkout repository
@@ -44,15 +47,52 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf automake libtool pkg-config autoconf-archive
+          sudo apt-get install -y \
+            autoconf automake libtool pkg-config autoconf-archive ninja-build mono-complete
 
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja
+          brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja mono
           echo "$(brew --prefix)/opt/gettext/bin" >> $GITHUB_PATH
           echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
+
+      - name: Configure NuGet (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          USERNAME: ${{ github.repository_owner }}
+          FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+        run: |
+          $nuget = & "${Env:VCPKG_ROOT}\vcpkg.exe" fetch nuget
+          & $nuget sources remove -Name GitHubPackages -NonInteractive 2>$null | Out-Null
+          & $nuget sources add `
+              -Source "$Env:FEED_URL" `
+              -Name GitHubPackages `
+              -UserName "$Env:USERNAME" `
+              -Password "${Env:NUGET_AUTH_TOKEN}" `
+              -StorePasswordInClearText `
+              -NonInteractive
+          & $nuget setapikey "${Env:NUGET_AUTH_TOKEN}" -Source "$Env:FEED_URL" -NonInteractive
+
+      - name: Configure NuGet (Linux / macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          USERNAME: ${{ github.repository_owner }}
+          FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+        run: |
+          nuget_exe="$(${VCPKG_ROOT}/vcpkg fetch nuget)"
+          mono "$nuget_exe" sources remove -Name GitHubPackages -NonInteractive >/dev/null 2>&1 || true
+          mono "$nuget_exe" sources add \
+            -Source "${FEED_URL}" \
+            -Name GitHubPackages \
+            -UserName "${USERNAME}" \
+            -Password "${NUGET_AUTH_TOKEN}" \
+            -StorePasswordInClearText \
+            -NonInteractive
+          mono "$nuget_exe" setapikey "${NUGET_AUTH_TOKEN}" -Source "${FEED_URL}" -NonInteractive
 
       - name: Install dependencies via vcpkg
         uses: lukka/run-vcpkg@v11
