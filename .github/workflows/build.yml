@@ -70,6 +70,11 @@ jobs:
         run: |
           echo "VCPKG_FORCE_SYSTEM_BINARIES=" >> "$GITHUB_ENV"
 
+      - name: Show suggested vcpkg baseline (to update vcpkg.json)
+        shell: bash
+        run: |
+          "${VCPKG_ROOT}/vcpkg" x-update-baseline || true
+
       - name: Configure NuGet (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

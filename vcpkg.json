@@ -1,6 +1,6 @@
 {
   "name": "cognitive-pipelines",
-  "version-string": "0.1.0",
+  "version-string": "0",
   "dependencies": [
     "boost",
     "cpr"
