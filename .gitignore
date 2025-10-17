@@ -1,0 +1,2 @@
+# Ignore local secrets file containing real API keys
+accounts.json

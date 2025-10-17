@@ -53,6 +53,20 @@ Build with CMake as usual after installing dependencies. On macOS, ensure Qt is 
 
 *(Instructions on how to use the application will be added here.)*
 
+## Configuration
+
+Before running the application, create your local API key configuration file:
+
+1. Copy the template file to a local, ignored file:
+   
+       cp accounts.json.example accounts.json
+
+2. Open accounts.json and replace the placeholder value YOUR_API_KEY_HERE with your actual API key.
+
+Notes:
+- The accounts.json file is intentionally ignored by Git to protect your secrets.
+- The JSON structure supports multiple accounts via the accounts array; you can add more entries later as needed.
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
