@@ -44,6 +44,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/PythonScriptConnector.h
     ${SRC_DIR}/llm_api_client.cpp
     ${SRC_DIR}/llm_api_client.h
+    ${SRC_DIR}/PromptDialog.cpp
+    ${SRC_DIR}/PromptDialog.h
 )
 
 

@@ -24,6 +24,7 @@
 
 #include "mainwindow.h"
 #include "about_dialog.h"
+#include "PromptDialog.h"
 
 #include <QAction>
 #include <QApplication>
@@ -87,6 +88,11 @@ void MainWindow::createActions() {
     });
 
     connect(aboutAction, &QAction::triggered, this, &MainWindow::onAbout);
+
+    // Tools -> Interactive Prompt action
+    interactivePromptAction_ = new QAction(tr("Interactive Prompt..."), this);
+    interactivePromptAction_->setStatusTip(tr("Open an interactive prompt dialog"));
+    connect(interactivePromptAction_, &QAction::triggered, this, &MainWindow::onInteractivePrompt);
 }
 
 void MainWindow::createMenus() {
@@ -95,6 +101,9 @@ void MainWindow::createMenus() {
     fileMenu->addAction(saveAction);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAction);
+
+    QMenu* toolsMenu = menuBar()->addMenu(tr("&Tools"));
+    toolsMenu->addAction(interactivePromptAction_);
 
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(aboutAction);
@@ -144,4 +153,9 @@ void MainWindow::onRunButtonClicked() {
 
     // Show the response to the user
     QMessageBox::information(this, tr("LLM Response"), QString::fromStdString(response));
+}
+
+void MainWindow::onInteractivePrompt() {
+    PromptDialog dlg(this);
+    dlg.exec();
 }

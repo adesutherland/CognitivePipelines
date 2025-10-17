@@ -40,6 +40,7 @@ public:
 private slots:
     void onAbout();
     void onRunButtonClicked();
+    void onInteractivePrompt();
 
 private:
     void createActions();
@@ -52,6 +53,7 @@ private:
     QAction* saveAction {nullptr};
     QAction* exitAction {nullptr};
     QAction* aboutAction {nullptr};
+    QAction* interactivePromptAction_ {nullptr};
 
     QPushButton* runButton_ {nullptr};
     LlmApiClient llmClient_;
