@@ -67,6 +67,18 @@ Notes:
 - The accounts.json file is intentionally ignored by Git to protect your secrets.
 - The JSON structure supports multiple accounts via the accounts array; you can add more entries later as needed.
 
+## Testing
+
+To run the integration tests for LlmApiClient, you must set your OpenAI API key in the environment before building and running tests:
+
+    export OPENAI_API_KEY="your_actual_api_key_here"
+
+Then configure and run tests (example):
+
+    cmake -DENABLE_TESTING=ON -S . -B cmake-build-debug
+    cmake --build cmake-build-debug --target run_tests
+    ctest --test-dir cmake-build-debug -V
+
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.

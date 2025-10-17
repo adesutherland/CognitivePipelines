@@ -1,3 +1,11 @@
+# For local macOS development, install dependencies via Homebrew:
+# brew install googletest
+#
+# To build and run the tests with CTest:
+# cmake -DENABLE_TESTING=ON -S . -B <build_dir>
+# cmake --build <build_dir> --target run_tests
+# ctest --test-dir <build_dir> -V
+
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
@@ -34,6 +42,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/IToolConnector.h
     ${SRC_DIR}/PythonScriptConnector.cpp
     ${SRC_DIR}/PythonScriptConnector.h
+    ${SRC_DIR}/llm_api_client.cpp
+    ${SRC_DIR}/llm_api_client.h
 )
 
 
@@ -100,6 +110,30 @@ if(WIN32)
     list(APPEND CPACK_GENERATOR NSIS)
 elseif(APPLE)
     list(APPEND CPACK_GENERATOR DragNDrop)
+endif()
+
+# --- Testing setup (optional, off by default) ---
+option(ENABLE_TESTING "Build unit/integration tests" OFF)
+
+if(ENABLE_TESTING)
+    message(STATUS "ENABLE_TESTING=ON: building test suite")
+    include(CTest)
+    enable_testing()
+
+    # Environment-agnostic discovery: works with Homebrew and vcpkg
+    find_package(GTest REQUIRED)
+
+    add_executable(run_tests
+        tests/test_llm_api_client.cpp
+        ${SRC_DIR}/llm_api_client.cpp
+        ${SRC_DIR}/llm_api_client.h
+    )
+
+    target_include_directories(run_tests PRIVATE ${SRC_DIR})
+    target_link_libraries(run_tests PRIVATE GTest::gtest_main cpr::cpr)
+
+    include(GoogleTest)
+    gtest_discover_tests(run_tests)
 endif()
 
 include(CPack)

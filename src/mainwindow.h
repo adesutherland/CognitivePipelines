@@ -25,9 +25,11 @@
 #pragma once
 
 #include <QMainWindow>
+#include "llm_api_client.h"
 
 class QAction;
 class QToolBar;
+class QPushButton;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -37,6 +39,7 @@ public:
 
 private slots:
     void onAbout();
+    void onRunButtonClicked();
 
 private:
     void createActions();
@@ -49,4 +52,7 @@ private:
     QAction* saveAction {nullptr};
     QAction* exitAction {nullptr};
     QAction* aboutAction {nullptr};
+
+    QPushButton* runButton_ {nullptr};
+    LlmApiClient llmClient_;
 };

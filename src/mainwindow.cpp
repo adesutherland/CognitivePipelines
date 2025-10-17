@@ -34,6 +34,9 @@
 #include <QToolBar>
 #include <QWidget>
 #include <QKeySequence>
+#include <QPushButton>
+#include <QMessageBox>
+#include <QByteArray>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
@@ -103,6 +106,11 @@ void MainWindow::createToolBar() {
     tb->setMovable(true);
     tb->addAction(openAction);
     tb->addAction(saveAction);
+
+    // Add a QPushButton labeled "Run" to trigger the LLM call
+    runButton_ = new QPushButton(tr("Run"), tb);
+    tb->addWidget(runButton_);
+    connect(runButton_, &QPushButton::clicked, this, &MainWindow::onRunButtonClicked);
 }
 
 void MainWindow::createStatusBar() {
@@ -118,4 +126,22 @@ void MainWindow::createCentralPlaceholder() {
 void MainWindow::onAbout() {
     AboutDialog dlg(this);
     dlg.exec();
+}
+
+void MainWindow::onRunButtonClicked() {
+    // Read API key from environment for security
+    const QByteArray apiKeyBA = qgetenv("OPENAI_API_KEY");
+    if (apiKeyBA.isEmpty()) {
+        QMessageBox::warning(this, tr("Missing API Key"), tr("OPENAI_API_KEY environment variable is not set. Please configure it and try again."));
+        return;
+    }
+
+    const std::string apiKey = apiKeyBA.toStdString();
+    const std::string prompt = "Tell me a short joke about programming.";
+
+    // Call the LLM client synchronously (simple initial integration)
+    const std::string response = llmClient_.sendPrompt(apiKey, prompt);
+
+    // Show the response to the user
+    QMessageBox::information(this, tr("LLM Response"), QString::fromStdString(response));
 }
