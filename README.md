@@ -1,84 +1,91 @@
-# Cognitive Pipeline Application
+# Cognitive Pipelines
 
-## Description
+## Project Overview
+Cognitive Pipelines is a cross-platform Qt desktop application for building and running “cognitive pipelines” — sequences of tools that can include Large Language Model (LLM) calls and other processors. The current focus is delivering a minimal, working end-to-end path from the UI to a live LLM API and back to the UI.
 
-This is a cross-platform desktop application designed for building and executing "cognitive pipelines." The application provides a user interface for chaining together different processing modules, including interfacing with Large Language Models (LLMs) and legacy C libraries. The goal is to create a flexible and extensible tool for complex, multi-step automated tasks.
-
-This project is being developed with the assistance of an AI agent.
-
-## Features
-
-* **Cross-Platform:** Built with C++ and Qt to run on Windows, macOS, and Linux.
-* **Modular Architecture:** A layered design separates the UI, core logic, and backend services.
-* **LLM Integration:** Core functionality includes sending prompts to and receiving responses from LLM APIs.
-* *(More features to be added)*
+## Current Features
+- Interactive UI built with Qt 6 (Widgets)
+- About dialog showing version, git hash, and build info
+- LLM integration via a simple C++ client (cpr) that calls an OpenAI-compatible Chat Completions endpoint
+- Integration test using GoogleTest that verifies a live roundtrip to the LLM API
+- Interactive Prompt dialog that:
+  - Loads API key from accounts.json
+  - Lets you type a prompt
+  - Sends it to the LLM and displays the response
+- Toolbar “Run” button that sends a predefined prompt using the OPENAI_API_KEY environment variable
 
 ## Dependencies
-
-This project relies on system package managers to provide all third-party libraries. Install the following before configuring with CMake:
-
+The project uses the following third-party libraries:
 - Qt 6 (Core, Gui, Widgets)
-- Boost (1.70 or newer)
-- cpr (C++ Requests)
-- OpenSSL (development headers)
-- Zlib (development headers)
+- Boost (headers)
+- cpr (HTTP/HTTPS requests)
+- OpenSSL (TLS, transitively used by cpr)
+- Zlib (transitive)
+- GoogleTest (tests only)
 
-macOS (Homebrew):
+Installation methods by environment:
+- CI (GitHub Actions):
+  - Qt installed via jurplel/install-qt-action
+  - C/C++ libraries installed via vcpkg with binary caching to GitHub Packages (NuGet)
+- macOS (local dev):
+  - Homebrew for system packages (e.g., qt, googletest if testing)
+- Linux (local dev):
+  - apt packages for Qt and cpr, etc.
+- Windows (local dev):
+  - vcpkg with the CMake toolchain file
 
-    brew update
-    brew install qt boost cpr
+## How to Build
+Prerequisites:
+- A C++17 compiler and CMake 3.21+
+- The dependencies above available via your platform’s package manager
 
-Ubuntu (apt):
+Example commands:
+- macOS (Homebrew):
+  - brew install qt cpr googletest
+- Ubuntu (apt):
+  - sudo apt-get update && sudo apt-get install -y build-essential cmake qt6-base-dev libcpr-dev libssl-dev zlib1g-dev
+- Windows (vcpkg):
+  - vcpkg install boost:x64-windows cpr:x64-windows
 
-    sudo apt-get update
-    sudo apt-get install -y build-essential cmake qt6-base-dev libboost-all-dev libcpr-dev libssl-dev zlib1g-dev
+Configure and build (replace <build_dir> if you use a custom build folder):
+- cmake -S . -B <build_dir>
+- cmake --build <build_dir> --target CognitivePipelines -j 2
 
-Windows (vcpkg, x64 triplet):
-
-    # One-time clone/setup if needed
-    git clone https://github.com/microsoft/vcpkg.git
-    .\vcpkg\bootstrap-vcpkg.bat
-    # Install deps
-    vcpkg install boost:x64-windows cpr:x64-windows
-
-When configuring with CMake on Windows, pass the vcpkg toolchain file:
-
-    -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\\scripts\\buildsystems\\vcpkg.cmake"
-
-## Installation
-
-Build with CMake as usual after installing dependencies. On macOS, ensure Qt is discoverable via CMAKE_PREFIX_PATH if needed (e.g., /opt/homebrew/opt/qt).
-
-## Usage
-
-*(Instructions on how to use the application will be added here.)*
-
-## Configuration
-
-Before running the application, create your local API key configuration file:
-
-1. Copy the template file to a local, ignored file:
-   
-       cp accounts.json.example accounts.json
-
-2. Open accounts.json and replace the placeholder value YOUR_API_KEY_HERE with your actual API key.
-
-Notes:
-- The accounts.json file is intentionally ignored by Git to protect your secrets.
-- The JSON structure supports multiple accounts via the accounts array; you can add more entries later as needed.
+Note for Windows: pass the vcpkg toolchain file at configure time:
+- -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\\scripts\\buildsystems\\vcpkg.cmake"
 
 ## Testing
+Testing is optional and gated by a CMake option.
+- Enable tests at configure time: -DENABLE_TESTING=ON
+- Install GoogleTest via your environment (Homebrew or vcpkg toolchain)
+- Provide your OpenAI API key via environment:
+  - export OPENAI_API_KEY="your_actual_api_key_here"
+- Build and run tests:
+  - cmake --build <build_dir> --target run_tests
+  - ctest --test-dir <build_dir> -V
 
-To run the integration tests for LlmApiClient, you must set your OpenAI API key in the environment before building and running tests:
+## Configuration
+API keys are managed via a local accounts.json file that is ignored by Git.
+- Copy the template and fill in your key:
+  - cp accounts.json.example accounts.json
+  - Edit accounts.json and replace YOUR_API_KEY_HERE
+- Expected structure:
+```
+{
+  "accounts": [
+    {
+      "name": "default_openai",
+      "api_key": "YOUR_API_KEY_HERE"
+    }
+  ]
+}
+```
+- The Interactive Prompt dialog reads the key from accounts.json. The toolbar Run button uses the OPENAI_API_KEY environment variable for convenience.
 
-    export OPENAI_API_KEY="your_actual_api_key_here"
-
-Then configure and run tests (example):
-
-    cmake -DENABLE_TESTING=ON -S . -B cmake-build-debug
-    cmake --build cmake-build-debug --target run_tests
-    ctest --test-dir cmake-build-debug -V
+## CI/CD
+- GitHub Actions builds on Windows, macOS, and Linux
+- Qt installed via jurplel/install-qt-action; C++ dependencies via vcpkg with NuGet-based binary caching
+- Release build uses Ninja (Unix) or MSVC (Windows) generators in CI
 
 ## License
-
-This project is licensed under the MIT License. See the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
+This project is licensed under the MIT License. See the LICENSE file for details.
