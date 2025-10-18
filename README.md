@@ -1,75 +1,68 @@
 # Cognitive Pipelines
 
 ## Project Overview
-Cognitive Pipelines is a cross-platform Qt desktop application for building and running “cognitive pipelines” — sequences of tools that can include Large Language Model (LLM) calls and other processors. The current focus is delivering a minimal, working end-to-end path from the UI to a live LLM API and back to the UI.
+Cognitive Pipelines is a Qt 6 desktop application for composing and running node-based “cognitive pipelines.” Each node represents a tool, such as a Large Language Model (LLM) call or a future Python/utility step. The current iteration focuses on a minimal, working path from the UI through an LLM connector to a live OpenAI-compatible API and back to the UI.
 
 ## Current Features
-- Interactive UI built with Qt 6 (Widgets)
-- About dialog showing version, git hash, and build info
-- LLM integration via a simple C++ client (cpr) that calls an OpenAI-compatible Chat Completions endpoint
-- Integration test using GoogleTest that verifies a live roundtrip to the LLM API
+- Qt 6 Widgets application with a dataflow canvas (QtNodes) and a main toolbar
+- About dialog showing version, git commit hash, build date/time, and Qt runtime
+- LLM integration via a lightweight C++ client (cpr) calling an OpenAI-compatible Chat Completions endpoint
 - Interactive Prompt dialog that:
-  - Loads API key from accounts.json
-  - Lets you type a prompt
-  - Sends it to the LLM and displays the response
-- Toolbar “Run” button that sends a predefined prompt using the OPENAI_API_KEY environment variable
+  - Loads an API key from accounts.json
+  - Accepts user text input
+  - Sends a request to the LLM and displays the response
+- Toolbar “Run” button that sends a predefined prompt, using the OPENAI_API_KEY environment variable
+- Optional GoogleTest-based test target (run_tests) for API integration testing (disabled by default)
 
 ## Dependencies
-The project uses the following third-party libraries:
-- Qt 6 (Core, Gui, Widgets)
-- Boost (headers)
-- cpr (HTTP/HTTPS requests)
-- OpenSSL (TLS, transitively used by cpr)
+Definitive dependency list derived from CMakeLists.txt and the CI workflow:
+- Qt 6: Core, Gui, Widgets, Network, Concurrent (installed via install-qt-action in CI; via system package manager for local dev)
+- QtNodes (paceholder/nodeeditor) fetched via CMake FetchContent
+- Boost (headers only)
+- cpr (HTTP/HTTPS client)
+- OpenSSL (TLS, transitive for cpr)
 - Zlib (transitive)
-- GoogleTest (tests only)
+- GoogleTest (tests only, optional when ENABLE_TESTING=ON)
 
 Installation methods by environment:
 - CI (GitHub Actions):
   - Qt installed via jurplel/install-qt-action
-  - C/C++ libraries installed via vcpkg with binary caching to GitHub Packages (NuGet)
+  - C/C++ libraries resolved via vcpkg with NuGet-based binary caching; manifest is vcpkg.json
 - macOS (local dev):
-  - Homebrew for system packages (e.g., qt, googletest if testing)
+  - Homebrew for system packages (e.g., qt, cpr, googletest if testing)
 - Linux (local dev):
-  - apt packages for Qt and cpr, etc.
+  - apt for Qt and cpr, etc.
 - Windows (local dev):
   - vcpkg with the CMake toolchain file
 
 ## How to Build
 Prerequisites:
-- A C++17 compiler and CMake 3.21+
-- The dependencies above available via your platform’s package manager
+- C++17 compiler and CMake 3.21+
+- Qt 6 and third-party deps available via your platform’s package manager
 
-Example commands:
-- macOS (Homebrew):
-  - brew install qt cpr googletest
-- Ubuntu (apt):
-  - sudo apt-get update && sudo apt-get install -y build-essential cmake qt6-base-dev libcpr-dev libssl-dev zlib1g-dev
-- Windows (vcpkg):
-  - vcpkg install boost:x64-windows cpr:x64-windows
-
-Configure and build (replace <build_dir> if you use a custom build folder):
+Configure and build (replace <build_dir> as needed):
 - cmake -S . -B <build_dir>
 - cmake --build <build_dir> --target CognitivePipelines -j 2
 
-Note for Windows: pass the vcpkg toolchain file at configure time:
+Windows note: pass the vcpkg toolchain file at configure time if using vcpkg:
 - -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\\scripts\\buildsystems\\vcpkg.cmake"
 
-## Testing
-Testing is optional and gated by a CMake option.
-- Enable tests at configure time: -DENABLE_TESTING=ON
-- Install GoogleTest via your environment (Homebrew or vcpkg toolchain)
-- Provide your OpenAI API key via environment:
-  - export OPENAI_API_KEY="your_actual_api_key_here"
-- Build and run tests:
-  - cmake --build <build_dir> --target run_tests
-  - ctest --test-dir <build_dir> -V
+Enable tests (optional):
+- cmake -S . -B <build_dir> -DENABLE_TESTING=ON
+- Ensure GoogleTest is available (Homebrew or vcpkg)
+- Build tests: cmake --build <build_dir> --target run_tests
+- Run: ctest --test-dir <build_dir> -V
 
 ## Configuration
-API keys are managed via a local accounts.json file that is ignored by Git.
-- Copy the template and fill in your key:
-  - cp accounts.json.example accounts.json
-  - Edit accounts.json and replace YOUR_API_KEY_HERE
-- Expected structure:
+The app expects an API key provided either via environment or a local accounts.json.
+- Environment variable: OPENAI_API_KEY
+- Local file: accounts.json in the project root (ignored by Git)
+
+Create accounts.json from the example:
+- cp accounts.json.example accounts.json
+- Edit accounts.json and set your key
+
+Structure:
 ```
 {
   "accounts": [
@@ -80,12 +73,16 @@ API keys are managed via a local accounts.json file that is ignored by Git.
   ]
 }
 ```
-- The Interactive Prompt dialog reads the key from accounts.json. The toolbar Run button uses the OPENAI_API_KEY environment variable for convenience.
+
+Behavior:
+- The Interactive Prompt dialog loads the API key from accounts.json
+- The toolbar Run button reads the key from OPENAI_API_KEY
 
 ## CI/CD
-- GitHub Actions builds on Windows, macOS, and Linux
-- Qt installed via jurplel/install-qt-action; C++ dependencies via vcpkg with NuGet-based binary caching
-- Release build uses Ninja (Unix) or MSVC (Windows) generators in CI
+- GitHub Actions builds on Ubuntu, macOS, and Windows
+- Qt provided by jurplel/install-qt-action
+- Dependencies resolved through vcpkg with NuGet-based binary caching to GitHub Packages
+- Ninja generator on Unix; MSVC generator on Windows
 
 ## License
-This project is licensed under the MIT License. See the LICENSE file for details.
+MIT License. See LICENSE for details.

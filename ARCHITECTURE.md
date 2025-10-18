@@ -2,59 +2,67 @@
 
 ## Component Breakdown
 - MainWindow (src/mainwindow.h/.cpp)
-  - Primary application window and menus/toolbars.
-  - Hosts actions like "Interactive Prompt..." and a toolbar "Run" button.
+  - Primary application window that sets up menus, toolbar, status bar, and the dataflow canvas view.
+  - Hosts actions such as "Interactive Prompt..." and a toolbar "Run" button.
   - Uses LlmApiClient to send a predefined prompt when "Run" is clicked (reads API key from OPENAI_API_KEY).
 - PromptDialog (src/PromptDialog.h/.cpp)
-  - Modal dialog that reads API key from accounts.json and lets the user send arbitrary prompts.
-  - Displays full LLM response text.
+  - Modal dialog that reads the API key from accounts.json and lets the user send arbitrary prompts.
+  - Displays the full LLM response text.
   - Uses LlmApiClient for the network call.
 - AboutDialog (src/about_dialog.h/.cpp)
-  - Simple dialog that shows application name, version, git hash, build date, and Qt runtime.
+  - Shows application name, version, git hash, build date, and Qt runtime.
 - LlmApiClient (src/llm_api_client.h/.cpp)
   - Minimal HTTP client built on cpr to call an OpenAI-compatible Chat Completions endpoint.
-  - Constructs JSON body manually and does a synchronous POST.
-  - Performs basic status/error checks and extracts the first choice.message.content from the JSON response using a lightweight string search.
-- IToolConnector (src/IToolConnector.h)
-  - Abstract interface for future pipeline tools with metadata and async execution API.
-- PythonScriptConnector (src/PythonScriptConnector.h/.cpp)
-  - A concrete IToolConnector that runs a Python script as a separate process.
-  - Provides configuration UI and async execution contract (future pipeline integration).
+  - Constructs JSON body manually and performs a synchronous POST.
+  - Performs basic status/error checks and extracts the first choices[0].message.content from the response via a lightweight string search.
+- QtNodes integration
+  - NodeGraphModel (src/NodeGraphModel.h/.cpp): Subclass of QtNodes::DataFlowGraphModel, registers available node models.
+  - ToolNodeDelegate (src/ToolNodeDelegate.h/.cpp): Adapter that maps an IToolConnector into a QtNodes NodeDelegateModel (ports, data types, execution triggering, and data propagation).
+- Connectors (Tools)
+  - IToolConnector (include/IToolConnector.h): Abstract interface for pipeline tools; defines node descriptor, configuration UI, and async Execute API.
+  - LLMConnector (src/LLMConnector.h/.cpp): Concrete connector implementing a single-input (Prompt) to single-output (Response) node that calls LlmApiClient off the main thread via QtConcurrent.
+  - PythonScriptConnector (src/PythonScriptConnector.h/.cpp): Placeholder connector for running external Python scripts (stubbed for now).
+- Shared Types
+  - CommonDataTypes (include/CommonDataTypes.h): Pin, node descriptor, and data packet typedefs shared across connectors and delegates.
 
 ## Data Flow
 Primary user interactions:
 1) Toolbar Run button
-- User clicks Run in MainWindow.
-- MainWindow reads OPENAI_API_KEY from environment.
-- MainWindow calls LlmApiClient::sendPrompt with a predefined prompt.
-- Response string is shown via QMessageBox::information.
+- User clicks Run in MainWindow
+- MainWindow reads OPENAI_API_KEY from the environment
+- MainWindow calls LlmApiClient::sendPrompt with a predefined prompt
+- Response string is displayed via QMessageBox::information
 
 2) Interactive Prompt dialog
-- User opens Tools -> "Interactive Prompt..." from MainWindow.
-- PromptDialog loads API key from accounts.json (first entry in accounts array) and populates a read-only field.
-- User enters a prompt and clicks Send.
-- PromptDialog calls LlmApiClient::sendPrompt.
-- Full response is placed into a read-only QTextEdit.
+- User opens Tools -> "Interactive Prompt..." from MainWindow
+- PromptDialog locates and loads accounts.json and populates a read-only API key field
+- User enters a prompt and clicks Send
+- PromptDialog calls LlmApiClient::sendPrompt and shows the response in a QTextEdit
+
+3) Dataflow canvas (foundations in place)
+- NodeGraphModel registers ToolNodeDelegate-wrapped connectors
+- ToolNodeDelegate maps high-level PinDefinitions to QtNodes ports
+- When inputs arrive, ToolNodeDelegate triggers connector->Execute asynchronously (QtConcurrent) and emits dataUpdated for downstream nodes when finished
 
 Notes:
-- Networking is synchronous in both paths; UI thread is blocked during request. This is acceptable for initial validation but should be moved off the UI thread for production.
+- The LLMConnector executes work off the UI thread; however, the manual flows (Run button, PromptDialog) currently call synchronously. These should be moved off the UI thread in a future iteration for better UX.
 
 ## Build System & CI/CD
-- Build System: CMake (minimum 3.21) targeting C++17.
-- Qt: Qt 6 with AUTOMOC/AUTOUIC/AUTORCC enabled.
-- Dependencies:
-  - Qt6::Core, Qt6::Gui, Qt6::Widgets
+- Build System: CMake (minimum 3.21), C++17 standard, AUTOMOC/AUTOUIC/AUTORCC enabled for Qt
+- Dependencies (from CMakeLists.txt):
+  - Qt6::Core, Qt6::Gui, Qt6::Widgets, Qt6::Network, Qt6::Concurrent
+  - QtNodes::QtNodes (via FetchContent of paceholder/nodeeditor)
   - Boost::boost (headers)
   - cpr::cpr
-  - ZLIB, OpenSSL (transitive/explicit finds)
-- Testing (optional): GoogleTest discovered via find_package(GTest) when ENABLE_TESTING=ON. Tests registered with CTest.
+  - ZLIB, OpenSSL (explicit/transitive finds)
+- Tests (optional): GoogleTest discovered with find_package(GTest) when ENABLE_TESTING=ON; tests registered with CTest
 
 CI/CD (GitHub Actions):
-- Matrix builds on ubuntu-latest, macos-latest, windows-latest.
-- Qt installed via jurplel/install-qt-action.
-- Third-party C/C++ libraries installed and cached via vcpkg with NuGet-based binary caching to GitHub Packages.
-- Ninja generator used on Unix; MSVC generator on Windows.
-- Release build target: CognitivePipelines.
+- Matrix on ubuntu-latest, macos-latest, windows-latest
+- Qt installed via jurplel/install-qt-action
+- vcpkg used for dependency resolution with NuGet-based binary caching to GitHub Packages
+- Ninja generator on Unix; Visual Studio generator on Windows
+- Release build target: CognitivePipelines
 
 ## Configuration Management
 - accounts.json (ignored by Git) provides one or more API key entries using the structure:
@@ -70,4 +78,4 @@ CI/CD (GitHub Actions):
 ```
 - accounts.json.example is tracked by Git and serves as a template.
 - PromptDialog loads the first account’s api_key for interactive prompts.
-- The integration test and toolbar Run flow can also use OPENAI_API_KEY from the environment.
+- The toolbar Run flow can also use OPENAI_API_KEY from the environment.
