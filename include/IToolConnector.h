@@ -26,6 +26,7 @@
 
 #include <QWidget>
 #include <QFuture>
+#include <QObject>
 
 #include "CommonDataTypes.h"
 
@@ -47,3 +48,6 @@ public:
     // Executes the tool asynchronously with given inputs; resolves to output packet.
     virtual QFuture<DataPacket> Execute(const DataPacket& inputs) = 0;
 };
+
+// Declare the Qt interface IID for IToolConnector so Q_INTERFACES can resolve it
+Q_DECLARE_INTERFACE(IToolConnector, "org.cognitivepipelines.IToolConnector/1.0")

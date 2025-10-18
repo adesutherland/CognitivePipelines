@@ -32,26 +32,19 @@
 #include "CommonDataTypes.h"
 
 
-class PythonScriptConnector : public QObject, public IToolConnector {
+class LLMConnector : public QObject, public IToolConnector {
     Q_OBJECT
     Q_INTERFACES(IToolConnector)
 public:
-    explicit PythonScriptConnector(QObject* parent = nullptr);
-    ~PythonScriptConnector() override = default;
+    explicit LLMConnector(QObject* parent = nullptr);
+    ~LLMConnector() override = default;
 
-    // IToolConnector interface (blueprint-aligned)
+    // IToolConnector interface
     NodeDescriptor GetDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
     QFuture<DataPacket> Execute(const DataPacket& inputs) override;
 
-    // Optional setters for future implementation
-    void setPythonExecutable(const QString& exe) { pythonExecutable_ = exe; }
-    void setScriptPath(const QString& path) { scriptPath_ = path; }
-    void setTimeoutMs(int ms) { timeoutMs_ = ms; }
-
-private:
-    // Configuration (mutable by the UI)
-    QString pythonExecutable_ = QStringLiteral("python3");
-    QString scriptPath_;
-    int timeoutMs_ = 30000; // 30 seconds default
+    // Constants for pin IDs
+    static constexpr const char* kInputPromptId = "prompt";
+    static constexpr const char* kOutputResponseId = "response";
 };
