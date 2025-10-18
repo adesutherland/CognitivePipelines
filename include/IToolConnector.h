@@ -22,31 +22,28 @@
 // SOFTWARE.
 //
 
-#include "PythonScriptConnector.h"
+#pragma once
 
-PythonScriptConnector::PythonScriptConnector(QObject* parent)
-    : QObject(parent)
-{
-}
+#include <QWidget>
+#include <QFuture>
 
-NodeDescriptor PythonScriptConnector::GetDescriptor() const
-{
-    // Return a default/empty descriptor for now.
-    return NodeDescriptor();
-}
+#include "CommonDataTypes.h"
 
-QWidget* PythonScriptConnector::createConfigurationWidget(QWidget* parent)
-{
-    // Suppress unused parameter warning in a portable way.
-    (void)parent;
-    // Return nullptr as a stub. No UI implemented yet.
-    return nullptr;
-}
+/**
+ * @file IToolConnector.h
+ * @brief Finalized abstract interface for executable nodes (tools) in the pipeline.
+ */
+class IToolConnector {
+public:
+    virtual ~IToolConnector() = default;
 
-QFuture<DataPacket> PythonScriptConnector::Execute(const DataPacket& inputs)
-{
-    // Suppress unused parameter warning in a portable way.
-    (void)inputs;
-    // Return a default-constructed QFuture. No execution logic yet.
-    return QFuture<DataPacket>();
-}
+    // Blueprint-aligned API
+    // Returns the static descriptor for this node/tool.
+    virtual NodeDescriptor GetDescriptor() const = 0;
+
+    // Creates (or returns) a QWidget used to configure this tool instance.
+    virtual QWidget* createConfigurationWidget(QWidget* parent) = 0;
+
+    // Executes the tool asynchronously with given inputs; resolves to output packet.
+    virtual QFuture<DataPacket> Execute(const DataPacket& inputs) = 0;
+};

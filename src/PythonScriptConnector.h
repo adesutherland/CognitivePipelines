@@ -24,38 +24,29 @@
 
 #pragma once
 
+#include <QObject>
+#include <QWidget>
+#include <QFuture>
+
 #include "IToolConnector.h"
+#include "CommonDataTypes.h"
 
-#include <QString>
-#include <QPointer>
+// Declare the Qt interface IID for IToolConnector so Q_INTERFACES can resolve it
+Q_DECLARE_INTERFACE(IToolConnector, "org.cognitivepipelines.IToolConnector/1.0")
 
-/**
- * @brief A concrete IToolConnector that executes a Python script as a separate process.
- *
- * Input protocol (executeAsync):
- *  - Uses the configured script path (from the configuration widget) or, if provided,
- *    the input pin with id "script_path" (QString) to select the script to run.
- *  - All other input pins are serialized to JSON and written to the Python process stdin.
- *
- * Output protocol:
- *  - "output": QVariant — Parsed JSON value from the script's stdout (object/array/primitive),
- *                or the raw stdout text if not valid JSON.
- *  - "stderr": QString — Entire stderr captured from the Python process.
- *  - "exit_code": int — Process exit code (or -1 for timeout/failure to start).
- *  - "error": QString (optional) — Human-readable error on failure (missing script,
- *                timeout, non-zero exit, parse error, etc.).
- */
-class PythonScriptConnector : public IToolConnector {
+class PythonScriptConnector : public QObject, public IToolConnector {
+    Q_OBJECT
+    Q_INTERFACES(IToolConnector)
 public:
-    PythonScriptConnector() = default;
+    explicit PythonScriptConnector(QObject* parent = nullptr);
     ~PythonScriptConnector() override = default;
 
-    // IToolConnector interface
-    ToolMetadata metadata() const override;
+    // IToolConnector interface (blueprint-aligned)
+    NodeDescriptor GetDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
-    QFuture<OutputMap> executeAsync(const InputMap& inputs) override;
+    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
 
-    // Optional setters useful for programmatic configuration and tests
+    // Optional setters for future implementation
     void setPythonExecutable(const QString& exe) { pythonExecutable_ = exe; }
     void setScriptPath(const QString& path) { scriptPath_ = path; }
     void setTimeoutMs(int ms) { timeoutMs_ = ms; }
@@ -65,6 +56,4 @@ private:
     QString pythonExecutable_ = QStringLiteral("python3");
     QString scriptPath_;
     int timeoutMs_ = 30000; // 30 seconds default
-
-    QPointer<QWidget> configWidget_;
 };

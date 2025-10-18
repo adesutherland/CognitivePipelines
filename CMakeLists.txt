@@ -39,7 +39,6 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/mainwindow.h
     ${SRC_DIR}/about_dialog.cpp
     ${SRC_DIR}/about_dialog.h
-    ${SRC_DIR}/IToolConnector.h
     ${SRC_DIR}/PythonScriptConnector.cpp
     ${SRC_DIR}/PythonScriptConnector.h
     ${SRC_DIR}/llm_api_client.cpp
@@ -50,6 +49,12 @@ add_executable(CognitivePipelines
 
 
 # Link libraries
+# Add public headers directory to include path
+target_include_directories(CognitivePipelines PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${SRC_DIR}
+)
+
 target_link_libraries(CognitivePipelines PRIVATE
     Qt6::Core
     Qt6::Gui
