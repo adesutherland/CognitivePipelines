@@ -25,6 +25,7 @@
 #include "mainwindow.h"
 #include "about_dialog.h"
 #include "PromptDialog.h"
+#include "NodeGraphModel.h"
 
 #include <QAction>
 #include <QApplication>
@@ -38,6 +39,9 @@
 #include <QPushButton>
 #include <QMessageBox>
 #include <QByteArray>
+#include <QtNodes/GraphicsView>
+#include <QtNodes/DataFlowGraphicsScene>
+#include <QVBoxLayout>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
@@ -48,7 +52,12 @@ MainWindow::MainWindow(QWidget* parent)
     createMenus();
     createToolBar();
     createStatusBar();
-    createCentralPlaceholder();
+
+    // Instantiate the graph model and view, and set as central widget
+    _graphModel = new NodeGraphModel(this);
+    auto* scene = new QtNodes::DataFlowGraphicsScene(*_graphModel, this);
+    _graphView = new QtNodes::GraphicsView(scene, this);
+    setCentralWidget(_graphView);
 }
 
 void MainWindow::createActions() {
@@ -126,11 +135,6 @@ void MainWindow::createStatusBar() {
     statusBar()->showMessage(tr("Ready"));
 }
 
-void MainWindow::createCentralPlaceholder() {
-    // A simple placeholder widget for now
-    QWidget* placeholder = new QWidget(this);
-    setCentralWidget(placeholder);
-}
 
 void MainWindow::onAbout() {
     AboutDialog dlg(this);

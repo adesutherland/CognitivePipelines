@@ -30,6 +30,11 @@
 class QAction;
 class QToolBar;
 class QPushButton;
+class NodeGraphModel;
+
+namespace QtNodes {
+class GraphicsView;
+}
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -47,7 +52,6 @@ private:
     void createMenus();
     void createToolBar();
     void createStatusBar();
-    void createCentralPlaceholder();
 
     QAction* openAction {nullptr};
     QAction* saveAction {nullptr};
@@ -57,4 +61,7 @@ private:
 
     QPushButton* runButton_ {nullptr};
     LlmApiClient llmClient_;
+
+    NodeGraphModel* _graphModel {nullptr};
+    QtNodes::GraphicsView* _graphView {nullptr};
 };

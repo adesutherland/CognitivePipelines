@@ -11,6 +11,17 @@ cmake_minimum_required(VERSION 3.21)
 # Project configuration
 project(CognitivePipelines VERSION 0.1.1 LANGUAGES CXX)
 
+# FetchContent for external dependencies
+include(FetchContent)
+
+# Add QtNodes (paceholder/nodeeditor) as a dependency
+FetchContent_Declare(
+    QtNodes
+    GIT_REPOSITORY https://github.com/paceholder/nodeeditor.git
+    GIT_TAG        3.0.12
+)
+FetchContent_MakeAvailable(QtNodes)
+
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,7 +33,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # Dependencies resolved from the system (no FetchContent)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent)
 find_package(Boost 1.70 REQUIRED)
 find_package(cpr REQUIRED)
 # Explicitly find transitive dependencies as good practice
@@ -45,6 +56,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/llm_api_client.h
     ${SRC_DIR}/PromptDialog.cpp
     ${SRC_DIR}/PromptDialog.h
+    ${SRC_DIR}/NodeGraphModel.cpp
+    ${SRC_DIR}/NodeGraphModel.h
 )
 
 
@@ -59,6 +72,9 @@ target_link_libraries(CognitivePipelines PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::Network
+    Qt6::Concurrent
+    QtNodes::QtNodes
     Boost::boost
     cpr::cpr
 )
