@@ -23,6 +23,7 @@
 //
 
 #include "LLMConnector.h"
+#include "LLMConnectorPropertiesWidget.h"
 
 #include <QtConcurrent/QtConcurrent>
 #include <QPointer>
@@ -32,6 +33,18 @@
 
 LLMConnector::LLMConnector(QObject* parent)
     : QObject(parent) {
+}
+
+void LLMConnector::setApiKey(const QString& key) {
+    if (m_apiKey == key) return;
+    m_apiKey = key;
+    emit apiKeyChanged(m_apiKey);
+}
+
+void LLMConnector::setPrompt(const QString& prompt) {
+    if (m_prompt == prompt) return;
+    m_prompt = prompt;
+    emit promptChanged(m_prompt);
 }
 
 NodeDescriptor LLMConnector::GetDescriptor() const {
@@ -58,28 +71,42 @@ NodeDescriptor LLMConnector::GetDescriptor() const {
 }
 
 QWidget* LLMConnector::createConfigurationWidget(QWidget* parent) {
-    Q_UNUSED(parent);
-    return nullptr; // Configuration UI will be implemented in a later story
+    auto* w = new LLMConnectorPropertiesWidget(parent);
+    // Initialize from current state
+    w->setPromptText(m_prompt);
+    w->setApiKeyText(m_apiKey);
+
+    // UI -> Connector (live updates)
+    QObject::connect(w, &LLMConnectorPropertiesWidget::promptChanged,
+                     this, &LLMConnector::setPrompt);
+    QObject::connect(w, &LLMConnectorPropertiesWidget::apiKeyChanged,
+                     this, &LLMConnector::setApiKey);
+
+    // Connector -> UI (reflect programmatic changes)
+    QObject::connect(this, &LLMConnector::promptChanged,
+                     w, &LLMConnectorPropertiesWidget::setPromptText);
+    QObject::connect(this, &LLMConnector::apiKeyChanged,
+                     w, &LLMConnectorPropertiesWidget::setApiKeyText);
+
+    return w;
 }
 
 QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
-    // Extract prompt from inputs
-    const QVariant promptVar = inputs.value(QString::fromLatin1(kInputPromptId));
-    const QString prompt = promptVar.toString();
+    Q_UNUSED(inputs);
 
-    // Capture copies for background thread
-    return QtConcurrent::run([prompt]() -> DataPacket {
+    // Capture copies for background thread from current properties
+    const QString apiKey = m_apiKey;
+    const QString prompt = m_prompt;
+
+    return QtConcurrent::run([apiKey, prompt]() -> DataPacket {
         DataPacket output;
 
-        // Read API key from environment
-        QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
         if (apiKey.isEmpty()) {
-            // Fallback placeholder (discouraged in production). Keep empty to signal error.
-            // apiKey = QStringLiteral("REPLACE_WITH_API_KEY");
+            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: API key not set.")));
+            return output;
         }
-
-        if (apiKey.isEmpty()) {
-            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: OPENAI_API_KEY not set.")));
+        if (prompt.trimmed().isEmpty()) {
+            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: Prompt is empty.")));
             return output;
         }
 

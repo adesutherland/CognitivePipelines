@@ -21,48 +21,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-
 #pragma once
 
-#include <QObject>
 #include <QWidget>
-#include <QFuture>
-#include <QString>
+#include <QTextEdit>
+#include <QLineEdit>
+#include <QFormLayout>
+#include <QLabel>
 
-#include "IToolConnector.h"
-#include "CommonDataTypes.h"
-
-
-class LLMConnector : public QObject, public IToolConnector {
+// Simple property editor widget for LLMConnector
+class LLMConnectorPropertiesWidget : public QWidget {
     Q_OBJECT
-    Q_INTERFACES(IToolConnector)
 public:
-    explicit LLMConnector(QObject* parent = nullptr);
-    ~LLMConnector() override = default;
+    explicit LLMConnectorPropertiesWidget(QWidget* parent = nullptr);
+    ~LLMConnectorPropertiesWidget() override = default;
 
-    // IToolConnector interface
-    NodeDescriptor GetDescriptor() const override;
-    QWidget* createConfigurationWidget(QWidget* parent) override;
-    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    // Initialize / update UI values from external state
+    void setPromptText(const QString& text);
+    void setApiKeyText(const QString& text);
 
-    // Accessors
-    QString apiKey() const { return m_apiKey; }
-    QString prompt() const { return m_prompt; }
-
-public slots:
-    void setApiKey(const QString& key);
-    void setPrompt(const QString& prompt);
+    // Read current values
+    QString promptText() const;
+    QString apiKeyText() const;
 
 signals:
+    void promptChanged(const QString& text);
     void apiKeyChanged(const QString& key);
-    void promptChanged(const QString& prompt);
-
-public:
-    // Constants for pin IDs
-    static constexpr const char* kInputPromptId = "prompt";
-    static constexpr const char* kOutputResponseId = "response";
 
 private:
-    QString m_apiKey;
-    QString m_prompt;
+    QTextEdit* m_promptEdit {nullptr};
+    QLineEdit* m_apiKeyEdit {nullptr};
 };

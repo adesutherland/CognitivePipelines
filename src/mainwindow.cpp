@@ -26,6 +26,7 @@
 #include "about_dialog.h"
 #include "PromptDialog.h"
 #include "NodeGraphModel.h"
+#include "ToolNodeDelegate.h"
 
 #include <QAction>
 #include <QApplication>
@@ -41,12 +42,16 @@
 #include <QByteArray>
 #include <QtNodes/GraphicsView>
 #include <QtNodes/DataFlowGraphicsScene>
+#include <QtNodes/Definitions>
+#include <QtNodes/internal/BasicGraphicsScene.hpp>
 #include <QVBoxLayout>
+#include <QDockWidget>
+#include <QLabel>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
     setWindowTitle("CognitivePipelines");
-    resize(900, 600);
+    resize(1100, 700);
 
     createActions();
     createMenus();
@@ -58,6 +63,26 @@ MainWindow::MainWindow(QWidget* parent)
     auto* scene = new QtNodes::DataFlowGraphicsScene(*_graphModel, this);
     _graphView = new QtNodes::GraphicsView(scene, this);
     setCentralWidget(_graphView);
+
+    // Create Properties dock on the right
+    propertiesDock_ = new QDockWidget(tr("Properties"), this);
+    propertiesDock_->setObjectName("PropertiesDock");
+    propertiesDock_->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    propertiesHost_ = new QWidget(propertiesDock_);
+    propertiesLayout_ = new QVBoxLayout(propertiesHost_);
+    propertiesLayout_->setContentsMargins(6, 6, 6, 6);
+    propertiesLayout_->setSpacing(6);
+    placeholderLabel_ = new QLabel(tr("No node selected"), propertiesHost_);
+    placeholderLabel_->setAlignment(Qt::AlignCenter);
+    propertiesLayout_->addWidget(placeholderLabel_);
+    propertiesDock_->setWidget(propertiesHost_);
+    addDockWidget(Qt::RightDockWidgetArea, propertiesDock_);
+
+    // Connect selection signals
+    connect(scene, &QtNodes::BasicGraphicsScene::nodeSelected,
+            this, &MainWindow::onNodeSelected);
+    connect(scene, &QGraphicsScene::selectionChanged,
+            this, &MainWindow::onSelectionChanged);
 }
 
 void MainWindow::createActions() {
@@ -135,6 +160,64 @@ void MainWindow::createStatusBar() {
     statusBar()->showMessage(tr("Ready"));
 }
 
+void MainWindow::setPropertiesWidget(QWidget* w)
+{
+    // Remove old widget from layout if any, but do not delete to avoid races with QPointer holders
+    if (currentConfigWidget_) {
+        propertiesLayout_->removeWidget(currentConfigWidget_);
+        currentConfigWidget_->hide();
+        // keep parent as propertiesHost_ to ensure proper lifetime management
+    }
+
+    if (!w) {
+        if (placeholderLabel_) placeholderLabel_->setVisible(true);
+        currentConfigWidget_.clear();
+        return;
+    }
+
+    // Add/show new widget
+    if (placeholderLabel_) placeholderLabel_->setVisible(false);
+
+    currentConfigWidget_ = w;
+    if (currentConfigWidget_ && currentConfigWidget_->parent() != propertiesHost_) {
+        currentConfigWidget_->setParent(propertiesHost_);
+    }
+    if (currentConfigWidget_ && propertiesLayout_->indexOf(currentConfigWidget_) == -1) {
+        propertiesLayout_->addWidget(currentConfigWidget_);
+    }
+    if (currentConfigWidget_) currentConfigWidget_->show();
+}
+
+void MainWindow::onNodeSelected(QtNodes::NodeId nodeId)
+{
+    if (!_graphModel) { setPropertiesWidget(nullptr); return; }
+
+    // Fetch our ToolNodeDelegate for this nodeId
+    auto* delegate = _graphModel->delegateModel<ToolNodeDelegate>(nodeId);
+    if (!delegate) {
+        setPropertiesWidget(nullptr);
+        return;
+    }
+
+    // Request the configuration widget from ToolNodeDelegate (not embedded in node)
+    QWidget* cfg = delegate->configurationWidget();
+    setPropertiesWidget(cfg);
+}
+
+void MainWindow::onSelectionChanged()
+{
+    auto* scene = qobject_cast<QtNodes::DataFlowGraphicsScene*>(_graphView ? _graphView->scene() : nullptr);
+    if (!scene) { setPropertiesWidget(nullptr); return; }
+
+    const auto sel = scene->selectedNodes();
+    if (sel.empty()) {
+        setPropertiesWidget(nullptr);
+        return;
+    }
+
+    // For now, take the first selected node
+    onNodeSelected(*sel.begin());
+}
 
 void MainWindow::onAbout() {
     AboutDialog dlg(this);

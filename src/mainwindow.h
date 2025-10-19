@@ -27,14 +27,25 @@
 #include <QMainWindow>
 #include "llm_api_client.h"
 
+#include <memory>
+#include <QPointer>
+
 class QAction;
 class QToolBar;
 class QPushButton;
+class QDockWidget;
+class QVBoxLayout;
+class QLabel;
 class NodeGraphModel;
 
 namespace QtNodes {
 class GraphicsView;
+namespace QtNodes { class DataFlowGraphicsScene; }
 }
+
+namespace QtNodes { namespace QtNodesInternal { class BasicGraphicsScene; } }
+
+namespace QtNodes { using NodeId = unsigned int; }
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -47,11 +58,17 @@ private slots:
     void onRunButtonClicked();
     void onInteractivePrompt();
 
+    // Selection handling
+    void onNodeSelected(QtNodes::NodeId nodeId);
+    void onSelectionChanged();
+
 private:
     void createActions();
     void createMenus();
     void createToolBar();
     void createStatusBar();
+
+    void setPropertiesWidget(QWidget* w);
 
     QAction* openAction {nullptr};
     QAction* saveAction {nullptr};
@@ -64,4 +81,11 @@ private:
 
     NodeGraphModel* _graphModel {nullptr};
     QtNodes::GraphicsView* _graphView {nullptr};
+
+    // Properties dock
+    QDockWidget* propertiesDock_ {nullptr};
+    QWidget* propertiesHost_ {nullptr};
+    QVBoxLayout* propertiesLayout_ {nullptr};
+    QLabel* placeholderLabel_ {nullptr};
+    QPointer<QWidget> currentConfigWidget_ {nullptr};
 };

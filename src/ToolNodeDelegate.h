@@ -57,6 +57,9 @@ public:
 
     QWidget* embeddedWidget() override;
 
+    // Returns the configuration widget for the properties panel (not embedded in node)
+    QWidget* configurationWidget();
+
 private:
     // Minimal generic NodeData that carries QVariant and a declared type id/name
     class VariantNodeData : public QtNodes::NodeData {

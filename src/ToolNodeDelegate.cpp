@@ -117,6 +117,14 @@ std::shared_ptr<NodeData> ToolNodeDelegate::outData(PortIndex const port)
 
 QWidget *ToolNodeDelegate::embeddedWidget()
 {
+    // Do not embed any configuration UI inside the node itself.
+    // The configuration widget must appear only in the MainWindow's properties panel.
+    return nullptr;
+}
+
+QWidget* ToolNodeDelegate::configurationWidget()
+{
+    // Lazily create the configuration widget for use in the properties panel only.
     if (!_widget) {
         _widget = _connector ? _connector->createConfigurationWidget(nullptr) : nullptr;
     }
