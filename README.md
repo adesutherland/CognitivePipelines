@@ -11,12 +11,13 @@ Cognitive Pipelines is a Qt 6 desktop application for composing and running node
   - Loads an API key from accounts.json
   - Accepts user text input
   - Sends a request to the LLM and displays the response
-- Toolbar “Run” button that sends a predefined prompt, using the OPENAI_API_KEY environment variable
+- Properties panel for nodes; an LLM Connector node exposes editable Prompt and API Key fields
+- Toolbar “Run” button triggers the ExecutionEngine which finds the LLM Connector node and executes it asynchronously
 - Optional GoogleTest-based test target (run_tests) for API integration testing (disabled by default)
 
 ## Dependencies
-Definitive dependency list derived from CMakeLists.txt and the CI workflow:
-- Qt 6: Core, Gui, Widgets, Network, Concurrent (installed via install-qt-action in CI; via system package manager for local dev)
+Definitive dependency list derived from CMakeLists.txt:
+- Qt 6: Core, Gui, Widgets, Network, Concurrent
 - QtNodes (paceholder/nodeeditor) fetched via CMake FetchContent
 - Boost (headers only)
 - cpr (HTTP/HTTPS client)
@@ -25,15 +26,12 @@ Definitive dependency list derived from CMakeLists.txt and the CI workflow:
 - GoogleTest (tests only, optional when ENABLE_TESTING=ON)
 
 Installation methods by environment:
-- CI (GitHub Actions):
-  - Qt installed via jurplel/install-qt-action
-  - C/C++ libraries resolved via vcpkg with NuGet-based binary caching; manifest is vcpkg.json
 - macOS (local dev):
   - Homebrew for system packages (e.g., qt, cpr, googletest if testing)
 - Linux (local dev):
-  - apt for Qt and cpr, etc.
+  - apt or your distro’s package manager for Qt and cpr, etc.
 - Windows (local dev):
-  - vcpkg with the CMake toolchain file
+  - vcpkg with the CMake toolchain file (see vcpkg.json manifest in this repo)
 
 ## How to Build
 Prerequisites:
@@ -54,9 +52,9 @@ Enable tests (optional):
 - Run: ctest --test-dir <build_dir> -V
 
 ## Configuration
-The app expects an API key provided either via environment or a local accounts.json.
-- Environment variable: OPENAI_API_KEY
-- Local file: accounts.json in the project root (ignored by Git)
+The app can use an API key from either a local accounts.json or environment (tests):
+- Local file: accounts.json in the project root (should not be committed; use accounts.json.example as a template)
+- Environment variable: OPENAI_API_KEY (primarily used by tests or external scripts)
 
 Create accounts.json from the example:
 - cp accounts.json.example accounts.json
@@ -75,8 +73,9 @@ Structure:
 ```
 
 Behavior:
-- The Interactive Prompt dialog loads the API key from accounts.json
-- The toolbar Run button reads the key from OPENAI_API_KEY
+- Interactive Prompt dialog loads the API key from accounts.json and sends requests synchronously
+- The toolbar Run button executes the LLM Connector node via the ExecutionEngine (async); configure its Prompt and API Key in the Properties panel
+- The test suite looks for OPENAI_API_KEY or accounts.json and skips if none is available
 
 ## CI/CD
 - GitHub Actions builds on Ubuntu, macOS, and Windows

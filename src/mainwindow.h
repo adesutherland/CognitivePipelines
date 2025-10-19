@@ -26,6 +26,7 @@
 
 #include <QMainWindow>
 #include "llm_api_client.h"
+#include "ExecutionEngine.h"
 
 #include <memory>
 #include <QPointer>
@@ -51,11 +52,10 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
-    ~MainWindow() override = default;
+    ~MainWindow() override;
 
 private slots:
     void onAbout();
-    void onRunButtonClicked();
     void onInteractivePrompt();
 
     // Selection handling
@@ -76,8 +76,8 @@ private:
     QAction* aboutAction {nullptr};
     QAction* interactivePromptAction_ {nullptr};
 
-    QPushButton* runButton_ {nullptr};
-    LlmApiClient llmClient_;
+    QAction* runAction_ {nullptr};
+    ExecutionEngine* execEngine_ {nullptr};
 
     NodeGraphModel* _graphModel {nullptr};
     QtNodes::GraphicsView* _graphView {nullptr};

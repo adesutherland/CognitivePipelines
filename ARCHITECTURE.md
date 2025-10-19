@@ -4,7 +4,7 @@
 - MainWindow (src/mainwindow.h/.cpp)
   - Primary application window that sets up menus, toolbar, status bar, and the dataflow canvas view.
   - Hosts actions such as "Interactive Prompt..." and a toolbar "Run" button.
-  - Uses LlmApiClient to send a predefined prompt when "Run" is clicked (reads API key from OPENAI_API_KEY).
+  - Wires the "Run" button to ExecutionEngine, which executes the currently present LLM Connector node.
 - PromptDialog (src/PromptDialog.h/.cpp)
   - Modal dialog that reads the API key from accounts.json and lets the user send arbitrary prompts.
   - Displays the full LLM response text.
@@ -29,9 +29,9 @@
 Primary user interactions:
 1) Toolbar Run button
 - User clicks Run in MainWindow
-- MainWindow reads OPENAI_API_KEY from the environment
-- MainWindow calls LlmApiClient::sendPrompt with a predefined prompt
-- Response string is displayed via QMessageBox::information
+- ExecutionEngine searches the graph for an LLM Connector node (via NodeGraphModel)
+- The connector executes asynchronously (QtConcurrent) using its configured Prompt and API Key
+- When finished, the response text is shown in a message box
 
 2) Interactive Prompt dialog
 - User opens Tools -> "Interactive Prompt..." from MainWindow
@@ -45,7 +45,8 @@ Primary user interactions:
 - When inputs arrive, ToolNodeDelegate triggers connector->Execute asynchronously (QtConcurrent) and emits dataUpdated for downstream nodes when finished
 
 Notes:
-- The LLMConnector executes work off the UI thread; however, the manual flows (Run button, PromptDialog) currently call synchronously. These should be moved off the UI thread in a future iteration for better UX.
+- The LLMConnector executes work off the UI thread for graph-driven execution.
+- The Interactive Prompt dialog currently performs a synchronous network call and can block the UI; consider moving it off the GUI thread and adding a busy indicator.
 
 ## Build System & CI/CD
 - Build System: CMake (minimum 3.21), C++17 standard, AUTOMOC/AUTOUIC/AUTORCC enabled for Qt
@@ -78,4 +79,4 @@ CI/CD (GitHub Actions):
 ```
 - accounts.json.example is tracked by Git and serves as a template.
 - PromptDialog loads the first account’s api_key for interactive prompts.
-- The toolbar Run flow can also use OPENAI_API_KEY from the environment.
+- The test suite can use OPENAI_API_KEY from the environment; the runtime graph execution uses the API key set in the LLM Connector’s Properties panel.

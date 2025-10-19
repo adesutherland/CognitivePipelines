@@ -10,9 +10,9 @@ This file tracks minor issues discovered during the latest housekeeping pass. It
   - Payload construction manually escapes a subset of characters.
   - Response parsing uses string scanning to extract choices[0].message.content.
   - Recommendation: adopt a proper JSON library (e.g., nlohmann/json or Qt JSON) for robustness and maintainability.
-- Synchronous network calls on the UI thread (manual flows):
-  - MainWindow Run button and PromptDialog execute sendPrompt synchronously, which can freeze the UI.
-  - Recommendation: move calls off the GUI thread (QThread/QThreadPool/QtConcurrent) and add a progress indicator.
+- Synchronous network calls on the UI thread (Interactive Prompt):
+  - PromptDialog executes sendPrompt synchronously, which can freeze the UI.
+  - Recommendation: move the call off the GUI thread (QThread/QThreadPool/QtConcurrent) and add a progress indicator.
 - Hardcoded model and endpoint in LlmApiClient:
   - Model name (gpt-4o-mini) and base URL are hardcoded.
   - Recommendation: make them configurable via file or UI preferences.
@@ -20,7 +20,7 @@ This file tracks minor issues discovered during the latest housekeeping pass. It
   - sendPrompt returns human-readable error text in-band.
   - Recommendation: return a structured result (status + payload + error details) to enable better UI behavior and testing.
 - Configuration duplication / discovery:
-  - Accounts.json lookup logic exists in PromptDialog and tests; environment variable usage exists in tests/MainWindow.
+  - accounts.json lookup logic exists in PromptDialog and tests.
   - Recommendation: centralize key-loading utilities and consider a single configuration discovery strategy.
 - Tests are optional and not exercised in CI:
   - CI builds the app but does not run tests; lack of secret prevents live API test.

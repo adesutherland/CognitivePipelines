@@ -60,6 +60,9 @@ public:
     // Returns the configuration widget for the properties panel (not embedded in node)
     QWidget* configurationWidget();
 
+    // Expose underlying connector for engine/execution control
+    std::shared_ptr<IToolConnector> connector() const { return _connector; }
+
 private:
     // Minimal generic NodeData that carries QVariant and a declared type id/name
     class VariantNodeData : public QtNodes::NodeData {

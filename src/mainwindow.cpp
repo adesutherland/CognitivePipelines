@@ -27,6 +27,7 @@
 #include "PromptDialog.h"
 #include "NodeGraphModel.h"
 #include "ToolNodeDelegate.h"
+#include "ExecutionEngine.h"
 
 #include <QAction>
 #include <QApplication>
@@ -47,22 +48,26 @@
 #include <QVBoxLayout>
 #include <QDockWidget>
 #include <QLabel>
+#include <QGraphicsView>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
     setWindowTitle("CognitivePipelines");
     resize(1100, 700);
 
-    createActions();
-    createMenus();
-    createToolBar();
-    createStatusBar();
-
     // Instantiate the graph model and view, and set as central widget
     _graphModel = new NodeGraphModel(this);
     auto* scene = new QtNodes::DataFlowGraphicsScene(*_graphModel, this);
     _graphView = new QtNodes::GraphicsView(scene, this);
     setCentralWidget(_graphView);
+
+    // Create execution engine
+    execEngine_ = new ExecutionEngine(_graphModel, this);
+
+    createActions();
+    createMenus();
+    createToolBar();
+    createStatusBar();
 
     // Create Properties dock on the right
     propertiesDock_ = new QDockWidget(tr("Properties"), this);
@@ -150,10 +155,8 @@ void MainWindow::createToolBar() {
     tb->addAction(openAction);
     tb->addAction(saveAction);
 
-    // Add a QPushButton labeled "Run" to trigger the LLM call
-    runButton_ = new QPushButton(tr("Run"), tb);
-    tb->addWidget(runButton_);
-    connect(runButton_, &QPushButton::clicked, this, &MainWindow::onRunButtonClicked);
+    runAction_ = tb->addAction(tr("Run"));
+    connect(runAction_, &QAction::triggered, execEngine_, &ExecutionEngine::run);
 }
 
 void MainWindow::createStatusBar() {
@@ -224,25 +227,32 @@ void MainWindow::onAbout() {
     dlg.exec();
 }
 
-void MainWindow::onRunButtonClicked() {
-    // Read API key from environment for security
-    const QByteArray apiKeyBA = qgetenv("OPENAI_API_KEY");
-    if (apiKeyBA.isEmpty()) {
-        QMessageBox::warning(this, tr("Missing API Key"), tr("OPENAI_API_KEY environment variable is not set. Please configure it and try again."));
-        return;
-    }
-
-    const std::string apiKey = apiKeyBA.toStdString();
-    const std::string prompt = "Tell me a short joke about programming.";
-
-    // Call the LLM client synchronously (simple initial integration)
-    const std::string response = llmClient_.sendPrompt(apiKey, prompt);
-
-    // Show the response to the user
-    QMessageBox::information(this, tr("LLM Response"), QString::fromStdString(response));
-}
 
 void MainWindow::onInteractivePrompt() {
     PromptDialog dlg(this);
     dlg.exec();
+}
+
+
+MainWindow::~MainWindow()
+{
+    // Ensure properties panel does not hold onto any widget
+    setPropertiesWidget(nullptr);
+
+    // Proactively tear down the scene and its items while the graph model still exists.
+    if (_graphView) {
+        QGraphicsScene* scene = _graphView->scene();
+        // Detach using base class to avoid QtNodes::GraphicsView assuming non-null scene
+        static_cast<QGraphicsView*>(_graphView)->setScene(nullptr);
+        if (scene) {
+            // If this is a QtNodes scene, clear via its model-driven API to avoid double-deletion
+            if (auto* bscene = dynamic_cast<QtNodes::BasicGraphicsScene*>(scene)) {
+                bscene->clearScene();
+            } else {
+                // Fallback for plain QGraphicsScene
+                scene->clear();
+            }
+            delete scene;
+        }
+    }
 }
