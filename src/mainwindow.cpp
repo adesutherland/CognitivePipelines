@@ -48,6 +48,7 @@
 #include <QDockWidget>
 #include <QLabel>
 #include <QGraphicsView>
+#include <QTextEdit>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
@@ -81,6 +82,35 @@ MainWindow::MainWindow(QWidget* parent)
     propertiesDock_->setWidget(propertiesHost_);
     addDockWidget(Qt::RightDockWidgetArea, propertiesDock_);
 
+    // Create Pipeline Output dock (read-only)
+    pipelineOutputDock_ = new QDockWidget(tr("Pipeline Output"), this);
+    pipelineOutputDock_->setObjectName("PipelineOutputDock");
+    pipelineOutputDock_->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+    pipelineOutputText_ = new QTextEdit(pipelineOutputDock_);
+    pipelineOutputText_->setReadOnly(true);
+    pipelineOutputDock_->setWidget(pipelineOutputText_);
+    addDockWidget(Qt::BottomDockWidgetArea, pipelineOutputDock_);
+
+    // Create Debug Log dock (read-only, hidden by default)
+    debugLogDock_ = new QDockWidget(tr("Debug Log"), this);
+    debugLogDock_->setObjectName("DebugLogDock");
+    debugLogDock_->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+    debugLogText_ = new QTextEdit(debugLogDock_);
+    debugLogText_->setReadOnly(true);
+    debugLogDock_->setWidget(debugLogText_);
+    addDockWidget(Qt::BottomDockWidgetArea, debugLogDock_);
+    debugLogDock_->hide();
+
+    // Wire action to dock visibility and keep them in sync
+    connect(showDebugLogAction_, &QAction::toggled, debugLogDock_, &QDockWidget::setVisible);
+    connect(debugLogDock_, &QDockWidget::visibilityChanged, showDebugLogAction_, &QAction::setChecked);
+
+    // Connect engine signals to UI slots
+    connect(execEngine_, &ExecutionEngine::pipelineFinished,
+            this, &MainWindow::onPipelineFinished);
+    connect(execEngine_, &ExecutionEngine::nodeLog,
+            this, &MainWindow::onNodeLog);
+
     // Connect selection signals
     connect(scene, &QtNodes::BasicGraphicsScene::nodeSelected,
             this, &MainWindow::onNodeSelected);
@@ -103,6 +133,16 @@ void MainWindow::createActions() {
     // Keep the same behavior: trigger the execution engine
     connect(runAction_, &QAction::triggered, execEngine_, &ExecutionEngine::run);
 
+    // View menu action to toggle debug log dock
+    showDebugLogAction_ = new QAction(tr("Show Debug Log"), this);
+    showDebugLogAction_->setCheckable(true);
+    showDebugLogAction_->setChecked(false);
+
+    // Pipeline menu action to enable/disable debug logging
+    enableDebugLoggingAction_ = new QAction(tr("Enable Debug Logging"), this);
+    enableDebugLoggingAction_->setCheckable(true);
+    enableDebugLoggingAction_->setChecked(false);
+
     // Modern signal-slot connections using function pointers / lambdas
 
     connect(exitAction, &QAction::triggered, this, [this]() {
@@ -119,9 +159,15 @@ void MainWindow::createMenus() {
     fileMenu->addSeparator();
     fileMenu->addAction(exitAction);
 
-    // New Pipeline menu containing the Run action
+    // New View menu containing toggle for Debug Log
+    QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
+    viewMenu->addAction(showDebugLogAction_);
+
+    // Pipeline menu containing the Run action and Enable Debug Logging toggle
     QMenu* pipelineMenu = menuBar()->addMenu(tr("&Pipeline"));
     pipelineMenu->addAction(runAction_);
+    pipelineMenu->addSeparator();
+    pipelineMenu->addAction(enableDebugLoggingAction_);
 
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(aboutAction);
@@ -196,7 +242,37 @@ void MainWindow::onAbout() {
     dlg.exec();
 }
 
+void MainWindow::onPipelineFinished(const DataPacket& finalOutput)
+{
+    QString text;
+    if (finalOutput.contains(QStringLiteral("text"))) {
+        text = finalOutput.value(QStringLiteral("text")).toString();
+    } else if (!finalOutput.isEmpty()) {
+        QStringList lines;
+        for (auto it = finalOutput.cbegin(); it != finalOutput.cend(); ++it) {
+            lines << QStringLiteral("%1: %2").arg(it.key(), it.value().toString());
+        }
+        text = lines.join('\n');
+    } else {
+        text = tr("<no output>");
+    }
+    if (pipelineOutputText_) {
+        pipelineOutputText_->setPlainText(text);
+    }
+    if (pipelineOutputDock_ && !pipelineOutputDock_->isVisible()) {
+        pipelineOutputDock_->show();
+    }
+}
 
+void MainWindow::onNodeLog(const QString& message)
+{
+    if (!enableDebugLoggingAction_ || !enableDebugLoggingAction_->isChecked()) {
+        return;
+    }
+    if (debugLogText_) {
+        debugLogText_->append(message);
+    }
+}
 
 
 MainWindow::~MainWindow()

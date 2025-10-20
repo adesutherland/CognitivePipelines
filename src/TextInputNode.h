@@ -24,37 +24,37 @@
 #pragma once
 
 #include <QObject>
-#include <QPointer>
-#include <QMap>
-#include <QSet>
+#include <QWidget>
+#include <QFuture>
+#include <QString>
 
+#include "IToolConnector.h"
 #include "CommonDataTypes.h"
 
-namespace QtNodes { class DataFlowGraphModel; using NodeId = unsigned int; }
-
-class NodeGraphModel;
-
-class ExecutionEngine : public QObject {
+class TextInputNode : public QObject, public IToolConnector {
     Q_OBJECT
+    Q_INTERFACES(IToolConnector)
 public:
-    explicit ExecutionEngine(NodeGraphModel* model, QObject* parent = nullptr);
-    ~ExecutionEngine() override = default;
+    explicit TextInputNode(QObject* parent = nullptr);
+    ~TextInputNode() override = default;
 
-signals:
-    // Emitted once at the very end of a successful run containing only the final DataPacket
-    void pipelineFinished(const DataPacket& finalOutput);
-    // Emitted for detailed per-node execution logs
-    void nodeLog(const QString& message);
+    // IToolConnector interface
+    NodeDescriptor GetDescriptor() const override;
+    QWidget* createConfigurationWidget(QWidget* parent) override;
+    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+
+    // Accessors
+    QString text() const { return m_text; }
 
 public slots:
-    void run();
+    void setText(const QString& text);
+
+signals:
+    void textChanged(const QString& text);
+
+public:
+    static constexpr const char* kOutputId = "text";
 
 private:
-    // Adjacency list: from nodeId -> set of downstream nodeIds
-    QMap<QtNodes::NodeId, QSet<QtNodes::NodeId>> _dag;
-
-    // Stores the output packet produced by each node after it executes
-    QMap<QtNodes::NodeId, DataPacket> _nodeOutputs;
-
-    NodeGraphModel* _graphModel {nullptr};
+    QString m_text;
 };

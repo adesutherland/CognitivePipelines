@@ -36,6 +36,7 @@ class QPushButton;
 class QDockWidget;
 class QVBoxLayout;
 class QLabel;
+class QTextEdit;
 class NodeGraphModel;
 
 namespace QtNodes {
@@ -52,6 +53,12 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
+
+public slots:
+    // Final pipeline result
+    void onPipelineFinished(const DataPacket& finalOutput);
+    // Per-node debug logging
+    void onNodeLog(const QString& message);
 
 private slots:
     void onAbout();
@@ -71,6 +78,8 @@ private:
     QAction* aboutAction {nullptr};
 
     QAction* runAction_ {nullptr};
+    QAction* showDebugLogAction_ {nullptr};
+    QAction* enableDebugLoggingAction_ {nullptr};
     ExecutionEngine* execEngine_ {nullptr};
 
     NodeGraphModel* _graphModel {nullptr};
@@ -82,4 +91,11 @@ private:
     QVBoxLayout* propertiesLayout_ {nullptr};
     QLabel* placeholderLabel_ {nullptr};
     QPointer<QWidget> currentConfigWidget_ {nullptr};
+
+    // Output docks
+    QDockWidget* pipelineOutputDock_ {nullptr};
+    QTextEdit* pipelineOutputText_ {nullptr};
+
+    QDockWidget* debugLogDock_ {nullptr};
+    QTextEdit* debugLogText_ {nullptr};
 };

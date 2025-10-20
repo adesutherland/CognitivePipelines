@@ -27,6 +27,7 @@
 #include "LLMConnector.h"
 #include "PromptBuilderNode.h"
 #include "ToolNodeDelegate.h"
+#include "TextInputNode.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -47,4 +48,10 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto tool = std::make_shared<PromptBuilderNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Text"));
+
+    // Register TextInputNode via the generic ToolNodeDelegate adapter
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<TextInputNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Inputs"));
 }

@@ -62,6 +62,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/PromptBuilderNode.h
     ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
     ${SRC_DIR}/PromptBuilderPropertiesWidget.h
+    ${SRC_DIR}/TextInputNode.cpp
+    ${SRC_DIR}/TextInputNode.h
+    ${SRC_DIR}/TextInputPropertiesWidget.cpp
+    ${SRC_DIR}/TextInputPropertiesWidget.h
     ${SRC_DIR}/NodeGraphModel.cpp
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp

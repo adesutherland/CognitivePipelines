@@ -21,40 +21,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#pragma once
+#include "TextInputPropertiesWidget.h"
 
-#include <QObject>
-#include <QPointer>
-#include <QMap>
-#include <QSet>
+TextInputPropertiesWidget::TextInputPropertiesWidget(QWidget* parent)
+    : QWidget(parent)
+{
+    auto* form = new QFormLayout(this);
+    form->setContentsMargins(4, 4, 4, 4);
+    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
-#include "CommonDataTypes.h"
+    m_textEdit = new QTextEdit(this);
+    m_textEdit->setPlaceholderText(tr("Enter text to inject into the pipeline..."));
+    m_textEdit->setAcceptRichText(false);
 
-namespace QtNodes { class DataFlowGraphModel; using NodeId = unsigned int; }
+    form->addRow(tr("Text"), m_textEdit);
 
-class NodeGraphModel;
+    connect(m_textEdit, &QTextEdit::textChanged, this, [this]() {
+        emit textChanged(m_textEdit->toPlainText());
+    });
+}
 
-class ExecutionEngine : public QObject {
-    Q_OBJECT
-public:
-    explicit ExecutionEngine(NodeGraphModel* model, QObject* parent = nullptr);
-    ~ExecutionEngine() override = default;
+void TextInputPropertiesWidget::setText(const QString& text)
+{
+    if (m_textEdit && m_textEdit->toPlainText() != text) {
+        m_textEdit->setPlainText(text);
+    }
+}
 
-signals:
-    // Emitted once at the very end of a successful run containing only the final DataPacket
-    void pipelineFinished(const DataPacket& finalOutput);
-    // Emitted for detailed per-node execution logs
-    void nodeLog(const QString& message);
-
-public slots:
-    void run();
-
-private:
-    // Adjacency list: from nodeId -> set of downstream nodeIds
-    QMap<QtNodes::NodeId, QSet<QtNodes::NodeId>> _dag;
-
-    // Stores the output packet produced by each node after it executes
-    QMap<QtNodes::NodeId, DataPacket> _nodeOutputs;
-
-    NodeGraphModel* _graphModel {nullptr};
-};
+QString TextInputPropertiesWidget::text() const
+{
+    return m_textEdit ? m_textEdit->toPlainText() : QString();
+}

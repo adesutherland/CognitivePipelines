@@ -92,26 +92,37 @@ QWidget* LLMConnector::createConfigurationWidget(QWidget* parent) {
 }
 
 QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
-    Q_UNUSED(inputs);
+    // Read incoming prompt if present
+    const QString incomingPrompt = inputs.value(QString::fromLatin1(kInputPromptId)).toString();
 
     // Capture copies for background thread from current properties
     const QString apiKey = m_apiKey;
-    const QString prompt = m_prompt;
+    const QString panelPrompt = m_prompt;
 
-    return QtConcurrent::run([apiKey, prompt]() -> DataPacket {
+    // Build combined prompt: panel prompt first, then separator, then incoming prompt (if provided)
+    const QString combinedPrompt = [&]() {
+        const QString inTrim = incomingPrompt.trimmed();
+        const QString panelTrim = panelPrompt.trimmed();
+        if (inTrim.isEmpty() && panelTrim.isEmpty()) return QString{};
+        if (panelTrim.isEmpty()) return inTrim; // only incoming
+        if (inTrim.isEmpty()) return panelPrompt; // only panel
+        return panelPrompt + QStringLiteral("\n\n-----\n\n") + incomingPrompt; // both
+    }();
+
+    return QtConcurrent::run([apiKey, combinedPrompt]() -> DataPacket {
         DataPacket output;
 
         if (apiKey.isEmpty()) {
             output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: API key not set.")));
             return output;
         }
-        if (prompt.trimmed().isEmpty()) {
+        if (combinedPrompt.trimmed().isEmpty()) {
             output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: Prompt is empty.")));
             return output;
         }
 
         LlmApiClient client;
-        const std::string response = client.sendPrompt(apiKey.toStdString(), prompt.toStdString());
+        const std::string response = client.sendPrompt(apiKey.toStdString(), combinedPrompt.toStdString());
         output.insert(QString::fromLatin1(kOutputResponseId), QString::fromStdString(response));
         return output;
     });
