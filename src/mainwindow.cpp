@@ -24,7 +24,6 @@
 
 #include "mainwindow.h"
 #include "about_dialog.h"
-#include "PromptDialog.h"
 #include "NodeGraphModel.h"
 #include "ToolNodeDelegate.h"
 #include "ExecutionEngine.h"
@@ -66,7 +65,6 @@ MainWindow::MainWindow(QWidget* parent)
 
     createActions();
     createMenus();
-    createToolBar();
     createStatusBar();
 
     // Create Properties dock on the right
@@ -91,13 +89,6 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 void MainWindow::createActions() {
-    openAction = new QAction(tr("&Open..."), this);
-    openAction->setShortcuts(QKeySequence::Open);
-    openAction->setStatusTip(tr("Open a file"));
-
-    saveAction = new QAction(tr("&Save"), this);
-    saveAction->setShortcuts(QKeySequence::Save);
-    saveAction->setStatusTip(tr("Save current file"));
 
     exitAction = new QAction(tr("E&xit"), this);
     exitAction->setShortcuts(QKeySequence::Quit);
@@ -106,20 +97,13 @@ void MainWindow::createActions() {
     aboutAction = new QAction(tr("&About..."), this);
     aboutAction->setStatusTip(tr("About this application"));
 
-    // Modern signal-slot connections using function pointers / lambdas
-    connect(openAction, &QAction::triggered, this, [this]() {
-        const QString fileName = QFileDialog::getOpenFileName(this, tr("Open File"));
-        if (!fileName.isEmpty()) {
-            statusBar()->showMessage(tr("Opened: %1").arg(fileName), 3000);
-        }
-    });
+    // Run action (moved from toolbar to the Pipeline menu)
+    runAction_ = new QAction(tr("&Run"), this);
+    runAction_->setStatusTip(tr("Execute the current pipeline"));
+    // Keep the same behavior: trigger the execution engine
+    connect(runAction_, &QAction::triggered, execEngine_, &ExecutionEngine::run);
 
-    connect(saveAction, &QAction::triggered, this, [this]() {
-        const QString fileName = QFileDialog::getSaveFileName(this, tr("Save File"));
-        if (!fileName.isEmpty()) {
-            statusBar()->showMessage(tr("Saved: %1").arg(fileName), 3000);
-        }
-    });
+    // Modern signal-slot connections using function pointers / lambdas
 
     connect(exitAction, &QAction::triggered, this, [this]() {
         // Close the main window (equivalent to quitting when it's the main window)
@@ -128,36 +112,21 @@ void MainWindow::createActions() {
 
     connect(aboutAction, &QAction::triggered, this, &MainWindow::onAbout);
 
-    // Tools -> Interactive Prompt action
-    interactivePromptAction_ = new QAction(tr("Interactive Prompt..."), this);
-    interactivePromptAction_->setStatusTip(tr("Open an interactive prompt dialog"));
-    connect(interactivePromptAction_, &QAction::triggered, this, &MainWindow::onInteractivePrompt);
 }
 
 void MainWindow::createMenus() {
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
-    fileMenu->addAction(openAction);
-    fileMenu->addAction(saveAction);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAction);
 
-    QMenu* toolsMenu = menuBar()->addMenu(tr("&Tools"));
-    toolsMenu->addAction(interactivePromptAction_);
+    // New Pipeline menu containing the Run action
+    QMenu* pipelineMenu = menuBar()->addMenu(tr("&Pipeline"));
+    pipelineMenu->addAction(runAction_);
 
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(aboutAction);
 }
 
-void MainWindow::createToolBar() {
-    QToolBar* tb = addToolBar(tr("Main Toolbar"));
-    tb->setObjectName("MainToolbar");
-    tb->setMovable(true);
-    tb->addAction(openAction);
-    tb->addAction(saveAction);
-
-    runAction_ = tb->addAction(tr("Run"));
-    connect(runAction_, &QAction::triggered, execEngine_, &ExecutionEngine::run);
-}
 
 void MainWindow::createStatusBar() {
     statusBar()->showMessage(tr("Ready"));
@@ -228,10 +197,6 @@ void MainWindow::onAbout() {
 }
 
 
-void MainWindow::onInteractivePrompt() {
-    PromptDialog dlg(this);
-    dlg.exec();
-}
 
 
 MainWindow::~MainWindow()

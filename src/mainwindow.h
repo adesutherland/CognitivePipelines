@@ -32,7 +32,6 @@
 #include <QPointer>
 
 class QAction;
-class QToolBar;
 class QPushButton;
 class QDockWidget;
 class QVBoxLayout;
@@ -56,7 +55,6 @@ public:
 
 private slots:
     void onAbout();
-    void onInteractivePrompt();
 
     // Selection handling
     void onNodeSelected(QtNodes::NodeId nodeId);
@@ -65,16 +63,12 @@ private slots:
 private:
     void createActions();
     void createMenus();
-    void createToolBar();
     void createStatusBar();
 
     void setPropertiesWidget(QWidget* w);
 
-    QAction* openAction {nullptr};
-    QAction* saveAction {nullptr};
     QAction* exitAction {nullptr};
     QAction* aboutAction {nullptr};
-    QAction* interactivePromptAction_ {nullptr};
 
     QAction* runAction_ {nullptr};
     ExecutionEngine* execEngine_ {nullptr};

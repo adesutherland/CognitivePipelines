@@ -58,8 +58,6 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/LLMConnector.h
     ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
     ${SRC_DIR}/LLMConnectorPropertiesWidget.h
-    ${SRC_DIR}/PromptDialog.cpp
-    ${SRC_DIR}/PromptDialog.h
     ${SRC_DIR}/NodeGraphModel.cpp
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp
