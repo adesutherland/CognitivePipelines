@@ -25,7 +25,6 @@
 
 #include <QWidget>
 #include <QTextEdit>
-#include <QLineEdit>
 #include <QFormLayout>
 #include <QLabel>
 
@@ -38,17 +37,13 @@ public:
 
     // Initialize / update UI values from external state
     void setPromptText(const QString& text);
-    void setApiKeyText(const QString& text);
 
     // Read current values
     QString promptText() const;
-    QString apiKeyText() const;
 
 signals:
     void promptChanged(const QString& text);
-    void apiKeyChanged(const QString& key);
 
 private:
     QTextEdit* m_promptEdit {nullptr};
-    QLineEdit* m_apiKeyEdit {nullptr};
 };

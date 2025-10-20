@@ -27,19 +27,18 @@
 
 #include <QtConcurrent/QtConcurrent>
 #include <QPointer>
-#include <QProcessEnvironment>
 #include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QFile>
+#include <QDir>
+#include <QCoreApplication>
+#include <QDebug>
 
 #include "llm_api_client.h"
 
 LLMConnector::LLMConnector(QObject* parent)
     : QObject(parent) {
-}
-
-void LLMConnector::setApiKey(const QString& key) {
-    if (m_apiKey == key) return;
-    m_apiKey = key;
-    emit apiKeyChanged(m_apiKey);
 }
 
 void LLMConnector::setPrompt(const QString& prompt) {
@@ -75,29 +74,30 @@ QWidget* LLMConnector::createConfigurationWidget(QWidget* parent) {
     auto* w = new LLMConnectorPropertiesWidget(parent);
     // Initialize from current state
     w->setPromptText(m_prompt);
-    w->setApiKeyText(m_apiKey);
 
     // UI -> Connector (live updates)
     QObject::connect(w, &LLMConnectorPropertiesWidget::promptChanged,
                      this, &LLMConnector::setPrompt);
-    QObject::connect(w, &LLMConnectorPropertiesWidget::apiKeyChanged,
-                     this, &LLMConnector::setApiKey);
 
     // Connector -> UI (reflect programmatic changes)
     QObject::connect(this, &LLMConnector::promptChanged,
                      w, &LLMConnectorPropertiesWidget::setPromptText);
-    QObject::connect(this, &LLMConnector::apiKeyChanged,
-                     w, &LLMConnectorPropertiesWidget::setApiKeyText);
 
     return w;
 }
 
 QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
+    // Resolve API key at runtime from accounts.json or environment
+    const QString apiKey = getApiKey();
+    if (apiKey.isEmpty()) {
+        qDebug() << "LLMConnector: API key not found. Provide accounts.json with 'openai' account or set OPENAI_API_KEY.";
+        return QFuture<DataPacket>(); // fail fast: do not attempt to call the API
+    }
+
     // Read incoming prompt if present
     const QString incomingPrompt = inputs.value(QString::fromLatin1(kInputPromptId)).toString();
 
     // Capture copies for background thread from current properties
-    const QString apiKey = m_apiKey;
     const QString panelPrompt = m_prompt;
 
     // Build combined prompt: panel prompt first, then separator, then incoming prompt (if provided)
@@ -113,10 +113,6 @@ QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
     return QtConcurrent::run([apiKey, combinedPrompt]() -> DataPacket {
         DataPacket output;
 
-        if (apiKey.isEmpty()) {
-            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: API key not set.")));
-            return output;
-        }
         if (combinedPrompt.trimmed().isEmpty()) {
             output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: Prompt is empty.")));
             return output;
@@ -129,19 +125,48 @@ QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
     });
 }
 
-
 QJsonObject LLMConnector::saveState() const {
     QJsonObject obj;
-    obj.insert(QStringLiteral("apiKey"), m_apiKey);
     obj.insert(QStringLiteral("prompt"), m_prompt);
     return obj;
 }
 
 void LLMConnector::loadState(const QJsonObject& data) {
-    if (data.contains(QStringLiteral("apiKey"))) {
-        setApiKey(data.value(QStringLiteral("apiKey")).toString());
-    }
     if (data.contains(QStringLiteral("prompt"))) {
         setPrompt(data.value(QStringLiteral("prompt")).toString());
     }
+}
+
+QString LLMConnector::getApiKey() const {
+    const QString fileName = QStringLiteral("accounts.json");
+
+    const QStringList candidates = {
+        QDir::current().filePath(fileName),
+        QCoreApplication::applicationDirPath() + QLatin1Char('/') + fileName,
+        QDir(QCoreApplication::applicationDirPath() + QLatin1String("/..")).filePath(fileName)
+    };
+
+    for (const QString& path : candidates) {
+        QFile f(path);
+        if (!f.exists()) continue;
+        if (!f.open(QIODevice::ReadOnly)) continue;
+        const QByteArray data = f.readAll();
+        f.close();
+        const QJsonDocument doc = QJsonDocument::fromJson(data);
+        if (!doc.isObject()) continue;
+        const QJsonArray accounts = doc.object().value(QStringLiteral("accounts")).toArray();
+        for (const QJsonValue& v : accounts) {
+            const QJsonObject acc = v.toObject();
+            const QString name = acc.value(QStringLiteral("name")).toString();
+            if (name == QStringLiteral("openai")) {
+                const QString key = acc.value(QStringLiteral("api_key")).toString();
+                if (!key.isEmpty()) return key;
+            }
+        }
+    }
+
+    const QByteArray envKey = qgetenv("OPENAI_API_KEY");
+    if (!envKey.isEmpty()) return QString::fromUtf8(envKey);
+
+    return {};
 }

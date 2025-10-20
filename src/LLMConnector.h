@@ -21,7 +21,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-
 #pragma once
 
 #include <QObject>
@@ -48,15 +47,12 @@ public:
     void loadState(const QJsonObject& data) override;
 
     // Accessors
-    QString apiKey() const { return m_apiKey; }
     QString prompt() const { return m_prompt; }
 
 public slots:
-    void setApiKey(const QString& key);
     void setPrompt(const QString& prompt);
 
 signals:
-    void apiKeyChanged(const QString& key);
     void promptChanged(const QString& prompt);
 
 public:
@@ -65,6 +61,8 @@ public:
     static constexpr const char* kOutputResponseId = "response";
 
 private:
-    QString m_apiKey;
+    QString getApiKey() const;
+
+private:
     QString m_prompt;
 };

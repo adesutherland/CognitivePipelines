@@ -36,18 +36,12 @@ LLMConnectorPropertiesWidget::LLMConnectorPropertiesWidget(QWidget* parent)
     m_promptEdit->setPlaceholderText(tr("Enter system message or prompt..."));
     m_promptEdit->setAcceptRichText(false);
 
-    m_apiKeyEdit = new QLineEdit(this);
-    m_apiKeyEdit->setPlaceholderText(tr("Enter API key"));
-    m_apiKeyEdit->setEchoMode(QLineEdit::Password);
-
     form->addRow(tr("Prompt"), m_promptEdit);
-    form->addRow(tr("API Key"), m_apiKeyEdit);
 
     // Wire UI changes to our signals (live updates)
     connect(m_promptEdit, &QTextEdit::textChanged, this, [this]() {
         emit promptChanged(m_promptEdit->toPlainText());
     });
-    connect(m_apiKeyEdit, &QLineEdit::textChanged, this, &LLMConnectorPropertiesWidget::apiKeyChanged);
 }
 
 void LLMConnectorPropertiesWidget::setPromptText(const QString& text)
@@ -56,18 +50,7 @@ void LLMConnectorPropertiesWidget::setPromptText(const QString& text)
         m_promptEdit->setPlainText(text);
 }
 
-void LLMConnectorPropertiesWidget::setApiKeyText(const QString& text)
-{
-    if (m_apiKeyEdit->text() != text)
-        m_apiKeyEdit->setText(text);
-}
-
 QString LLMConnectorPropertiesWidget::promptText() const
 {
     return m_promptEdit->toPlainText();
-}
-
-QString LLMConnectorPropertiesWidget::apiKeyText() const
-{
-    return m_apiKeyEdit->text();
 }
