@@ -21,30 +21,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#include "NodeGraphModel.h"
-#include <QtNodes/NodeDelegateModelRegistry>
+#pragma once
 
-#include "LLMConnector.h"
-#include "PromptBuilderNode.h"
-#include "ToolNodeDelegate.h"
+#include <QWidget>
+#include <QTextEdit>
+#include <QFormLayout>
 
-NodeGraphModel::NodeGraphModel(QObject* parent)
-    : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
-{
-    Q_UNUSED(parent);
+// Property editor widget for PromptBuilderNode
+class PromptBuilderPropertiesWidget : public QWidget {
+    Q_OBJECT
+public:
+    explicit PromptBuilderPropertiesWidget(QWidget* parent = nullptr);
+    ~PromptBuilderPropertiesWidget() override = default;
 
-    // Register LLMConnector via the generic ToolNodeDelegate adapter
-    auto registry = dataModelRegistry();
+    // Initialize / update UI values from external state
+    void setTemplateText(const QString& text);
 
-    registry->registerModel([this]() {
-        // Create connector and wrap into ToolNodeDelegate
-        auto connector = std::make_shared<LLMConnector>();
-        return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("Generative AI"));
+    // Read current values
+    QString templateText() const;
 
-    // Register PromptBuilderNode via the generic ToolNodeDelegate adapter
-    registry->registerModel([this]() {
-        auto tool = std::make_shared<PromptBuilderNode>();
-        return std::make_unique<ToolNodeDelegate>(tool);
-    }, QStringLiteral("Text"));
-}
+signals:
+    void templateChanged(const QString& text);
+
+private:
+    QTextEdit* m_templateEdit {nullptr};
+};

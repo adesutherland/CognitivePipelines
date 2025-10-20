@@ -21,30 +21,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#include "NodeGraphModel.h"
-#include <QtNodes/NodeDelegateModelRegistry>
+#include "PromptBuilderPropertiesWidget.h"
 
-#include "LLMConnector.h"
-#include "PromptBuilderNode.h"
-#include "ToolNodeDelegate.h"
-
-NodeGraphModel::NodeGraphModel(QObject* parent)
-    : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
+PromptBuilderPropertiesWidget::PromptBuilderPropertiesWidget(QWidget* parent)
+    : QWidget(parent)
 {
-    Q_UNUSED(parent);
+    auto* form = new QFormLayout(this);
+    form->setContentsMargins(4, 4, 4, 4);
+    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
-    // Register LLMConnector via the generic ToolNodeDelegate adapter
-    auto registry = dataModelRegistry();
+    m_templateEdit = new QTextEdit(this);
+    m_templateEdit->setPlaceholderText(tr("Write your prompt template here, e.g., 'Summarize this: {input}'"));
+    m_templateEdit->setAcceptRichText(false);
 
-    registry->registerModel([this]() {
-        // Create connector and wrap into ToolNodeDelegate
-        auto connector = std::make_shared<LLMConnector>();
-        return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("Generative AI"));
+    form->addRow(tr("Template"), m_templateEdit);
 
-    // Register PromptBuilderNode via the generic ToolNodeDelegate adapter
-    registry->registerModel([this]() {
-        auto tool = std::make_shared<PromptBuilderNode>();
-        return std::make_unique<ToolNodeDelegate>(tool);
-    }, QStringLiteral("Text"));
+    connect(m_templateEdit, &QTextEdit::textChanged, this, [this]() {
+        emit templateChanged(m_templateEdit->toPlainText());
+    });
+}
+
+void PromptBuilderPropertiesWidget::setTemplateText(const QString& text)
+{
+    if (m_templateEdit && m_templateEdit->toPlainText() != text) {
+        m_templateEdit->setPlainText(text);
+    }
+}
+
+QString PromptBuilderPropertiesWidget::templateText() const
+{
+    return m_templateEdit ? m_templateEdit->toPlainText() : QString();
 }

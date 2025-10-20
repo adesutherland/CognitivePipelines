@@ -21,30 +21,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#include "NodeGraphModel.h"
-#include <QtNodes/NodeDelegateModelRegistry>
+#pragma once
 
-#include "LLMConnector.h"
-#include "PromptBuilderNode.h"
-#include "ToolNodeDelegate.h"
+#include <QObject>
+#include <QWidget>
+#include <QFuture>
+#include <QString>
 
-NodeGraphModel::NodeGraphModel(QObject* parent)
-    : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
-{
-    Q_UNUSED(parent);
+#include "IToolConnector.h"
+#include "CommonDataTypes.h"
 
-    // Register LLMConnector via the generic ToolNodeDelegate adapter
-    auto registry = dataModelRegistry();
+class PromptBuilderNode : public QObject, public IToolConnector {
+    Q_OBJECT
+    Q_INTERFACES(IToolConnector)
+public:
+    explicit PromptBuilderNode(QObject* parent = nullptr);
+    ~PromptBuilderNode() override = default;
 
-    registry->registerModel([this]() {
-        // Create connector and wrap into ToolNodeDelegate
-        auto connector = std::make_shared<LLMConnector>();
-        return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("Generative AI"));
+    // IToolConnector interface
+    NodeDescriptor GetDescriptor() const override;
+    QWidget* createConfigurationWidget(QWidget* parent) override;
+    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
 
-    // Register PromptBuilderNode via the generic ToolNodeDelegate adapter
-    registry->registerModel([this]() {
-        auto tool = std::make_shared<PromptBuilderNode>();
-        return std::make_unique<ToolNodeDelegate>(tool);
-    }, QStringLiteral("Text"));
-}
+    // Accessors
+    QString templateText() const { return m_templateText; }
+
+public slots:
+    void setTemplateText(const QString& text);
+
+signals:
+    void templateTextChanged(const QString& text);
+
+public:
+    static constexpr const char* kInputId = "input";
+    static constexpr const char* kOutputId = "prompt";
+
+private:
+    QString m_templateText { QStringLiteral("{input}") };
+};
