@@ -1,66 +1,72 @@
 # Cognitive Pipelines
 
 ## Project Overview
-Cognitive Pipelines is a Qt 6 desktop application for composing and running node-based “cognitive pipelines.” Each node represents a tool, such as a Large Language Model (LLM) call or a future Python/utility step. The current iteration focuses on a minimal, working path from the UI through an LLM connector to a live OpenAI-compatible API and back to the UI.
+Cognitive Pipelines is a Qt 6 desktop application for composing and running node‑based “cognitive” workflows. The UI provides a data‑flow canvas (via QtNodes) where each node represents a tool (e.g., a Large Language Model call or text utility). A Properties panel lets you configure the selected node, and an ExecutionEngine runs the graph and displays results in a Pipeline Output dock.
 
 ## Current Features
-- Qt 6 Widgets application with a dataflow canvas (QtNodes) and a main toolbar
-- About dialog showing version, git commit hash, build date/time, and Qt runtime
-- LLM integration via a lightweight C++ client (cpr) calling an OpenAI-compatible Chat Completions endpoint
-- Interactive Prompt dialog that:
-  - Loads an API key from accounts.json
-  - Accepts user text input
-  - Sends a request to the LLM and displays the response
-- Properties panel for nodes; an LLM Connector node exposes editable Prompt and API Key fields
-- Toolbar “Run” button triggers the ExecutionEngine which finds the LLM Connector node and executes it asynchronously
-- Optional GoogleTest-based test target (run_tests) for API integration testing (disabled by default)
+- Cross‑platform Qt 6 Widgets application
+- Data‑flow canvas powered by QtNodes (paceholder/nodeeditor)
+- Nodes/tools provided out of the box:
+  - TextInputNode: emits user‑provided text
+  - PromptBuilderNode: formats a template using upstream text
+  - LLMConnector: calls an OpenAI‑compatible Chat Completions endpoint (via cpr)
+- Properties panel for configuring the selected node (e.g., LLM prompt and API key)
+- Run action that executes the graph in topological order; work is performed asynchronously per node via QtConcurrent
+- Pipeline Output dock and optional Debug Log dock
+- About dialog (version, git hash, build date/time, Qt runtime)
+- Optional GoogleTest‑based test target (run_tests) for API integration testing (disabled by default)
 
-## Dependencies
-Definitive dependency list derived from CMakeLists.txt:
+## Dependencies (definitive)
+From CMakeLists.txt and vcpkg manifest:
 - Qt 6: Core, Gui, Widgets, Network, Concurrent
-- QtNodes (paceholder/nodeeditor) fetched via CMake FetchContent
-- Boost (headers only)
+- QtNodes (fetched via CMake FetchContent)
+- Boost (headers)
 - cpr (HTTP/HTTPS client)
 - OpenSSL (TLS, transitive for cpr)
 - Zlib (transitive)
 - GoogleTest (tests only, optional when ENABLE_TESTING=ON)
 
 Installation methods by environment:
+- CI (GitHub Actions):
+  - Qt installed via jurplel/install-qt-action@v4
+  - Third‑party libraries resolved via vcpkg with NuGet‑based binary caching to GitHub Packages
+  - Ninja generator on Unix; Visual Studio generator on Windows
 - macOS (local dev):
-  - Homebrew for system packages (e.g., qt, cpr, googletest if testing)
+  - Homebrew: brew install qt cpr googletest (tests optional)
+  - Or use vcpkg with this repo’s vcpkg.json manifest
 - Linux (local dev):
-  - apt or your distro’s package manager for Qt and cpr, etc.
+  - Use your distro packages for Qt 6/cpr where available, or vcpkg
+  - Ensure common build tools (pkg-config, ninja, etc.) are installed
 - Windows (local dev):
-  - vcpkg with the CMake toolchain file (see vcpkg.json manifest in this repo)
+  - vcpkg recommended; pass the toolchain file during CMake configure
 
-## How to Build
+## How to Build (local)
 Prerequisites:
 - C++17 compiler and CMake 3.21+
-- Qt 6 and third-party deps available via your platform’s package manager
+- Qt 6 and listed third‑party dependencies available via your environment
 
-Configure and build (replace <build_dir> as needed):
-- cmake -S . -B <build_dir>
-- cmake --build <build_dir> --target CognitivePipelines -j 2
+Generic configure/build:
+- cmake -S . -B build
+- cmake --build build --target CognitivePipelines -j 2
 
-Windows note: pass the vcpkg toolchain file at configure time if using vcpkg:
-- -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\\scripts\\buildsystems\\vcpkg.cmake"
+Using vcpkg (recommended on Windows or cross‑platform):
+- cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+- cmake --build build --target CognitivePipelines -j 2
 
 Enable tests (optional):
-- cmake -S . -B <build_dir> -DENABLE_TESTING=ON
-- Ensure GoogleTest is available (Homebrew or vcpkg)
-- Build tests: cmake --build <build_dir> --target run_tests
-- Run: ctest --test-dir <build_dir> -V
+- cmake -S . -B build -DENABLE_TESTING=ON [ -DCMAKE_TOOLCHAIN_FILE=... ]
+- cmake --build build --target run_tests
+- ctest --test-dir build -V
 
 ## Configuration
-The app can use an API key from either a local accounts.json or environment (tests):
-- Local file: accounts.json in the project root (should not be committed; use accounts.json.example as a template)
-- Environment variable: OPENAI_API_KEY (primarily used by tests or external scripts)
+Runtime:
+- Configure the LLMConnector’s API Key and Prompt via the Properties panel.
 
-Create accounts.json from the example:
-- cp accounts.json.example accounts.json
-- Edit accounts.json and set your key
+Tests:
+- Provide an API key via either an accounts.json file (project root) or the OPENAI_API_KEY environment variable.
+- accounts.json.example is provided as a template; copy it to accounts.json and set your key.
 
-Structure:
+accounts.json structure:
 ```
 {
   "accounts": [
@@ -72,16 +78,14 @@ Structure:
 }
 ```
 
-Behavior:
-- Interactive Prompt dialog loads the API key from accounts.json and sends requests synchronously
-- The toolbar Run button executes the LLM Connector node via the ExecutionEngine (async); configure its Prompt and API Key in the Properties panel
-- The test suite looks for OPENAI_API_KEY or accounts.json and skips if none is available
+Notes:
+- The application itself does not auto‑load accounts.json; it relies on the Properties panel. The test suite looks for OPENAI_API_KEY or accounts.json and skips if none is available.
 
 ## CI/CD
-- GitHub Actions builds on Ubuntu, macOS, and Windows
-- Qt provided by jurplel/install-qt-action
-- Dependencies resolved through vcpkg with NuGet-based binary caching to GitHub Packages
-- Ninja generator on Unix; MSVC generator on Windows
+- Matrix builds on Ubuntu, macOS, and Windows
+- Qt via jurplel/install-qt-action; third‑party dependencies via vcpkg (with NuGet binary caching)
+- Ninja on Unix; MSVC/Visual Studio on Windows
+- Release build target: CognitivePipelines
 
 ## License
 MIT License. See LICENSE for details.

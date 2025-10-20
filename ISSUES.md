@@ -3,35 +3,33 @@
 This file tracks minor issues discovered during the latest housekeeping pass. Items here are not blockers but should be triaged and addressed in future iterations.
 
 ## Resolved Since Last Pass
-- Source file header standardization: All .h and .cpp files now use the canonical header from src/main.cpp.
+- Source file header standardization: All .h and .cpp files use the canonical header from src/main.cpp.
+- Documentation alignment: Removed outdated references to an Interactive Prompt dialog; docs now reflect the current LLM Connector + Properties panel flow.
 
 ## New Findings
 - Hand-rolled JSON in LlmApiClient:
   - Payload construction manually escapes a subset of characters.
   - Response parsing uses string scanning to extract choices[0].message.content.
-  - Recommendation: adopt a proper JSON library (e.g., nlohmann/json or Qt JSON) for robustness and maintainability.
-- Synchronous network calls on the UI thread (Interactive Prompt):
-  - PromptDialog executes sendPrompt synchronously, which can freeze the UI.
-  - Recommendation: move the call off the GUI thread (QThread/QThreadPool/QtConcurrent) and add a progress indicator.
+  - Recommendation: adopt a JSON library (e.g., nlohmann/json or Qt JSON) for robustness and maintainability.
 - Hardcoded model and endpoint in LlmApiClient:
   - Model name (gpt-4o-mini) and base URL are hardcoded.
   - Recommendation: make them configurable via file or UI preferences.
 - Error handling returns plain strings:
   - sendPrompt returns human-readable error text in-band.
   - Recommendation: return a structured result (status + payload + error details) to enable better UI behavior and testing.
-- Configuration duplication / discovery:
-  - accounts.json lookup logic exists in PromptDialog and tests.
-  - Recommendation: centralize key-loading utilities and consider a single configuration discovery strategy.
+- Graph cycle handling:
+  - ExecutionEngine builds a DAG and performs a topological ordering but does not explicitly detect/report cycles.
+  - Recommendation: add cycle detection and a user-visible error if the graph isn’t acyclic.
 - Tests are optional and not exercised in CI:
   - CI builds the app but does not run tests; lack of secret prevents live API test.
-  - Recommendation: add a separate CI job that runs tests when OPENAI_API_KEY is provided as a secret, or add a mock/test double.
-- Security/UX for API key display:
-  - PromptDialog shows the API key in a read-only text field.
-  - Recommendation: mask the value or provide a reveal/hide toggle.
-- Documentation/manifest alignment:
-  - Ensure future Qt module or dependency changes are reflected in both README and CMake; clarify vcpkg vs system package split for local dev.
+  - Recommendation: add a CI job that runs tests when OPENAI_API_KEY is provided as a secret, or introduce a mock/test double.
 - Code hygiene automation:
-  - Add clang-format and clang-tidy configurations; consider a pre-commit hook or CI check to enforce the canonical header and formatting.
+  - No clang-format or clang-tidy configuration is present.
+  - Recommendation: add formatting/lint configs and a CI check or pre-commit hook.
 - Commented/unused helpers:
   - A small static helper (find_after) in llm_api_client.cpp is defined but currently unused.
-  - Recommendation: remove unused helpers or use them consistently.
+  - Recommendation: remove or consistently use it.
+
+## Notes for Next Pass
+- Reassess dependency versions (QtNodes, cpr, Boost) and update docs if CMake changes.
+- Review UI/UX around API key entry in the LLM Connector properties; consider secure storage or masking options if needed.
