@@ -49,6 +49,12 @@
 #include <QLabel>
 #include <QGraphicsView>
 #include <QTextEdit>
+#include <QFile>
+#include <QFileInfo>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
@@ -127,6 +133,17 @@ void MainWindow::createActions() {
     aboutAction = new QAction(tr("&About..."), this);
     aboutAction->setStatusTip(tr("About this application"));
 
+    // File actions
+    openAction_ = new QAction(tr("&Open..."), this);
+    openAction_->setShortcuts(QKeySequence::Open);
+    openAction_->setStatusTip(tr("Open a pipeline from a file"));
+    connect(openAction_, &QAction::triggered, this, &MainWindow::onOpen);
+
+    saveAsAction_ = new QAction(tr("Save &As..."), this);
+    saveAsAction_->setShortcuts(QKeySequence::SaveAs);
+    saveAsAction_->setStatusTip(tr("Save the current pipeline to a file"));
+    connect(saveAsAction_, &QAction::triggered, this, &MainWindow::onSaveAs);
+
     // Run action (moved from toolbar to the Pipeline menu)
     runAction_ = new QAction(tr("&Run"), this);
     runAction_->setStatusTip(tr("Execute the current pipeline"));
@@ -156,6 +173,8 @@ void MainWindow::createActions() {
 
 void MainWindow::createMenus() {
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
+    fileMenu->addAction(openAction_);
+    fileMenu->addAction(saveAsAction_);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAction);
 
@@ -235,6 +254,130 @@ void MainWindow::onSelectionChanged()
 
     // For now, take the first selected node
     onNodeSelected(*sel.begin());
+}
+
+void MainWindow::onSaveAs()
+{
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save Pipeline As"),
+                                                    QDir::homePath(),
+                                                    tr("Flow Scene Files (*.flow);;JSON Files (*.json);;All Files (*)"));
+    if (fileName.isEmpty()) return;
+
+    if (!fileName.endsWith(".flow", Qt::CaseInsensitive) &&
+        !fileName.endsWith(".json", Qt::CaseInsensitive)) {
+        fileName += ".flow";
+    }
+
+    if (!_graphModel) return;
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, tr("Save Failed"),
+                             tr("Could not open file for writing:\n%1").arg(file.errorString()));
+        return;
+    }
+
+    const QJsonObject json = _graphModel->save();
+    file.write(QJsonDocument(json).toJson());
+    file.close();
+
+    statusBar()->showMessage(tr("Saved to %1").arg(QFileInfo(fileName).fileName()), 3000);
+}
+
+void MainWindow::onOpen()
+{
+    QString fileName = QFileDialog::getOpenFileName(this,
+                                                    tr("Open Pipeline"),
+                                                    QDir::homePath(),
+                                                    tr("Flow Scene Files (*.flow);;JSON Files (*.json);;All Files (*)"));
+    if (fileName.isEmpty()) return;
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, tr("Open Failed"),
+                             tr("Could not open file for reading:\n%1").arg(file.errorString()));
+        return;
+    }
+
+    const QByteArray data = file.readAll();
+    file.close();
+
+    // Clear properties panel to avoid dangling widgets from nodes being deleted
+    setPropertiesWidget(nullptr);
+
+    // Clear existing graph before loading
+    if (_graphView && _graphView->scene()) {
+        if (auto* bscene = dynamic_cast<QtNodes::BasicGraphicsScene*>(_graphView->scene())) {
+            bscene->clearScene();
+        } else {
+            _graphView->scene()->clear();
+        }
+    }
+
+    QJsonParseError parseErr{};
+    const QJsonDocument doc = QJsonDocument::fromJson(data, &parseErr);
+    if (parseErr.error != QJsonParseError::NoError || !doc.isObject()) {
+        QMessageBox::warning(this, tr("Open Failed"),
+                             tr("Invalid JSON in file: %1").arg(parseErr.errorString()));
+        return;
+    }
+
+    // Migrate legacy model names to current IDs and infer when missing
+    QJsonObject migrated = doc.object();
+    QJsonArray nodesArray = migrated.value(QStringLiteral("nodes")).toArray();
+    for (int i = 0; i < nodesArray.size(); ++i) {
+        QJsonObject nodeObj = nodesArray.at(i).toObject();
+        QJsonObject internal = nodeObj.value(QStringLiteral("internal-data")).toObject();
+        const QString modelName = internal.value(QStringLiteral("model-name")).toString();
+        QString mapped = modelName;
+
+        if (modelName.isEmpty()) {
+            // Infer from known state keys when model-name is absent (older saves)
+            if (internal.contains(QStringLiteral("text"))) {
+                mapped = QStringLiteral("text-input");
+            } else if (internal.contains(QStringLiteral("template"))) {
+                mapped = QStringLiteral("prompt-builder");
+            } else if (internal.contains(QStringLiteral("apiKey")) || internal.contains(QStringLiteral("prompt"))) {
+                mapped = QStringLiteral("llm-connector");
+            } else {
+                // Fallback to a safe default to allow loading
+                mapped = QStringLiteral("text-input");
+            }
+        } else {
+            // Remap legacy human-readable names to stable IDs
+            if (modelName == QStringLiteral("LLM Connector") || modelName == QStringLiteral("LLMConnector")) {
+                mapped = QStringLiteral("llm-connector");
+            } else if (modelName == QStringLiteral("Prompt Builder") || modelName == QStringLiteral("PromptBuilderNode")) {
+                mapped = QStringLiteral("prompt-builder");
+            } else if (modelName == QStringLiteral("Text Input") || modelName == QStringLiteral("TextInputNode")) {
+                mapped = QStringLiteral("text-input");
+            }
+        }
+
+        if ((mapped != modelName || modelName.isEmpty()) && !mapped.isEmpty()) {
+            internal.insert(QStringLiteral("model-name"), mapped);
+            nodeObj.insert(QStringLiteral("internal-data"), internal);
+            nodesArray.replace(i, nodeObj);
+        }
+    }
+    migrated.insert(QStringLiteral("nodes"), nodesArray);
+
+    try {
+        if (_graphModel) {
+            _graphModel->load(migrated);
+        }
+    } catch (const std::exception& e) {
+        QMessageBox::critical(this, tr("Open Failed"),
+                              tr("An error occurred while loading the pipeline:\n%1").arg(QString::fromUtf8(e.what())));
+        return;
+    } catch (...) {
+        QMessageBox::critical(this, tr("Open Failed"),
+                              tr("An unknown error occurred while loading the pipeline."));
+        return;
+    }
+
+    statusBar()->showMessage(tr("Loaded from %1").arg(QFileInfo(fileName).fileName()), 3000);
 }
 
 void MainWindow::onAbout() {

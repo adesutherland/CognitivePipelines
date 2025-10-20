@@ -176,17 +176,47 @@ void ToolNodeDelegate::triggerExecutionIfReady()
     // Use watcher to know when finished
     auto watcher = new QFutureWatcher<DataPacket>(this);
     connect(watcher, &QFutureWatcher<DataPacket>::finished, this, [this, watcher]() {
-        const DataPacket result = watcher->result();
-        // Update outputs
-        for (const auto &key : result.keys()) {
-            _outputs[key] = result.value(key);
-        }
-        // Notify downstream for each output port
-        for (PortIndex i = 0; i < _outputOrder.size(); ++i) {
-            emit dataUpdated(i);
+        try {
+            const DataPacket result = watcher->result();
+            // Update outputs
+            for (const auto &key : result.keys()) {
+                _outputs[key] = result.value(key);
+            }
+            // Notify downstream for each output port
+            for (PortIndex i = 0; i < _outputOrder.size(); ++i) {
+                emit dataUpdated(i);
+            }
+        } catch (const std::exception &e) {
+            qWarning() << "ToolNodeDelegate execution threw exception:" << e.what();
+        } catch (...) {
+            qWarning() << "ToolNodeDelegate execution threw unknown exception";
         }
         emit computingFinished();
         watcher->deleteLater();
     });
     watcher->setFuture(future);
+}
+
+
+QJsonObject ToolNodeDelegate::save() const
+{
+    QJsonObject obj;
+    // Persist the registry lookup key so loader can instantiate the correct model
+    obj.insert(QStringLiteral("model-name"), name());
+
+    // Merge connector-specific state into the internal-data object
+    if (_connector) {
+        const QJsonObject state = _connector->saveState();
+        for (auto it = state.begin(); it != state.end(); ++it) {
+            obj.insert(it.key(), it.value());
+        }
+    }
+    return obj;
+}
+
+void ToolNodeDelegate::load(QJsonObject const& data)
+{
+    if (_connector) {
+        _connector->loadState(data);
+    }
 }

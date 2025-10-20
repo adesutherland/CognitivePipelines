@@ -28,6 +28,7 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QPointer>
 #include <QProcessEnvironment>
+#include <QJsonObject>
 
 #include "llm_api_client.h"
 
@@ -126,4 +127,21 @@ QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
         output.insert(QString::fromLatin1(kOutputResponseId), QString::fromStdString(response));
         return output;
     });
+}
+
+
+QJsonObject LLMConnector::saveState() const {
+    QJsonObject obj;
+    obj.insert(QStringLiteral("apiKey"), m_apiKey);
+    obj.insert(QStringLiteral("prompt"), m_prompt);
+    return obj;
+}
+
+void LLMConnector::loadState(const QJsonObject& data) {
+    if (data.contains(QStringLiteral("apiKey"))) {
+        setApiKey(data.value(QStringLiteral("apiKey")).toString());
+    }
+    if (data.contains(QStringLiteral("prompt"))) {
+        setPrompt(data.value(QStringLiteral("prompt")).toString());
+    }
 }

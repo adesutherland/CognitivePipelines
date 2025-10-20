@@ -25,6 +25,7 @@
 #include "PromptBuilderPropertiesWidget.h"
 
 #include <QtConcurrent/QtConcurrent>
+#include <QJsonObject>
 
 PromptBuilderNode::PromptBuilderNode(QObject* parent)
     : QObject(parent)
@@ -92,4 +93,19 @@ QFuture<DataPacket> PromptBuilderNode::Execute(const DataPacket& inputs)
         output.insert(QString::fromLatin1(kOutputId), result);
         return output;
     });
+}
+
+
+QJsonObject PromptBuilderNode::saveState() const
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("template"), m_templateText);
+    return obj;
+}
+
+void PromptBuilderNode::loadState(const QJsonObject& data)
+{
+    if (data.contains(QStringLiteral("template"))) {
+        setTemplateText(data.value(QStringLiteral("template")).toString());
+    }
 }

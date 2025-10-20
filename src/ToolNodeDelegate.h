@@ -33,6 +33,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QVariant>
+#include <QJsonObject>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
@@ -56,6 +57,10 @@ public:
     std::shared_ptr<QtNodes::NodeData> outData(QtNodes::PortIndex const port) override;
 
     QWidget* embeddedWidget() override;
+
+    // Node persistence
+    QJsonObject save() const override;
+    void load(QJsonObject const& data) override;
 
     // Returns the configuration widget for the properties panel (not embedded in node)
     QWidget* configurationWidget();

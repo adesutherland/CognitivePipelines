@@ -25,6 +25,7 @@
 #include "TextInputPropertiesWidget.h"
 
 #include <QtConcurrent/QtConcurrent>
+#include <QJsonObject>
 
 TextInputNode::TextInputNode(QObject* parent)
     : QObject(parent)
@@ -83,4 +84,19 @@ QFuture<DataPacket> TextInputNode::Execute(const DataPacket& /*inputs*/)
         output.insert(QString::fromLatin1(kOutputId), value);
         return output;
     });
+}
+
+
+QJsonObject TextInputNode::saveState() const
+{
+    QJsonObject obj;
+    obj.insert(QStringLiteral("text"), m_text);
+    return obj;
+}
+
+void TextInputNode::loadState(const QJsonObject& data)
+{
+    if (data.contains(QStringLiteral("text"))) {
+        setText(data.value(QStringLiteral("text")).toString());
+    }
 }

@@ -27,6 +27,7 @@
 #include <QWidget>
 #include <QFuture>
 #include <QObject>
+#include <QJsonObject>
 
 #include "CommonDataTypes.h"
 
@@ -47,6 +48,10 @@ public:
 
     // Executes the tool asynchronously with given inputs; resolves to output packet.
     virtual QFuture<DataPacket> Execute(const DataPacket& inputs) = 0;
+
+    // Serialization of node-specific state (properties).
+    virtual QJsonObject saveState() const = 0;
+    virtual void loadState(const QJsonObject& data) = 0;
 };
 
 // Declare the Qt interface IID for IToolConnector so Q_INTERFACES can resolve it

@@ -62,6 +62,8 @@ public slots:
 
 private slots:
     void onAbout();
+    void onOpen();
+    void onSaveAs();
 
     // Selection handling
     void onNodeSelected(QtNodes::NodeId nodeId);
@@ -75,6 +77,8 @@ private:
     void setPropertiesWidget(QWidget* w);
 
     QAction* exitAction {nullptr};
+    QAction* openAction_ {nullptr};
+    QAction* saveAsAction_ {nullptr};
     QAction* aboutAction {nullptr};
 
     QAction* runAction_ {nullptr};

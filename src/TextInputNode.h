@@ -42,6 +42,8 @@ public:
     NodeDescriptor GetDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
     QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    QJsonObject saveState() const override;
+    void loadState(const QJsonObject& data) override;
 
     // Accessors
     QString text() const { return m_text; }
