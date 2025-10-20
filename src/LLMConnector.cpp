@@ -138,6 +138,10 @@ void LLMConnector::loadState(const QJsonObject& data) {
 }
 
 QString LLMConnector::getApiKey() const {
+    // Prefer environment variable to avoid relying on any committed files in CI
+    const QByteArray envKey = qgetenv("OPENAI_API_KEY");
+    if (!envKey.isEmpty()) return QString::fromUtf8(envKey);
+
     const QString fileName = QStringLiteral("accounts.json");
 
     const QStringList candidates = {
@@ -164,9 +168,6 @@ QString LLMConnector::getApiKey() const {
             }
         }
     }
-
-    const QByteArray envKey = qgetenv("OPENAI_API_KEY");
-    if (!envKey.isEmpty()) return QString::fromUtf8(envKey);
 
     return {};
 }

@@ -128,7 +128,8 @@ jobs:
             cmake -S . -B "${{ github.workspace }}/build" \
               -G "Visual Studio 17 2022" -A x64 \
               -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
-              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
+              -DENABLE_TESTING=ON
           else         
               if [[ "${{ runner.os }}" != "Windows" ]]; then
                 unset VCPKG_FORCE_SYSTEM_BINARIES
@@ -137,8 +138,29 @@ jobs:
                 -G Ninja \
                 -DCMAKE_BUILD_TYPE=Release \
                 -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
-                -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}"
+                -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
+                -DENABLE_TESTING=ON
           fi
 
       - name: Build (Release)
-        run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines -j 2
+        run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines run_tests integration_tests -j 2
+
+      - name: Run Unit Tests (Windows)
+        if: runner.os == 'Windows'
+        run: .\\build\\Release\\run_tests.exe
+
+      - name: Run Unit Tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: ./build/run_tests
+
+      - name: Run Integration Tests (Windows)
+        if: runner.os == 'Windows'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: .\\build\\Release\\integration_tests.exe
+
+      - name: Run Integration Tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: ./build/integration_tests -platform offscreen

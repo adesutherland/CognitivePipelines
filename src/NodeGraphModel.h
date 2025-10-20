@@ -33,4 +33,7 @@ class NodeGraphModel : public QtNodes::DataFlowGraphModel
 
 public:
     explicit NodeGraphModel(QObject* parent = nullptr);
+
+    // Convenience: remove all nodes and connections from the model
+    void clear();
 };

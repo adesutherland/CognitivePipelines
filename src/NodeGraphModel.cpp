@@ -55,3 +55,15 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Inputs"));
 }
+
+void NodeGraphModel::clear()
+{
+    // Collect node IDs first to avoid iterator invalidation
+    const auto idsSet = allNodeIds();
+    QList<QtNodes::NodeId> ids;
+    ids.reserve(static_cast<int>(idsSet.size()));
+    for (auto id : idsSet) ids.append(id);
+    for (auto id : ids) {
+        deleteNode(id);
+    }
+}

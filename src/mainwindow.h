@@ -54,6 +54,10 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+    // Accessors used by headless tests
+    NodeGraphModel* graphModel() const { return _graphModel; }
+    ExecutionEngine* executionEngine() const { return execEngine_; }
+
 public slots:
     // Final pipeline result
     void onPipelineFinished(const DataPacket& finalOutput);
