@@ -66,7 +66,7 @@ jobs:
           echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
           echo "$(brew --prefix)/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies via vcpkg (for runner arch)
+      - name: Bootstrap vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
@@ -133,18 +133,21 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
+          unset VCPKG_FORCE_SYSTEM_BINARIES
           "${VCPKG_ROOT}/vcpkg" install --triplet=x64-windows
 
       - name: Run vcpkg install (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
+          unset VCPKG_FORCE_SYSTEM_BINARIES
           "${VCPKG_ROOT}/vcpkg" install --triplet=x64-linux
 
       - name: Run vcpkg install (macOS Universal)
         if: runner.os == 'macOS'
         shell: bash
         run: |
+          unset VCPKG_FORCE_SYSTEM_BINARIES
           "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx
           "${VCPKG_ROOT}/vcpkg" install --triplet=arm64-osx
 
