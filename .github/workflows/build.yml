@@ -48,7 +48,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            autoconf automake libtool pkg-config autoconf-archive ninja-build mono-complete
+            autoconf automake libtool pkg-config autoconf-archive ninja-build mono-complete \
+            libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-image0-dev libxcb-keysyms1-dev libxcb-icccm4-dev \
+            libxcb-sync-dev libxcb-xinerama0-dev libxcb-cursor-dev libxkbcommon-dev \
+            libfontconfig1-dev libfreetype6-dev libegl1-mesa-dev libgbm-dev \
+            libgl1-mesa-dev libgles2-mesa-dev '^libxcb.*-dev' libx11-xcb-dev \
+            libxi-dev libdbus-1-dev # Add essential XCB and related dev packages 
 
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
@@ -147,11 +153,15 @@ jobs:
 
       - name: Run Unit Tests (Windows)
         if: runner.os == 'Windows'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: .\\build\\Release\\run_tests.exe
 
       - name: Run Unit Tests (Linux/macOS)
         if: runner.os != 'Windows'
-        run: ./build/run_tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: ./build/run_tests -platform offscreen
 
       - name: Run Integration Tests (Windows)
         if: runner.os == 'Windows'

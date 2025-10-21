@@ -157,94 +157,93 @@ if(ENABLE_TESTING)
     include(CTest)
     enable_testing()
 
-    # Environment-agnostic discovery: works with Homebrew and vcpkg
-    find_package(GTest REQUIRED)
-
-    add_executable(run_tests
-        tests/test_llm_api_client.cpp
-        tests/test_nodes.cpp
-        tests/test_execution_engine.cpp
-        # Sources required by the new unit tests
-        ${SRC_DIR}/llm_api_client.cpp
-        ${SRC_DIR}/llm_api_client.h
-        ${SRC_DIR}/ExecutionEngine.cpp
-        ${SRC_DIR}/ExecutionEngine.h
-        ${SRC_DIR}/NodeGraphModel.cpp
-        ${SRC_DIR}/NodeGraphModel.h
-        ${SRC_DIR}/ToolNodeDelegate.cpp
-        ${SRC_DIR}/ToolNodeDelegate.h
-        ${SRC_DIR}/PromptBuilderNode.cpp
-        ${SRC_DIR}/PromptBuilderNode.h
-        ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
-        ${SRC_DIR}/PromptBuilderPropertiesWidget.h
-        ${SRC_DIR}/TextInputNode.cpp
-        ${SRC_DIR}/TextInputNode.h
-        ${SRC_DIR}/TextInputPropertiesWidget.cpp
-        ${SRC_DIR}/TextInputPropertiesWidget.h
-        ${SRC_DIR}/LLMConnector.cpp
-        ${SRC_DIR}/LLMConnector.h
-        ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
-        ${SRC_DIR}/LLMConnectorPropertiesWidget.h
+    # Unit Tests (GTest)
+    add_executable(unit_tests
+            tests/test_llm_api_client.cpp
+            tests/test_nodes.cpp
+            tests/test_execution_engine.cpp
+            # Sources required by the unit tests
+            ${SRC_DIR}/llm_api_client.cpp
+            ${SRC_DIR}/llm_api_client.h
+            ${SRC_DIR}/ExecutionEngine.cpp
+            ${SRC_DIR}/ExecutionEngine.h
+            ${SRC_DIR}/NodeGraphModel.cpp
+            ${SRC_DIR}/NodeGraphModel.h
+            ${SRC_DIR}/ToolNodeDelegate.cpp
+            ${SRC_DIR}/ToolNodeDelegate.h
+            ${SRC_DIR}/PromptBuilderNode.cpp
+            ${SRC_DIR}/PromptBuilderNode.h
+            ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
+            ${SRC_DIR}/PromptBuilderPropertiesWidget.h
+            ${SRC_DIR}/TextInputNode.cpp
+            ${SRC_DIR}/TextInputNode.h
+            ${SRC_DIR}/TextInputPropertiesWidget.cpp
+            ${SRC_DIR}/TextInputPropertiesWidget.h
+            ${SRC_DIR}/LLMConnector.cpp
+            ${SRC_DIR}/LLMConnector.h
+            ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
+            ${SRC_DIR}/LLMConnectorPropertiesWidget.h
     )
-
-    target_include_directories(run_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(run_tests PRIVATE
-        GTest::gtest_main
-        cpr::cpr
-        Qt6::Core
-        Qt6::Widgets
-        Qt6::Concurrent
-        QtNodes::QtNodes
-        Boost::boost
+    target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(unit_tests PRIVATE
+            GTest::gtest_main # Use vcpkg target
+            GTest::gtest_main
+            cpr::cpr
+            Qt6::Core
+            Qt6::Widgets
+            Qt6::Concurrent
+            QtNodes::QtNodes
+            Boost::boost
     )
-
+    # Add unit tests to CTest
     include(GoogleTest)
-    gtest_discover_tests(run_tests)
+    gtest_discover_tests(unit_tests) # Discover tests FOR the unit_tests target
 
-    # Integration tests (Qt Test based, headless)
+    # Integration tests (Qt Test based, headless) - Definition looks okay
     add_executable(integration_tests
-        tests/test_integration.cpp
-        # Link against the same application sources (excluding main.cpp)
-        ${SRC_DIR}/mainwindow.cpp
-        ${SRC_DIR}/mainwindow.h
-        ${SRC_DIR}/about_dialog.cpp
-        ${SRC_DIR}/about_dialog.h
-        ${SRC_DIR}/PythonScriptConnector.cpp
-        ${SRC_DIR}/PythonScriptConnector.h
-        ${SRC_DIR}/llm_api_client.cpp
-        ${SRC_DIR}/llm_api_client.h
-        ${SRC_DIR}/LLMConnector.cpp
-        ${SRC_DIR}/LLMConnector.h
-        ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
-        ${SRC_DIR}/LLMConnectorPropertiesWidget.h
-        ${SRC_DIR}/PromptBuilderNode.cpp
-        ${SRC_DIR}/PromptBuilderNode.h
-        ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
-        ${SRC_DIR}/PromptBuilderPropertiesWidget.h
-        ${SRC_DIR}/TextInputNode.cpp
-        ${SRC_DIR}/TextInputNode.h
-        ${SRC_DIR}/TextInputPropertiesWidget.cpp
-        ${SRC_DIR}/TextInputPropertiesWidget.h
-        ${SRC_DIR}/NodeGraphModel.cpp
-        ${SRC_DIR}/NodeGraphModel.h
-        ${SRC_DIR}/ToolNodeDelegate.cpp
-        ${SRC_DIR}/ToolNodeDelegate.h
-        ${SRC_DIR}/ExecutionEngine.cpp
-        ${SRC_DIR}/ExecutionEngine.h
+            tests/test_integration.cpp
+            ${SRC_DIR}/mainwindow.cpp
+            ${SRC_DIR}/mainwindow.h
+            ${SRC_DIR}/about_dialog.cpp
+            ${SRC_DIR}/about_dialog.h
+            ${SRC_DIR}/PythonScriptConnector.cpp
+            ${SRC_DIR}/PythonScriptConnector.h
+            ${SRC_DIR}/llm_api_client.cpp
+            ${SRC_DIR}/llm_api_client.h
+            ${SRC_DIR}/LLMConnector.cpp
+            ${SRC_DIR}/LLMConnector.h
+            ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
+            ${SRC_DIR}/LLMConnectorPropertiesWidget.h
+            ${SRC_DIR}/PromptBuilderNode.cpp
+            ${SRC_DIR}/PromptBuilderNode.h
+            ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
+            ${SRC_DIR}/PromptBuilderPropertiesWidget.h
+            ${SRC_DIR}/TextInputNode.cpp
+            ${SRC_DIR}/TextInputNode.h
+            ${SRC_DIR}/TextInputPropertiesWidget.cpp
+            ${SRC_DIR}/TextInputPropertiesWidget.h
+            ${SRC_DIR}/NodeGraphModel.cpp
+            ${SRC_DIR}/NodeGraphModel.h
+            ${SRC_DIR}/ToolNodeDelegate.cpp
+            ${SRC_DIR}/ToolNodeDelegate.h
+            ${SRC_DIR}/ExecutionEngine.cpp
+            ${SRC_DIR}/ExecutionEngine.h
     )
 
     target_include_directories(integration_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(integration_tests PRIVATE
-        Qt6::Test
-        Qt6::Core
-        Qt6::Gui
-        Qt6::Widgets
-        Qt6::Network
-        Qt6::Concurrent
-        QtNodes::QtNodes
-        Boost::boost
-        cpr::cpr
+            Qt6::Test
+            Qt6::Core
+            Qt6::Gui
+            Qt6::Widgets
+            Qt6::Network
+            Qt6::Concurrent
+            QtNodes::QtNodes
+            Boost::boost
+            cpr::cpr
     )
+    # Add integration tests to CTest (can have the same name as executable)
+    add_test(NAME integration_tests COMMAND integration_tests) # Explicitly add to CTest
 endif()
 
 include(CPack)
