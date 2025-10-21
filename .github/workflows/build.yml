@@ -150,7 +150,7 @@ jobs:
           
             # Add macOS-specific flags to build a Universal (arm64 + x86_64) binary
             if [[ "${{ runner.os }}" == "macOS" ]]; then
-              CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\""
+              CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
             fi
           
             # Unset vcpkg flag
