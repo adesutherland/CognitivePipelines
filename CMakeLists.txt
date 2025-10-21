@@ -120,10 +120,10 @@ target_compile_definitions(CognitivePipelines PRIVATE
 # On macOS and Windows, optionally create a GUI app without console if needed
 if(WIN32)
     # Uncomment to build a WIN32 subsystem GUI app:
-    # set_target_properties(CognitivePipelines PROPERTIES WIN32_EXECUTABLE YES)
+    set_target_properties(CognitivePipelines PROPERTIES WIN32_EXECUTABLE YES)
 elseif(APPLE)
     # Uncomment to build a macOS app bundle:
-    # set_target_properties(CognitivePipelines PROPERTIES MACOSX_BUNDLE YES)
+    set_target_properties(CognitivePipelines PROPERTIES MACOSX_BUNDLE YES)
 endif()
 
 # Install rules
