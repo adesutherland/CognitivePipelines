@@ -187,7 +187,6 @@ if(ENABLE_TESTING)
     target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(unit_tests PRIVATE
             GTest::gtest_main # Use vcpkg target
-            GTest::gtest_main
             cpr::cpr
             Qt6::Core
             Qt6::Widgets
