@@ -66,12 +66,17 @@ jobs:
           echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
           echo "$(brew --prefix)/bin" >> $GITHUB_PATH
 
-      - name: Install dependencies via vcpkg
+      - name: Install dependencies via vcpkg (for runner arch)
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
-          runVcpkgInstall: true
-          vcpkgTriplet: ${{ runner.os == 'macOS' && 'x64-osx arm64-osx' || '' }}
+          runVcpkgInstall: true # Make sure this is here
+
+      - name: Install x86_64 dependencies (for macOS Universal Build)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx     
 
       - name: Allow vcpkg to download helper tools (Unix)
         if: runner.os != 'Windows'
@@ -151,7 +156,7 @@ jobs:
           
             # Add macOS-specific flags to build a Universal (arm64 + x86_64) binary
             if [[ "${{ runner.os }}" == "macOS" ]]; then
-              CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+              CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
             fi
           
             # Unset vcpkg flag
