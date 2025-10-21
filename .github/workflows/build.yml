@@ -70,6 +70,7 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
+          runVcpkgInstall: true
           vcpkgTriplet: ${{ runner.os == 'macOS' && 'x64-osx arm64-osx' || '' }}
 
       - name: Allow vcpkg to download helper tools (Unix)
@@ -187,7 +188,7 @@ jobs:
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .\\build\\bin\Release\\integration_tests.exe
+        run: .\\build\\bin\\Release\\integration_tests.exe
 
       - name: Run Integration Tests (macOS)
         if: runner.os == 'macOS'
