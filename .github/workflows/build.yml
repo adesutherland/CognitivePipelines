@@ -156,35 +156,35 @@ jobs:
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .\\build\\Release\\unit_tests.exe
+        run: .\\build\\bin\\Release\\unit_tests.exe
 
       - name: Run Unit Tests (macOS)
         if: runner.os == 'macOS'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: ./build/unit_tests -platform offscreen
+        run: ./build/bin/unit_tests -platform offscreen
 
       - name: Run Unit Tests (Linux)
         if: runner.os == 'Linux'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: xvfb-run ./build/unit_tests
+        run: xvfb-run ./build/bin/unit_tests
 
       - name: Run Integration Tests (Windows)
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .\\build\\Release\\integration_tests.exe
+        run: .\\build\\bin\Release\\integration_tests.exe
 
       - name: Run Integration Tests (macOS)
         if: runner.os == 'macOS'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: ./build/integration_tests -platform offscreen
+        run: ./build/bin/integration_tests -platform offscreen
 
       - name: Run Integration Tests (Linux)
         if: runner.os == 'Linux'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: xvfb-run ./build/integration_tests
+        run: xvfb-run ./build/bin/integration_tests
 
