@@ -8,8 +8,13 @@
 #include <QTimer>
 #include <QtNodes/internal/Definitions.hpp>
 
-#include <stdio.h> // For fprintf
+#include <stdio.h> // For fprintf, stderr/stdout redirection
 #include <iostream>
+#if defined(_WIN32)
+ #include <io.h> // _dup2, _fileno
+#else
+ #include <unistd.h> // dup2, fileno
+#endif
 
 #include "mainwindow.h"
 #include "NodeGraphModel.h"
@@ -178,6 +183,17 @@ void IntegrationTests::test_FullPipelineExecution()
     QVERIFY(!response.trimmed().isEmpty());
 }
 
+// Force everything written to stdout to be redirected to stderr (so CI captures all test output)
+static void redirectStdoutToStderr()
+{
+#if defined(_WIN32)
+    _dup2(_fileno(stderr), _fileno(stdout));
+#else
+    dup2(fileno(stderr), fileno(stdout));
+#endif
+    setvbuf(stdout, nullptr, _IONBF, 0);
+}
+
 // Custom handler to force all Qt output to stderr
 void ciMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
@@ -191,7 +207,8 @@ void ciMessageHandler(QtMsgType type, const QMessageLogContext &context, const Q
 // Custom main to ensure QApplication is created and logging is captured in CI
 int main(int argc, char** argv)
 {
-    qInstallMessageHandler(ciMessageHandler); // <-- Install handler before QApplication
+    redirectStdoutToStderr(); // Route QTest/stdout to stderr
+    qInstallMessageHandler(ciMessageHandler); // Install handler before QApplication
 
     QApplication app(argc, argv);
     IntegrationTests tc;
