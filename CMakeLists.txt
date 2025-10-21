@@ -54,8 +54,6 @@ find_package(GTest REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-
-
 # Sources
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_executable(CognitivePipelines
@@ -255,6 +253,15 @@ if(ENABLE_TESTING)
             Boost::boost
             cpr::cpr
     )
+
+    # Force integration_tests to be a CONSOLE app on Windows
+    # This enables stdout/stderr logging in CI
+    if(WIN32)
+        set_target_properties(integration_tests PROPERTIES
+                WIN32_EXECUTABLE OFF
+        )
+    endif()
+
     # Add integration tests to CTest (can have the same name as executable)
     add_test(NAME integration_tests COMMAND integration_tests) # Explicitly add to CTest
 endif()
