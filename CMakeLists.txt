@@ -36,6 +36,7 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test)
 find_package(Boost 1.70 REQUIRED)
 find_package(cpr REQUIRED)
+find_package(GTest REQUIRED)
 # Explicitly find transitive dependencies as good practice
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
