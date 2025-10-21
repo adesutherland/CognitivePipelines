@@ -188,3 +188,30 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: xvfb-run ./build/bin/integration_tests
 
+      # -----------------------------------------------------------------
+      # ---           Archive Build Artifacts                         ---
+      # -----------------------------------------------------------------
+
+      - name: Archive build artifacts (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognitive-pipelines-windows
+          path: ${{ github.workspace }}/build/bin/Release/
+          retention-days: 7 # Optional: keeps artifacts for 7 days
+
+      - name: Archive build artifacts (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognitive-pipelines-ubuntu
+          path: ${{ github.workspace }}/build/bin/
+          retention-days: 7
+
+      - name: Archive build artifacts (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognitive-pipelines-macos
+          path: ${{ github.workspace }}/build/bin/
+          retention-days: 7
