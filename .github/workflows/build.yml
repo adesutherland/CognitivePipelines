@@ -149,19 +149,19 @@ jobs:
           fi
 
       - name: Build (Release)
-        run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines run_tests integration_tests -j 2
+        run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
 
       - name: Run Unit Tests (Windows)
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .\\build\\Release\\run_tests.exe
+        run: .\\build\\Release\\unit_tests.exe
 
       - name: Run Unit Tests (Linux/macOS)
         if: runner.os != 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: ./build/run_tests -platform offscreen
+        run: ./build/unit_tests -platform offscreen
 
       - name: Run Integration Tests (Windows)
         if: runner.os == 'Windows'

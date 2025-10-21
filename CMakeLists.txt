@@ -3,7 +3,7 @@
 #
 # To build and run the tests with CTest:
 # cmake -DENABLE_TESTING=ON -S . -B <build_dir>
-# cmake --build <build_dir> --target run_tests
+# cmake --build <build_dir> --target unit_tests
 # ctest --test-dir <build_dir> -V
 
 cmake_minimum_required(VERSION 3.21)
