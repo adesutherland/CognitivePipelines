@@ -129,25 +129,36 @@ jobs:
           mono "$nuget_exe" setapikey "${NUGET_AUTH_TOKEN}" -Source "${FEED_URL}" -NonInteractive
 
       - name: Configure (CMake)
-        shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            cmake -S . -B "${{ github.workspace }}/build" \
-              -G "Visual Studio 17 2022" -A x64 \
-              -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
-              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
+            # Windows configuration (unchanged)
+            cmake -S . -B "${{ github.workspace }}/build" `
+              -G "Visual Studio 17 2022" -A x64 `
+              -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" `
+              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" `
               -DENABLE_TESTING=ON
-          else         
-              if [[ "${{ runner.os }}" != "Windows" ]]; then
-                unset VCPKG_FORCE_SYSTEM_BINARIES
-              fi
-              cmake -S . -B "${{ github.workspace }}/build" \
-                -G Ninja \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
-                -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
-                -DENABLE_TESTING=ON
-          fi
+          else
+            # Common flags for Linux/macOS
+            CMAKE_FLAGS="-S . -B ${{ github.workspace }}/build \
+              -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake \
+              -DCMAKE_PREFIX_PATH=${{ env.Qt6_DIR }} \
+              -DENABLE_TESTING=ON"
+    
+            # Add macOS-specific flags to build a Universal (arm64 + x86_64) binary
+            if [[ "${{ runner.os }}" == "macOS" ]]; then
+              CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES=\"arm64;x86_64\""
+            fi
+          
+            # Unset vcpkg flag
+            if [[ "${{ runner.os }}" != "Windows" ]]; then
+              unset VCPKG_FORCE_SYSTEM_BINARIES
+            fi
+            
+            # Run cmake with all flags
+            cmake $CMAKE_FLAGS
+          fi  
 
       - name: Build (Release)
         run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
@@ -212,6 +223,6 @@ jobs:
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: cognitive-pipelines-macos
+          name: cognitive-pipelines-macos-universal
           path: ${{ github.workspace }}/build/bin/
           retention-days: 7
