@@ -70,13 +70,7 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
-          runVcpkgInstall: true # Make sure this is here
-
-      - name: Install x86_64 dependencies (for macOS Universal Build)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx     
+          runVcpkgInstall: false
 
       - name: Allow vcpkg to download helper tools (Unix)
         if: runner.os != 'Windows'
@@ -134,6 +128,25 @@ jobs:
             -StorePasswordInClearText \
             -NonInteractive
           mono "$nuget_exe" setapikey "${NUGET_AUTH_TOKEN}" -Source "${FEED_URL}" -NonInteractive
+
+      - name: Run vcpkg install (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          "${VCPKG_ROOT}/vcpkg" install --triplet=x64-windows
+
+      - name: Run vcpkg install (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          "${VCPKG_ROOT}/vcpkg" install --triplet=x64-linux
+
+      - name: Run vcpkg install (macOS Universal)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx
+          "${VCPKG_ROOT}/vcpkg" install --triplet=arm64-osx
 
       - name: Configure CMake
         shell: bash
