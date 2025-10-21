@@ -54,7 +54,7 @@ jobs:
             libxcb-sync-dev libxcb-xinerama0-dev libxcb-cursor-dev libxkbcommon-dev \
             libfontconfig1-dev libfreetype6-dev libegl1-mesa-dev libgbm-dev \
             libgl1-mesa-dev libgles2-mesa-dev '^libxcb.*-dev' libx11-xcb-dev \
-            libxi-dev libdbus-1-dev # Add essential XCB and related dev packages 
+            libxi-dev libdbus-1-dev libxcb-cursor0 # Add essential XCB and related dev packages 
 
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
@@ -161,6 +161,7 @@ jobs:
         if: runner.os != 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          QT_DEBUG_PLUGINS: 1 # Detailed plugin loading info
         run: ./build/unit_tests -platform offscreen
 
       - name: Run Integration Tests (Windows)
