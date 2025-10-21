@@ -8,6 +8,9 @@
 #include <QTimer>
 #include <QtNodes/internal/Definitions.hpp>
 
+#include <stdio.h> // For fprintf
+#include <iostream>
+
 #include "mainwindow.h"
 #include "NodeGraphModel.h"
 #include "ExecutionEngine.h"
@@ -175,9 +178,21 @@ void IntegrationTests::test_FullPipelineExecution()
     QVERIFY(!response.trimmed().isEmpty());
 }
 
-// Custom main to ensure QApplication is created
+// Custom handler to force all Qt output to stderr
+void ciMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &msg)
+{
+    Q_UNUSED(type);
+    Q_UNUSED(context);
+    // Force output to stderr, which CI runners will capture
+    fprintf(stderr, "%s\n", msg.toLocal8Bit().constData());
+    fflush(stderr); // Ensure it's written immediately
+}
+
+// Custom main to ensure QApplication is created and logging is captured in CI
 int main(int argc, char** argv)
 {
+    qInstallMessageHandler(ciMessageHandler); // <-- Install handler before QApplication
+
     QApplication app(argc, argv);
     IntegrationTests tc;
     return QTest::qExec(&tc, argc, argv);
