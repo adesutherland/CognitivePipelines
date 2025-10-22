@@ -56,7 +56,6 @@ jobs:
         with:
           version: ${{ matrix.qt-version }}
           cache: true
-          arch: ${{ runner.os == 'macOS' && matrix.arch || '' }}
 
       # --- ADDED: This new step sets env vars for all subsequent macOS steps ---
       - name: Set macOS architecture variables
