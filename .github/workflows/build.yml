@@ -14,37 +14,12 @@ permissions:
 
 jobs:
   build:
-    name: ${{ matrix.name }} (${{ matrix.build_config }}) • Qt ${{ matrix.qt-version }}
+    name: ${{ matrix.os }} • Qt ${{ matrix.qt-version }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: ubuntu-latest
-            os: ubuntu-latest
-            qt-version: "6.6.3"
-            arch: x64
-            build_config: Release
-          - name: windows-latest
-            os: windows-latest
-            qt-version: "6.6.3"
-            arch: x64
-            build_config: Release
-          - name: windows-latest
-            os: windows-latest
-            qt-version: "6.6.3"
-            arch: x64
-            build_config: Debug
-          - name: macos-latest (arm64)
-            os: macos-latest
-            qt-version: "6.6.3"
-            arch: arm64
-            build_config: Release
-          - name: macos-latest (x86_64)
-            os: macos-latest
-            qt-version: "6.6.3"
-            arch: x86_64
-            build_config: Release
-
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        qt-version: [ "6.6.3" ]
     runs-on: ${{ matrix.os }}
 
     # Cross-OS environment for vcpkg binary caching via GitHub Packages (NuGet)
@@ -66,52 +41,94 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt-version }}
-          arch: ${{ runner.os == 'macOS' && matrix.arch || '' }}
+          cache: true
 
-      - name: Install Python via Homebrew (macOS)
+      - name: Add Qt bin to PATH (Windows)
+        if: runner.os == 'Windows'
+        run: echo "${{ env.QT_ROOT_DIR }}\\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install build dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update          
+          sudo apt-get install -y \
+            autoconf automake libtool pkg-config autoconf-archive ninja-build mono-complete \
+            xvfb libxcb-cursor0 libxcb-cursor-dev '^libxcb.*-dev' libx11-xcb-dev \
+            libfontconfig1-dev libfreetype6-dev libegl1-mesa-dev libgbm-dev \
+            libgl1-mesa-dev libgles2-mesa-dev libxi-dev libdbus-1-dev
+
+      - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
-          if [ "${{ matrix.arch }}" == "x86_64" ]; then
-            # Install Rosetta Homebrew if not present & then python
-            if ! [ -x /usr/local/bin/brew ]; then
-              arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
-            fi
-            arch -x86_64 /usr/local/bin/brew install python
-          else
-            # Install native arm64 python
-            brew install python
-          fi
+          brew update
+          brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja mono
+          echo "$(brew --prefix)/opt/gettext/bin" >> $GITHUB_PATH
+          echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
+          echo "$(brew --prefix)/bin" >> $GITHUB_PATH
 
-      - name: Setup vcpkg environment
+      - name: Bootstrap vcpkg
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgGitCommitId: a2efad2ec955878d30db81d730490e931b84850f
           runVcpkgInstall: false
 
-      # -----------------------------------------------------------------
-      # ---           Configure NuGet (Binary Cache)                ---
-      # -----------------------------------------------------------------
+      - name: Allow vcpkg to download helper tools (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "VCPKG_FORCE_SYSTEM_BINARIES=" >> "$GITHUB_ENV"
+
+      - name: Show suggested vcpkg baseline (to update vcpkg.json)
+        shell: bash
+        run: |
+          "${VCPKG_ROOT}/vcpkg" x-update-baseline || true
+
       - name: Configure NuGet (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          USERNAME: ${{ github.repository_owner }}
+          FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
         run: |
-          $env:VCPKG_PATH = $env:VCPKG_ROOT
-          $VCPKG_EXE = "$env:VCPKG_PATH/vcpkg.exe"
-          & $VCPKG_EXE nuget add-source -name "github" -source "$env:FEED_URL" -username "$env:GITHUB_REPOSITORY_OWNER" -password "$env:NUGET_AUTH_TOKEN"
-          & $VCPKG_EXE help
+          $nuget = & "${Env:VCPKG_ROOT}\vcpkg.exe" fetch nuget
+          & $nuget sources remove -Name GitHubPackages -NonInteractive 2>$null | Out-Null
+          & $nuget sources add `
+            -Source "$Env:FEED_URL" `
+            -Name GitHubPackages `
+            -UserName "${Env:GITHUB_REPOSITORY_OWNER}" `
+            -Password "${Env:NUGET_AUTH_TOKEN}" `
+            -StorePasswordInClearText `
+            -NonInteractive
+          & $nuget setapikey "${Env:NUGET_AUTH_TOKEN}" -Source "$Env:FEED_URL" -NonInteractive
 
       - name: Configure NuGet (Linux / macOS)
         if: runner.os != 'Windows'
         shell: bash
+        env:
+          USERNAME: ${{ github.repository_owner }}
+          FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
         run: |
-          export VCPKG_PATH="$VCPKG_ROOT"
-          VCPKG_EXE="$VCPKG_PATH/vcpkg"
-          "$VCPKG_EXE" nuget add-source -name "github" -source "$FEED_URL" -username "$GITHUB_REPOSITORY_OWNER" -password "$NUGET_AUTH_TOKEN"
-          "$VCPKG_EXE" help
+          # Let vcpkg download helper tools (needed on macOS runners)
+          unset VCPKG_FORCE_SYSTEM_BINARIES 
+          # Get a clean path to nuget.exe (last line of stdout)
+          nuget_exe="$("${VCPKG_ROOT}/vcpkg" fetch nuget 2>/dev/null | tail -n1)"
+          # Guardrail: bail with a clear error if we didn't get a file path
+          if [ ! -f "$nuget_exe" ]; then
+          echo "::error::vcpkg fetch nuget did not return a usable path. Got: '$nuget_exe'"
+          "${VCPKG_ROOT}/vcpkg" fetch nuget || true
+          exit 1
+          fi
+          # Preconfigure the GitHub Packages source using the CI token (non-interactive)
+          mono "$nuget_exe" sources remove -Name GitHubPackages -NonInteractive >/dev/null 2>&1 || true
+          mono "$nuget_exe" sources add \
+            -Source "${FEED_URL}" \
+            -Name GitHubPackages \
+            -UserName "${GITHUB_REPOSITORY_OWNER}" \
+            -Password "${NUGET_AUTH_TOKEN}" \
+            -StorePasswordInClearText \
+            -NonInteractive
+          mono "$nuget_exe" setapikey "${NUGET_AUTH_TOKEN}" -Source "${FEED_URL}" -NonInteractive
 
-      # -----------------------------------------------------------------
-      # ---           Install Dependencies                          ---
-      # -----------------------------------------------------------------
       - name: Run vcpkg install (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -126,79 +143,61 @@ jobs:
           unset VCPKG_FORCE_SYSTEM_BINARIES
           "${VCPKG_ROOT}/vcpkg" install --triplet=x64-linux
 
-      - name: Run vcpkg install (macOS)
+      - name: Run vcpkg install (macOS Universal)
         if: runner.os == 'macOS'
         shell: bash
         run: |
           unset VCPKG_FORCE_SYSTEM_BINARIES
-          if [ "${{ matrix.arch }}" == "x86_64" ]; then
-            arch -x86_64 "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx
-          else
-            "${VCPKG_ROOT}/vcpkg" install --triplet=arm64-osx
-          fi
+          "${VCPKG_ROOT}/vcpkg" install --triplet=arm64-osx # Install first for arm64 to boostrap x86_64
+          "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx
 
-      # -----------------------------------------------------------------
-      # ---           Configure & Build Project                     ---
-      # -----------------------------------------------------------------
       - name: Configure CMake
         shell: bash
         run: |
-          VCPKG_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-          
-          if [ "$RUNNER_OS" == "macOS" ]; then
-            if [ "${{ matrix.arch }}" == "x86_64" ]; then
-              # Rosetta x86_64 build
-              arch -x86_64 cmake -B build -S . \
-                -DCMAKE_BUILD_TYPE=${{ matrix.build_config }} \
-                -DCMAKE_TOOLCHAIN_FILE="$VCPKG_TOOLCHAIN_FILE" \
-                -DVCPKG_TARGET_TRIPLET=x64-osx \
-                -DCMAKE_OSX_ARCHITECTURES="x86_64" \
-                -DENABLE_TESTING=ON
-            else
-              # Native arm64 build
-              cmake -B build -S . \
-                -DCMAKE_BUILD_TYPE=${{ matrix.build_config }} \
-                -DCMAKE_TOOLCHAIN_FILE="$VCPKG_TOOLCHAIN_FILE" \
-                -DVCPKG_TARGET_TRIPLET=arm64-osx \
-                -DCMAKE_OSX_ARCHITECTURES="arm64" \
-                -DENABLE_TESTING=ON
-            fi
-          else
-            # Windows/Linux
-            cmake -B build -S . \
-              -DCMAKE_BUILD_TYPE=${{ matrix.build_config }} \
-              -DCMAKE_TOOLCHAIN_FILE="$VCPKG_TOOLCHAIN_FILE" \
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            # Windows configuration
+            cmake -S . -B "${{ github.workspace }}/build" \
+              -G "Visual Studio 17 2022" -A x64 \
+              -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+              -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
               -DENABLE_TESTING=ON
-          fi
-
-      - name: Build project
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" == "macOS" ] && [ "${{ matrix.arch }}" == "x86_64" ]; then
-            arch -x86_64 cmake --build build --config ${{ matrix.build_config }}
           else
-            cmake --build build --config ${{ matrix.build_config }}
+            # Common flags for Linux/macOS
+            CMAKE_FLAGS="-S . -B ${{ github.workspace }}/build \
+              -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake \
+              -DCMAKE_PREFIX_PATH=${{ env.Qt6_DIR }} \
+              -DENABLE_TESTING=ON"
+          
+            # Add macOS-specific flags to build a Universal (arm64 + x86_64) binary
+            if [[ "${{ runner.os }}" == "macOS" ]]; then
+              CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES='arm64;x86_64'"
+            fi
+          
+            # Unset vcpkg flag
+            if [[ "${{ runner.os }}" != "Windows" ]]; then
+              unset VCPKG_FORCE_SYSTEM_BINARIES
+            fi
+          
+            # Run cmake with all flags
+            cmake $CMAKE_FLAGS
           fi
 
-      # -----------------------------------------------------------------
-      # ---           Run Tests                                     ---
-      # -----------------------------------------------------------------
+      - name: Build (Release)
+        run: cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
+
       - name: Run Unit Tests (Windows)
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: .\\build\\bin\\${{ matrix.build_config }}\\unit_tests.exe
+        run: .\\build\\bin\\Release\\unit_tests.exe
 
       - name: Run Unit Tests (macOS)
         if: runner.os == 'macOS'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          if [ "${{ matrix.arch }}" == "x86_64" ]; then
-            arch -x86_64 ./build/bin/unit_tests -platform offscreen
-          else
-            ./build/bin/unit_tests -platform offscreen
-          fi
+        run: ./build/bin/unit_tests -platform offscreen
 
       - name: Run Unit Tests (Linux)
         if: runner.os == 'Linux'
@@ -210,19 +209,13 @@ jobs:
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        shell: bash
-        run: .\\build\\bin\\${{ matrix.build_config }}\\integration_tests.exe -platform offscreen
+        run: .\\build\\bin\\Release\\integration_tests.exe 2>&1 | tee integration_test_log.txt
 
       - name: Run Integration Tests (macOS)
         if: runner.os == 'macOS'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          if [ "${{ matrix.arch }}" == "x86_64" ]; then
-            arch -x86_64 ./build/bin/integration_tests -platform offscreen
-          else
-            ./build/bin/integration_tests -platform offscreen
-          fi
+        run: ./build/bin/integration_tests -platform offscreen
 
       - name: Run Integration Tests (Linux)
         if: runner.os == 'Linux'
@@ -233,13 +226,14 @@ jobs:
       # -----------------------------------------------------------------
       # ---           Archive Build Artifacts                         ---
       # -----------------------------------------------------------------
+
       - name: Archive build artifacts (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: cognitive-pipelines-windows-${{ matrix.build_config }}
-          path: ${{ github.workspace }}/build/bin/${{ matrix.build_config }}/
-          retention-days: 7
+          name: cognitive-pipelines-windows
+          path: ${{ github.workspace }}/build/bin/Release/
+          retention-days: 7 # Optional: keeps artifacts for 7 days
 
       - name: Archive build artifacts (Linux)
         if: runner.os == 'Linux'
@@ -253,48 +247,6 @@ jobs:
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
-          name: cognitive-pipelines-macos-${{ matrix.arch }}
-          path: ${{ github.workspace }}/build/bin/
-          retention-days: 7
-
-  package-macos:
-    name: Package macOS Universal Binary
-    needs: build
-    # This job will only run if all jobs in the 'build' matrix succeed
-    runs-on: macos-latest
-
-    steps:
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: cognitive-pipelines-macos-arm64
-          path: arm64
-
-      - name: Download x86_64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: cognitive-pipelines-macos-x86_64
-          path: x86_64
-
-      - name: Create Universal Binaries
-        run: |
-          mkdir -p universal
-          
-          echo "Creating Universal executable for CognitivePipelines..."
-          lipo -create -output universal/CognitivePipelines arm64/CognitivePipelines x86_64/CognitivePipelines
-          
-          echo "Creating Universal executable for unit_tests..."
-          lipo -create -output universal/unit_tests arm64/unit_tests x86_64/unit_tests
-          
-          echo "Creating Universal executable for integration_tests..."
-          lipo -create -output universal/integration_tests arm64/integration_tests x86_64/integration_tests
-          
-          echo "Verifying binaries..."
-          lipo -info universal/*
-
-      - name: Upload Universal Artifact
-        uses: actions/upload-artifact@v4
-        with:
           name: cognitive-pipelines-macos-universal
-          path: universal/
+          path: ${{ github.workspace }}/build/bin/
           retention-days: 7
