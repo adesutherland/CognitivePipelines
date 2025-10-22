@@ -235,7 +235,7 @@ jobs:
 
       - name: Build (Release)
         shell: bash
-        run: ${{ env.RUN_ARCH }} cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
+        run: ${{ env.RUN_ARCH }} cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
 
       - name: Run Unit Tests (Windows)
         if: runner.os == 'Windows'
