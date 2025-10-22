@@ -14,12 +14,10 @@ permissions:
 
 jobs:
   build:
-    # --- CHANGED: Updated job name to use matrix.name ---
     name: ${{ matrix.name }} • Qt ${{ matrix.qt-version }}
     strategy:
       fail-fast: false
       matrix:
-        # --- CHANGED: Use 'include' to define specific job combinations ---
         include:
           - os: ubuntu-latest
             name: ubuntu-latest
@@ -48,10 +46,6 @@ jobs:
       NUGET_CREDENTIALPROVIDERS_PATH: ''
       NUGET_PLUGIN_PATHS: ''
       VCPKG_NUGET_EXTRA_ARGS: "-NonInteractive -ForceEnglishOutput -Verbosity detailed -Timeout 600"
-      # --- ADDED: Define RUN_ARCH prefix for macos builds ---
-      # This will be 'arch -x86_64' for the x86_64 job and empty for all other jobs
-      RUN_ARCH: ${{ runner.os == 'macOS' && matrix.arch == 'x86_64' && 'arch -x86_64' || '' }}
-
 
     steps:
       - name: Checkout repository
@@ -62,8 +56,20 @@ jobs:
         with:
           version: ${{ matrix.qt-version }}
           cache: true
-          # --- CHANGED: Pass correct arch to Qt installer ---
           arch: ${{ runner.os == 'macOS' && matrix.arch || '' }}
+
+      # --- ADDED: This new step sets env vars for all subsequent macOS steps ---
+      - name: Set macOS architecture variables
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          if [ "${{ matrix.arch }}" == "x86_64" ]; then
+            echo "RUN_ARCH=arch -x86_64" >> $GITHUB_ENV
+            echo "BREW_HOME=/usr/local" >> $GITHUB_ENV
+          else
+            echo "RUN_ARCH=" >> $GITHUB_ENV
+            echo "BREW_HOME=$(brew --prefix)" >> $GITHUB_ENV
+          fi
 
       - name: Add Qt bin to PATH (Windows)
         if: runner.os == 'Windows'
@@ -79,7 +85,6 @@ jobs:
             libfontconfig1-dev libfreetype6-dev libegl1-mesa-dev libgbm-dev \
             libgl1-mesa-dev libgles2-mesa-dev libxi-dev libdbus-1-dev
 
-      # --- CHANGED: This step now handles both arm64 and x86_64 Homebrew/Python ---
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -88,18 +93,17 @@ jobs:
             if ! [ -x /usr/local/bin/brew ]; then
               arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
             fi
-            arch -x86_64 /usr/local/bin/brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja mono python
-            echo "$(/usr/local/bin/brew --prefix)/opt/gettext/bin" >> $GITHUB_PATH
-            echo "ACLOCAL_PATH=$(/usr/local/bin/brew --prefix)/share/aclocal:$(/usr/local/bin/brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
-            echo "$(/usr/local/bin/brew --prefix)/bin" >> $GITHUB_PATH
+            /usr/local/bin/brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja mono python
           else
             # Install native arm64 deps
             brew update
             brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja mono python
-            echo "$(brew --prefix)/opt/gettext/bin" >> $GITHUB_PATH
-            echo "ACLOCAL_PATH=$(brew --prefix)/share/aclocal:$(brew --prefix gettext)/share/aclocal" >> $GITHUB_ENV
-            echo "$(brew --prefix)/bin" >> $GITHUB_PATH
           fi
+          
+          # Use the BREW_HOME var set in the previous step
+          echo "${{ env.BREW_HOME }}/opt/gettext/bin" >> $GITHUB_PATH
+          echo "ACLOCAL_PATH=${{ env.BREW_HOME }}/share/aclocal:${{ env.BREW_HOME }}/opt/gettext/share/aclocal" >> $GITHUB_ENV
+          echo "${{ env.BREW_HOME }}/bin" >> $GITHUB_PATH
 
       - name: Bootstrap vcpkg
         uses: lukka/run-vcpkg@v11
@@ -115,6 +119,7 @@ jobs:
 
       - name: Show suggested vcpkg baseline (to update vcpkg.json)
         shell: bash
+        # --- CHANGED: Added arch prefix ---
         run: |
           ${{ env.RUN_ARCH }} "${VCPKG_ROOT}/vcpkg" x-update-baseline || true
 
@@ -145,7 +150,6 @@ jobs:
         run: |
           # Let vcpkg download helper tools (needed on macOS runners)
           unset VCPKG_FORCE_SYSTEM_BINARIES
-          # Get a clean path to nuget.exe (last line of stdout)
           nuget_exe="$(${{ env.RUN_ARCH }} "${VCPKG_ROOT}/vcpkg" fetch nuget 2>/dev/null | tail -n1)"
           # Guardrail: bail with a clear error if we didn't get a file path
           if [ ! -f "$nuget_exe" ]; then
@@ -178,23 +182,22 @@ jobs:
           unset VCPKG_FORCE_SYSTEM_BINARIES
           "${VCPKG_ROOT}/vcpkg" install --triplet=x64-linux
 
-      # --- CHANGED: Renamed and modified to install only one arch triplet ---
       - name: Run vcpkg install (macOS)
         if: runner.os == 'macOS'
         shell: bash
         run: |
           unset VCPKG_FORCE_SYSTEM_BINARIES
           if [ "${{ matrix.arch }}" == "x86_64" ]; then
-            arch -x86_64 "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx
+            ${{ env.RUN_ARCH }} "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx
           else
-            "${VCPKG_ROOT}/vcpkg" install --triplet=arm64-osx
+            ${{ env.RUN_ARCH }} "${VCPKG_ROOT}/vcpkg" install --triplet=arm64-osx
           fi
 
       - name: Configure CMake
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            # Windows configuration (Builds Release by default)
+            # Windows configuration
             cmake -S . -B "${{ github.workspace }}/build" \
               -G "Visual Studio 17 2022" -A x64 \
               -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
@@ -226,12 +229,12 @@ jobs:
               unset VCPKG_FORCE_SYSTEM_BINARIES
             fi
           
-            # Run cmake with all flags, prefixed by arch if needed
+            # Run cmake with all flags
             ${{ env.RUN_ARCH }} cmake $CMAKE_FLAGS
           fi
 
       - name: Build (Release)
-        shell: bash # --- ADDED: Set shell to bash for env var to work ---
+        shell: bash
         run: ${{ env.RUN_ARCH }} cmake --build ${{ github.workspace }}/build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
 
       - name: Run Unit Tests (Windows)
@@ -256,7 +259,6 @@ jobs:
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        # --- CHANGED: Added shell:bash to make tee work ---
         shell: bash
         run: |
           set -o pipefail
@@ -294,7 +296,6 @@ jobs:
           path: ${{ github.workspace }}/build/bin/
           retention-days: 7
 
-      # --- CHANGED: Archive name is now arch-specific ---
       - name: Archive build artifacts (macOS)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
@@ -307,7 +308,6 @@ jobs:
   package-macos:
     name: Package macOS Universal Binary
     needs: build
-    # This job will only run if all jobs in the 'build' matrix succeed
     runs-on: macos-latest
 
     steps:
