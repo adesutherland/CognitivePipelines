@@ -88,13 +88,18 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           if [ "${{ matrix.arch }}" == "x86_64" ]; then
-            # Install Rosetta Homebrew (if not present) & then deps
+            # Install Rosetta Homebrew (if not present)
             if ! [ -x /usr/local/bin/brew ]; then
               arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
             fi
-            # Split install to isolate python overwrite
-            /usr/local/bin/brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja mono
-            /usr/local/bin/brew install python --overwrite # Force overwrite of conflicting symlinks
+            ${{ env.RUN_ARCH }} ${{ env.BREW_HOME }}/bin/brew update
+            # Install non-conflicting packages
+            ${{ env.RUN_ARCH }} ${{ env.BREW_HOME }}/bin/brew install autoconf automake libtool pkg-config gettext autoconf-archive ninja mono
+            # Install python. We add '|| true' to ensure the build doesn't stop if the (expected) link failure happens.
+            ${{ env.RUN_ARCH }} ${{ env.BREW_HOME }}/bin/brew install python || true
+            # Explicitly force the link
+            ${{ env.RUN_ARCH }} ${{ env.BREW_HOME }}/bin/brew link --overwrite python
+          
           else
             # Install native arm64 deps
             brew update
