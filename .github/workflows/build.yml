@@ -209,9 +209,7 @@ jobs:
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          set -o pipefail
-          .\\build\\bin\\Release\\integration_tests.exe 2>&1 | tee integration_test_log.txt
+        run: .\\build\\bin\\Release\\integration_tests.exe 2>&1 | tee integration_test_log.txt
 
       - name: Run Integration Tests (macOS)
         if: runner.os == 'macOS'
