@@ -148,8 +148,8 @@ jobs:
         shell: bash
         run: |
           unset VCPKG_FORCE_SYSTEM_BINARIES
+          "${VCPKG_ROOT}/vcpkg" install --triplet=arm64-osx # Install first for arm64 to boostrap x86_64
           "${VCPKG_ROOT}/vcpkg" install --triplet=x64-osx
-          "${VCPKG_ROOT}/vcpkg" install --triplet=arm64-osx
 
       - name: Configure CMake
         shell: bash
