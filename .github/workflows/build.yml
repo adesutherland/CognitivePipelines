@@ -243,7 +243,6 @@ jobs:
           # --- ADDED: Create directories for desktop file and icon ---
           mkdir -p "${APPDIR}/usr/share/applications"
           mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps" # Standard icon path
-         
           # Copy executables into the AppDir
           cp build/bin/CognitivePipelines "${APPDIR}/usr/bin/"
           # Copy Tests
@@ -252,28 +251,15 @@ jobs:
           # ---Copy desktop file and icon ---
           cp packaging/linux/CognitivePipelines.desktop "${APPDIR}/usr/share/applications/"
           cp packaging/linux/CognitivePipelines.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/"
-          
-          echo "Verifying copied files:"
-          ls -l "${APPDIR}/usr/share/applications/"
-          cat "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" # Display content
-          if [ ! -f "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" ]; then
-          echo "::error::Desktop file was not found after copy!"
-          exit 1
-          fi
-          echo "Desktop file found. Continuing..."
-          
-          # Run linuxdeployqt - point it to the executable inside AppDir
+          # Run linuxdeployqt
           export PATH="${QT_ROOT_DIR}/bin:$PATH"
           export LD_LIBRARY_PATH="${QT_ROOT_DIR}/lib:$LD_LIBRARY_PATH"
           # Extract version from CMakeLists.txt (example, might need refinement based on your exact file)
           PROJECT_VERSION=$(grep -oP 'project\(CognitivePipelines VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
           export VERSION=${PROJECT_VERSION:-0.0.0} # Set VERSION env var, default to 0.0.0 if not found
           echo "Setting AppImage version to: $VERSION"
-          
           ./linuxdeployqt-continuous-x86_64.AppImage \
-            "${APPDIR}/usr/bin/CognitivePipelines" \
-            -desktop="${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
-            -icon="${APPDIR}/usr/share/icons/hicolor/256x256/apps/CognitivePipelines.png" \
+            "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
             -appimage
 
       - name: Deploy Qt dependencies (Windows)
