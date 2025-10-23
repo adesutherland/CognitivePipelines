@@ -235,21 +235,30 @@ jobs:
           # Download linuxdeployqt AppImage
           curl -LO https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage
           chmod +x linuxdeployqt-continuous-x86_64.AppImage
+        
+          # Prepare deployment directory structure (AppDir standard)
+          APPDIR="AppDir" # Define AppDir name
+          mkdir -p "${APPDIR}/usr/bin"
+          mkdir -p "${APPDIR}/usr/lib"
+          # --- ADDED: Create directories for desktop file and icon ---
+          mkdir -p "${APPDIR}/usr/share/applications"
+          mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps" # Standard icon path
+         
+          # Copy executables into the AppDir
+          cp build/bin/CognitivePipelines "${APPDIR}/usr/bin/"
+          # Optionally copy tests if needed
+          # cp build/bin/unit_tests "${APPDIR}/usr/bin/"
+          # cp build/bin/integration_tests "${APPDIR}/usr/bin/"
           
-          # The output directory for deployment
-          DEPLOY_DIR="${{ github.workspace }}/deploy/linux"
-          mkdir -p "$DEPLOY_DIR"
+          # ---Copy desktop file and icon ---
+          cp packaging/linux/CognitivePipelines.desktop "${APPDIR}/usr/share/applications/"
+          cp packaging/linux/CognitivePipelines.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/"
           
-          # Copy the executables
-          cp "${{ github.workspace }}/build/bin/CognitivePipelines" "$DEPLOY_DIR/"
-          cp "${{ github.workspace }}/build/bin/unit_tests" "$DEPLOY_DIR/"
-          cp "${{ github.workspace }}/build/bin/integration_tests" "$DEPLOY_DIR/"
-          
-          # Run linuxdeployqt (needs PATH and LD_LIBRARY_PATH adjustments)
-          # We point it to the main executable
+          # Run linuxdeployqt - point it to the executable inside AppDir
           export PATH="${QT_ROOT_DIR}/bin:$PATH"
           export LD_LIBRARY_PATH="${QT_ROOT_DIR}/lib:$LD_LIBRARY_PATH"
-          ./linuxdeployqt-continuous-x86_64.AppImage "$DEPLOY_DIR/CognitivePipelines" -appimage
+
+          ./linuxdeployqt-continuous-x86_64.AppImage "${APPDIR}/usr/bin/CognitivePipelines" -appimage
 
       - name: Deploy Qt dependencies (Windows)
         if: runner.os == 'Windows'

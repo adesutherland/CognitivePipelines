@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Cognitive Pipelines
+Comment=Design and execute cognitive pipelines
+Exec=CognitivePipelines
+Icon=CognitivePipelines
+Categories=Utility;Development;
+Terminal=false
