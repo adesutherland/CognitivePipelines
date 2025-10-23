@@ -279,9 +279,16 @@ jobs:
           # It will find dependencies relative to the .exe
           "${QT_ROOT_DIR}/bin/windeployqt.exe" "$DEPLOY_DIR/CognitivePipelines.exe"
           
-          # --- Manually copy QtNodes DLL ---
+          # Copy QtNodes
           echo "Copying QtNodes library..."
           cp "${{ github.workspace }}/build/bin/Release/QtNodes.dll" "$DEPLOY_DIR/"
+          
+          # Copy cpr, and dependencies 
+          cp "${BUILD_BIN_DIR}/cpr.dll" "$DEPLOY_DIR/" || echo "cpr.dll not found, skipping."
+          cp "${BUILD_BIN_DIR}/libcurl*.dll" "$DEPLOY_DIR/" || echo "libcurl*.dll not found, skipping."
+          cp "${BUILD_BIN_DIR}/libcrypto*.dll" "$DEPLOY_DIR/" || echo "libcrypto*.dll not found, skipping."
+          cp "${BUILD_BIN_DIR}/libssl*.dll" "$DEPLOY_DIR/" || echo "libssl*.dll not found, skipping."
+          cp "${BUILD_BIN_DIR}/zlib*.dll" "$DEPLOY_DIR/" || echo "zlib*.dll not found, skipping."   
 
       - name: Deploy Qt dependencies (macOS)
         if: runner.os == 'macOS'
