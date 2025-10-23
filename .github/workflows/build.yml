@@ -318,13 +318,13 @@ jobs:
           mkdir -p universal
           
           echo "Creating Universal executable for CognitivePipelines..."
-          lipo -create -output universal/CognitivePipelines arm64/CognitivePipelines x86_64/CognitivePipelines
+          lipo -create -output universal/CognitivePipelines arm64/bin/CognitivePipelines x86_64/bin/CognitivePipelines
           
           echo "Creating Universal executable for unit_tests..."
-          lipo -create -output universal/unit_tests arm64/unit_tests x86_64/unit_tests
+          lipo -create -output universal/unit_tests arm64/bin/unit_tests x86_64/bin/unit_tests
           
           echo "Creating Universal executable for integration_tests..."
-          lipo -create -output universal/integration_tests arm64/integration_tests x86_64/integration_tests
+          lipo -create -output universal/integration_tests arm64/bin/integration_tests x86_64/bin/integration_tests
           
           echo "Verifying binaries..."
           lipo -info universal/*
