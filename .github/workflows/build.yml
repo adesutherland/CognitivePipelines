@@ -266,18 +266,22 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash # Use bash to easily access QT_ROOT_DIR env var
         run: |
-         # The output directory for deployment
-         DEPLOY_DIR="${{ github.workspace }}/deploy/windows"
-         mkdir -p "$DEPLOY_DIR"
-         
-         # Copy the executables to the deployment dir first
-         cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
-         cp "${{ github.workspace }}/build/bin/Release/unit_tests.exe" "$DEPLOY_DIR/"
-         cp "${{ github.workspace }}/build/bin/Release/integration_tests.exe" "$DEPLOY_DIR/"
-         
-         # Run windeployqt on the main executable
-         # It will find dependencies relative to the .exe
-         "${QT_ROOT_DIR}/bin/windeployqt.exe" "$DEPLOY_DIR/CognitivePipelines.exe"
+          # The output directory for deployment
+          DEPLOY_DIR="${{ github.workspace }}/deploy/windows"
+          mkdir -p "$DEPLOY_DIR"
+          
+          # Copy the executables to the deployment dir first
+          cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
+          cp "${{ github.workspace }}/build/bin/Release/unit_tests.exe" "$DEPLOY_DIR/"
+          cp "${{ github.workspace }}/build/bin/Release/integration_tests.exe" "$DEPLOY_DIR/"
+          
+          # Run windeployqt on the main executable
+          # It will find dependencies relative to the .exe
+          "${QT_ROOT_DIR}/bin/windeployqt.exe" "$DEPLOY_DIR/CognitivePipelines.exe"
+          
+          # --- Manually copy QtNodes DLL ---
+          echo "Copying QtNodes library..."
+          cp "${{ github.workspace }}/build/bin/Release/QtNodes.dll" "$DEPLOY_DIR/"
 
       - name: Deploy Qt dependencies (macOS)
         if: runner.os == 'macOS'
