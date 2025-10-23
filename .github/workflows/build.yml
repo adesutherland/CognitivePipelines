@@ -228,6 +228,52 @@ jobs:
         shell: bash
         run: cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
 
+      - name: Deploy Qt dependencies (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Download linuxdeployqt AppImage
+          curl -LO https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage
+          chmod +x linuxdeployqt-continuous-x86_64.AppImage
+          
+          # The output directory for deployment
+          DEPLOY_DIR="${{ github.workspace }}/deploy/linux"
+          mkdir -p "$DEPLOY_DIR"
+          
+          # Copy the executables
+          cp "${{ github.workspace }}/build/bin/CognitivePipelines" "$DEPLOY_DIR/"
+          cp "${{ github.workspace }}/build/bin/unit_tests" "$DEPLOY_DIR/"
+          cp "${{ github.workspace }}/build/bin/integration_tests" "$DEPLOY_DIR/"
+          
+          # Run linuxdeployqt (needs PATH and LD_LIBRARY_PATH adjustments)
+          # We point it to the main executable
+          export PATH="${QT_ROOT_DIR}/bin:$PATH"
+          export LD_LIBRARY_PATH="${QT_ROOT_DIR}/lib:$LD_LIBRARY_PATH"
+          ./linuxdeployqt-continuous-x86_64.AppImage "$DEPLOY_DIR/CognitivePipelines" -appimage
+
+      - name: Deploy Qt dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: bash # Use bash to easily access QT_ROOT_DIR env var
+        run: |
+         # The output directory for deployment
+         DEPLOY_DIR="${{ github.workspace }}/deploy/windows"
+         mkdir -p "$DEPLOY_DIR"
+         
+         # Copy the executables to the deployment dir first
+         cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
+         cp "${{ github.workspace }}/build/bin/Release/unit_tests.exe" "$DEPLOY_DIR/"
+         cp "${{ github.workspace }}/build/bin/Release/integration_tests.exe" "$DEPLOY_DIR/"
+         
+         # Run windeployqt on the main executable
+         # It will find dependencies relative to the .exe
+         "${QT_ROOT_DIR}/bin/windeployqt.exe" "$DEPLOY_DIR/CognitivePipelines.exe"
+
+      - name: Deploy Qt dependencies (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          ${{ env.QT_ROOT_DIR }}/bin/macdeployqt ${{ github.workspace }}/build/bin/CognitivePipelines.app
+
       - name: Run Unit Tests (Windows)
         if: runner.os == 'Windows'
         env:
@@ -276,7 +322,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cognitive-pipelines-windows
-          path: ${{ github.workspace }}/build/bin/Release/
+          path: ${{ github.workspace }}/deploy/windows/
           retention-days: 7
 
       - name: Archive build artifacts (Linux)
@@ -284,7 +330,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cognitive-pipelines-ubuntu
-          path: ${{ github.workspace }}/build/bin/
+          path: ${{ github.workspace }}/deploy/linux/
           retention-days: 7
 
       - name: Archive build artifacts (macOS)
@@ -313,21 +359,33 @@ jobs:
           name: cognitive-pipelines-macos-x86_64
           path: x86_64
 
-      - name: Create Universal Binaries
+      - name: Create Universal Binaries and App Bundle
         run: |
+          echo "Creating universal directory..."
           mkdir -p universal
           
+          echo "Copying base arm64 app bundle structure..."
+          cp -R arm64/CognitivePipelines.app universal/
+          
           echo "Creating Universal executable for CognitivePipelines..."
-          lipo -create -output universal/CognitivePipelines arm64/bin/CognitivePipelines x86_64/bin/CognitivePipelines
+          lipo -create -output universal/CognitivePipelines.app/Contents/MacOS/CognitivePipelines \
+            arm64/CognitivePipelines.app/Contents/MacOS/CognitivePipelines \
+            x86_64/CognitivePipelines.app/Contents/MacOS/CognitivePipelines
           
           echo "Creating Universal executable for unit_tests..."
-          lipo -create -output universal/unit_tests arm64/bin/unit_tests x86_64/bin/unit_tests
+          lipo -create -output universal/unit_tests \
+            arm64/unit_tests \
+            x86_64/unit_tests
           
           echo "Creating Universal executable for integration_tests..."
-          lipo -create -output universal/integration_tests arm64/bin/integration_tests x86_64/bin/integration_tests
+          lipo -create -output universal/integration_tests \
+            arm64/integration_tests \
+            x86_64/integration_tests
           
           echo "Verifying binaries..."
-          lipo -info universal/*
+          lipo -info universal/CognitivePipelines.app/Contents/MacOS/CognitivePipelines
+          lipo -info universal/unit_tests
+          lipo -info universal/integration_tests
 
       - name: Upload Universal Artifact
         uses: actions/upload-artifact@v4
