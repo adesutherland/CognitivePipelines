@@ -269,6 +269,7 @@ jobs:
           # The output directory for deployment
           DEPLOY_DIR="${{ github.workspace }}/deploy/windows"
           mkdir -p "$DEPLOY_DIR"
+          BUILD_BIN_DIR="${{ github.workspace }}/build/bin/Release" # Source directory
           
           # Copy the executables to the deployment dir first
           cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
