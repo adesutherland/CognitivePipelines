@@ -246,13 +246,21 @@ jobs:
          
           # Copy executables into the AppDir
           cp build/bin/CognitivePipelines "${APPDIR}/usr/bin/"
-          # Optionally copy tests if needed
-          # cp build/bin/unit_tests "${APPDIR}/usr/bin/"
-          # cp build/bin/integration_tests "${APPDIR}/usr/bin/"
-          
+          # Copy Tests
+          cp build/bin/unit_tests "${APPDIR}/usr/bin/"
+          cp build/bin/integration_tests "${APPDIR}/usr/bin/"
           # ---Copy desktop file and icon ---
           cp packaging/linux/CognitivePipelines.desktop "${APPDIR}/usr/share/applications/"
           cp packaging/linux/CognitivePipelines.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/"
+          
+          echo "Verifying copied files:"
+          ls -l "${APPDIR}/usr/share/applications/"
+          cat "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" # Display content
+          if [ ! -f "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" ]; then
+          echo "::error::Desktop file was not found after copy!"
+          exit 1
+          fi
+          echo "Desktop file found. Continuing..."
           
           # Run linuxdeployqt - point it to the executable inside AppDir
           export PATH="${QT_ROOT_DIR}/bin:$PATH"
