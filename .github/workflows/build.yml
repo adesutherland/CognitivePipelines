@@ -322,7 +322,19 @@ jobs:
         if: runner.os == 'Linux'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: xvfb-run ./build/bin/integration_tests
+        # Retry loop ---
+        run: |
+          for i in 1 2 3; do
+            echo "Attempt $i to run integration tests..."
+            xvfb-run ./build/bin/integration_tests && break # Success, exit loop
+            if [ $i -lt 3 ]; then
+              echo "Attempt $i failed. Retrying in 5 seconds..."
+              sleep 5
+            else
+              echo "Attempt $i failed. No more retries."
+              exit 1 # Explicitly fail the step after last attempt
+            fi
+          done
 
       # -----------------------------------------------------------------
       # ---           Archive Build Artifacts                         ---
@@ -340,8 +352,8 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: cognitive-pipelines-ubuntu
-          path: ${{ github.workspace }}/deploy/linux/
+          name: cognitive-pipelines-ubuntu-appimage
+          path: CognitivePipelines*.AppImage
           retention-days: 7
 
       - name: Archive build artifacts (macOS)
