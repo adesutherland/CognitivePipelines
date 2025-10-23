@@ -19,8 +19,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            name: ubuntu-latest
+          - os: ubuntu-22.04
+            name: ubuntu-22.04
             qt-version: "6.6.3"
           - os: windows-latest
             name: windows-latest
