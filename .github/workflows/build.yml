@@ -272,10 +272,8 @@ jobs:
           DEPLOY_DIR="${{ github.workspace }}/deploy/windows"
           mkdir -p "$DEPLOY_DIR"
           BUILD_BIN_DIR="${{ github.workspace }}/build/bin/Release" # Source directory
-          VCPKG_BIN_DIR_RAW="${{ env.VCPKG_ROOT }}/x64-windows/bin"
-          VCPKG_BIN_DIR="${VCPKG_BIN_DIR_RAW//\\//}" # Replace all \ with /          
-          # "${VCPKG_ROOT}/vcpkg" owns libcurl.dll
-          # curl:x64-windows: x64-windows/bin/libcurl.dll
+          VCPKG_BIN_DIR_RAW="${{ env.VCPKG_ROOT }}_installed/x64-windows/bin"
+          VCPKG_BIN_DIR="${VCPKG_BIN_DIR_RAW//\\//}" # Replace all \ with /    
 
           # Copy the executables to the deployment dir first
           cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
