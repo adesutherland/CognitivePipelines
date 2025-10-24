@@ -168,7 +168,7 @@ jobs:
         shell: bash
         run: |
           unset VCPKG_FORCE_SYSTEM_BINARIES
-          "${VCPKG_ROOT}/vcpkg" install --triplet=x64-windows
+          "${VCPKG_ROOT}/vcpkg" install --triplet=x64-windows-static # static libs for cpr, etc.
 
       - name: Run vcpkg install (Linux)
         if: runner.os == 'Linux'
@@ -374,57 +374,4 @@ jobs:
         with:
           name: cognitive-pipelines-macos-${{ matrix.arch }}
           path: ${{ github.workspace }}/build/bin/
-          retention-days: 7
-
-  package-macos:
-    name: Package macOS Universal Binary
-    needs: build
-    runs-on: macos-latest
-
-    steps:
-      - name: Download arm64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: cognitive-pipelines-macos-arm64
-          path: arm64
-
-      - name: Download x86_64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: cognitive-pipelines-macos-x86_64
-          path: x86_64
-
-      - name: Create Universal Binaries and App Bundle
-        run: |
-          echo "Creating universal directory..."
-          mkdir -p universal
-          
-          echo "Copying base arm64 app bundle structure..."
-          cp -R arm64/CognitivePipelines.app universal/
-          
-          echo "Creating Universal executable for CognitivePipelines..."
-          lipo -create -output universal/CognitivePipelines.app/Contents/MacOS/CognitivePipelines \
-            arm64/CognitivePipelines.app/Contents/MacOS/CognitivePipelines \
-            x86_64/CognitivePipelines.app/Contents/MacOS/CognitivePipelines
-          
-          echo "Creating Universal executable for unit_tests..."
-          lipo -create -output universal/unit_tests \
-            arm64/unit_tests \
-            x86_64/unit_tests
-          
-          echo "Creating Universal executable for integration_tests..."
-          lipo -create -output universal/integration_tests \
-            arm64/integration_tests \
-            x86_64/integration_tests
-          
-          echo "Verifying binaries..."
-          lipo -info universal/CognitivePipelines.app/Contents/MacOS/CognitivePipelines
-          lipo -info universal/unit_tests
-          lipo -info universal/integration_tests
-
-      - name: Upload Universal Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cognitive-pipelines-macos-universal
-          path: universal/
           retention-days: 7
