@@ -286,13 +286,17 @@ jobs:
           # Copy QtNodes
           echo "Copying QtNodes library..."
           cp "${{ github.workspace }}/build/bin/Release/QtNodes.dll" "$DEPLOY_DIR/"
-          
-          # Copy cpr, and dependencies 
-          cp "${BUILD_BIN_DIR}/cpr.dll" "$DEPLOY_DIR/" || echo "cpr.dll not found, skipping."
-          cp "${BUILD_BIN_DIR}/libcurl*.dll" "$DEPLOY_DIR/" || echo "libcurl*.dll not found, skipping."
-          cp "${BUILD_BIN_DIR}/libcrypto*.dll" "$DEPLOY_DIR/" || echo "libcrypto*.dll not found, skipping."
-          cp "${BUILD_BIN_DIR}/libssl*.dll" "$DEPLOY_DIR/" || echo "libssl*.dll not found, skipping."
-          cp "${BUILD_BIN_DIR}/zlib*.dll" "$DEPLOY_DIR/" || echo "zlib*.dll not found, skipping."   
+          # Copy CPR
+          cp "${BUILD_BIN_DIR}/cpr.dll" "$DEPLOY_DIR/" || echo "cpr.dll not found, skipping." 
+          # Copy CPR's dependencies (Curl, OpenSSL, zlib etc.) FROM VCPKG BIN DIR
+          echo "Copying CPR dependencies from vcpkg install tree..."
+          cp "${VCPKG_BIN_DIR}/libcurl*.dll" "$DEPLOY_DIR/" || echo "libcurl*.dll not found."
+          cp "${VCPKG_BIN_DIR}/libcrypto*.dll" "$DEPLOY_DIR/" || echo "libcrypto*.dll not found."
+          cp "${VCPKG_BIN_DIR}/libssl*.dll" "$DEPLOY_DIR/" || echo "libssl*.dll not found."
+          # Note: zlib might be zlib1.dll or similar
+          cp "${VCPKG_BIN_DIR}/zlib*.dll" "$DEPLOY_DIR/" || echo "zlib*.dll not found." 
+          echo "Deployment directory contents:"
+          ls -l "$DEPLOY_DIR"  
 
       - name: Deploy Qt dependencies (macOS)
         if: runner.os == 'macOS'
