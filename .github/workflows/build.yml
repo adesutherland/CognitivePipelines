@@ -171,9 +171,6 @@ jobs:
         run: |
           unset VCPKG_FORCE_SYSTEM_BINARIES
           "${VCPKG_ROOT}/vcpkg" install --triplet=${VCPKG_DEFAULT_TRIPLET}
-          echo "Where is curl.dll?"
-          "${VCPKG_ROOT}/vcpkg" owns libcurl.dll
-          "${VCPKG_ROOT}/vcpkg" owns curl.dll
 
       - name: Run vcpkg install (Linux)
         if: runner.os == 'Linux'
@@ -245,7 +242,7 @@ jobs:
           APPDIR="AppDir" # Define AppDir name
           mkdir -p "${APPDIR}/usr/bin"
           mkdir -p "${APPDIR}/usr/lib"
-          # --- ADDED: Create directories for desktop file and icon ---
+          # --- Create directories for desktop file and icon ---
           mkdir -p "${APPDIR}/usr/share/applications"
           mkdir -p "${APPDIR}/usr/share/icons/hicolor/256x256/apps" # Standard icon path
           # Copy executables into the AppDir
@@ -275,9 +272,11 @@ jobs:
           DEPLOY_DIR="${{ github.workspace }}/deploy/windows"
           mkdir -p "$DEPLOY_DIR"
           BUILD_BIN_DIR="${{ github.workspace }}/build/bin/Release" # Source directory
-          VCPKG_BIN_DIR_RAW="${{ env.VCPKG_ROOT }}/installed/x64-windows/bin"
-          VCPKG_BIN_DIR="${VCPKG_BIN_DIR_RAW//\\//}" # Replace all \ with /
-          
+          VCPKG_BIN_DIR_RAW="${{ env.VCPKG_ROOT }}/x64-windows/bin"
+          VCPKG_BIN_DIR="${VCPKG_BIN_DIR_RAW//\\//}" # Replace all \ with /          
+          # "${VCPKG_ROOT}/vcpkg" owns libcurl.dll
+          # curl:x64-windows: x64-windows/bin/libcurl.dll
+
           # Copy the executables to the deployment dir first
           cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
           cp "${{ github.workspace }}/build/bin/Release/unit_tests.exe" "$DEPLOY_DIR/"
