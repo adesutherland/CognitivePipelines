@@ -201,6 +201,7 @@ jobs:
               -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
               -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
               -DVCPKG_TARGET_TRIPLET=x64-windows-static \
+              -DUSE_STATIC_CRT=ON \
               -DENABLE_TESTING=ON
           else
             # Common flags for Linux/macOS

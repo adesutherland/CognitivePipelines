@@ -11,6 +11,8 @@ cmake_minimum_required(VERSION 3.21)
 # Project configuration
 project(CognitivePipelines VERSION 0.1.1 LANGUAGES CXX)
 
+option(USE_STATIC_CRT "Build using the static C++ runtime library (/MT or /MTd)" OFF)
+
 # --- Standardize Output Directories ---
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -22,6 +24,21 @@ foreach(CONFIG ${CMAKE_CONFIGURATION_TYPES})
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${CONFIG_UPPER} ${CMAKE_BINARY_DIR}/bin/${CONFIG})
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_UPPER} ${CMAKE_BINARY_DIR}/bin/${CONFIG})
 endforeach()
+# --------------------------------------
+
+# --- CRT conditional ------------------
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND USE_STATIC_CRT) # Added 'AND USE_STATIC_CRT'
+    message(STATUS "Static CRT (/MT) linkage enabled via USE_STATIC_CRT option.")
+    # For static vcpkg triplets (like x64-windows-static),
+    # we must compile our own code with the static runtime (/MT or /MTd)
+    # This overrides the default dynamic runtime (/MD or /MDd)
+    foreach(FLAG_VAR CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE
+            CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
+        if(${FLAG_VAR} MATCHES "/MD")
+            string(REGEX REPLACE "/MD" "/MT" ${FLAG_VAR} "${${FLAG_VAR}}")
+        endif()
+    endforeach()
+endif()
 # --------------------------------------
 
 # FetchContent for external dependencies
