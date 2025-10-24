@@ -272,6 +272,8 @@ jobs:
           DEPLOY_DIR="${{ github.workspace }}/deploy/windows"
           mkdir -p "$DEPLOY_DIR"
           BUILD_BIN_DIR="${{ github.workspace }}/build/bin/Release" # Source directory
+          VCPKG_BIN_DIR_RAW="${{ env.VCPKG_ROOT }}/installed/x64-windows/bin"
+          VCPKG_BIN_DIR="${VCPKG_BIN_DIR_RAW//\\//}" # Replace all \ with /
           
           # Copy the executables to the deployment dir first
           cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
@@ -289,11 +291,10 @@ jobs:
           cp "${BUILD_BIN_DIR}/cpr.dll" "$DEPLOY_DIR/" || echo "cpr.dll not found, skipping." 
           # Copy CPR's dependencies (Curl, OpenSSL, zlib etc.) FROM VCPKG BIN DIR
           echo "Copying CPR dependencies from vcpkg install tree..."
-          cp "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libcurl*.dll" "$DEPLOY_DIR/" || echo "libcurl*.dll not found."
-          cp "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/libcrypto*.dll" "$DEPLOY_DIR/" || echo "libcrypto*.dll not found."
-          cp "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/" || echo "libssl*.dll not found."
-          # Note: zlib might be zlib1.dll or similar
-          cp "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin/zlib*.dll" "$DEPLOY_DIR/" || echo "zlib*.dll not found." 
+          cp "${VCPKG_BIN_DIR}/libcurl*.dll" "$DEPLOY_DIR/" || echo "libcurl*.dll not found."
+          cp "${VCPKG_BIN_DIR}/libcrypto*.dll" "$DEPLOY_DIR/" || echo "libcrypto*.dll not found."
+          cp "${VCPKG_BIN_DIR}/libssl*.dll" "$DEPLOY_DIR/" || echo "libssl*.dll not found."
+          cp "${VCPKG_BIN_DIR}/zlib*.dll" "$DEPLOY_DIR/" || echo "zlib*.dll not found."
           echo "Deployment directory contents:"
           ls -l "$DEPLOY_DIR"  
 
