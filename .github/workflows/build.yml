@@ -167,10 +167,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         env:
-          VCPKG_DEFAULT_TRIPLET: x64-windows-static
+          VCPKG_DEFAULT_TRIPLET: x64-windows
         run: |
           unset VCPKG_FORCE_SYSTEM_BINARIES
-          # vcpkg install will now build static libs for cpr, etc.
           "${VCPKG_ROOT}/vcpkg" install --triplet=${VCPKG_DEFAULT_TRIPLET}
 
       - name: Run vcpkg install (Linux)
@@ -200,8 +199,6 @@ jobs:
               -G "Visual Studio 17 2022" -A x64 \
               -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
               -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
-              -DVCPKG_TARGET_TRIPLET=x64-windows-static \
-              -DUSE_STATIC_CRT=ON \
               -DENABLE_TESTING=ON
           else
             # Common flags for Linux/macOS
