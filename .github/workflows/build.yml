@@ -274,18 +274,6 @@ jobs:
           BUILD_BIN_DIR="${{ github.workspace }}/build/bin/Release" # Source directory
           VCPKG_BIN_DIR_RAW="${{ env.VCPKG_ROOT }}_installed/x64-windows/bin"
           VCPKG_BIN_DIR="${VCPKG_BIN_DIR_RAW//\\//}" # Replace all \ with /   
-          
-          # Debugging
-          echo "listing ${{ env.VCPKG_ROOT }}"
-          ls "${{ env.VCPKG_ROOT }}" || echo "failed"
-          echo "listing ${{ env.VCPKG_ROOT }}/installed"
-          ls "${{ env.VCPKG_ROOT }}/installed" || echo "failed"
-          echo "listing ${{ env.VCPKG_ROOT }}/installed/x64-windows"
-          ls "${{ env.VCPKG_ROOT }}/installed/x64-windows" || echo "failed"
-          echo "listing ${{ env.VCPKG_ROOT }}/installed/x64-windows/bin"
-          ls "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin" || echo "failed"
-          echo "listing ${VCPKG_BIN_DIR}"
-          ls "${VCPKG_BIN_DIR}" || echo "failed"
 
           # Copy the executables to the deployment dir first
           cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
@@ -303,10 +291,10 @@ jobs:
           cp "${BUILD_BIN_DIR}/cpr.dll" "$DEPLOY_DIR/" || echo "cpr.dll not found, skipping." 
           # Copy CPR's dependencies (Curl, OpenSSL, zlib etc.) FROM VCPKG BIN DIR
           echo "Copying CPR dependencies from vcpkg install tree..."
-          cp "${VCPKG_BIN_DIR}/libcurl*.dll" "$DEPLOY_DIR/" || echo "libcurl*.dll not found."
-          cp "${VCPKG_BIN_DIR}/libcrypto*.dll" "$DEPLOY_DIR/" || echo "libcrypto*.dll not found."
-          cp "${VCPKG_BIN_DIR}/libssl*.dll" "$DEPLOY_DIR/" || echo "libssl*.dll not found."
-          cp "${VCPKG_BIN_DIR}/zlib*.dll" "$DEPLOY_DIR/" || echo "zlib*.dll not found."
+          cp "${VCPKG_BIN_DIR}/"libcurl*.dll "$DEPLOY_DIR/" || echo "libcurl*.dll not found."
+          cp "${VCPKG_BIN_DIR}/"libcrypto*.dll "$DEPLOY_DIR/" || echo "libcrypto*.dll not found."
+          cp "${VCPKG_BIN_DIR}/"libssl*.dll "$DEPLOY_DIR/" || echo "libssl*.dll not found."
+          cp "${VCPKG_BIN_DIR}/"zlib*.dll "$DEPLOY_DIR/" || echo "zlib*.dll not found."
           echo "Deployment directory contents:"
           ls -l "$DEPLOY_DIR"  
 
