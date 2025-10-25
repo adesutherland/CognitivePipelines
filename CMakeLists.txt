@@ -54,6 +54,11 @@ find_package(GTest REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 
+# Windows resource file for application icon
+if(WIN32)
+    set(WIN32_RESOURCE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/app.rc)
+endif()
+
 # Sources
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_executable(CognitivePipelines
@@ -84,6 +89,7 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ToolNodeDelegate.h
     ${SRC_DIR}/ExecutionEngine.cpp
     ${SRC_DIR}/ExecutionEngine.h
+    $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
 )
 
 
@@ -195,6 +201,7 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/LLMConnector.h
             ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
             ${SRC_DIR}/LLMConnectorPropertiesWidget.h
+            $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
     target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(unit_tests PRIVATE
@@ -239,6 +246,7 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ToolNodeDelegate.h
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
+            $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
 
     target_include_directories(integration_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)

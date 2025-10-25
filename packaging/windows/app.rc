@@ -1,0 +1,2 @@
+#include "winres.h"
+IDI_ICON1               ICON    "CognitivePipelines.ico"
