@@ -280,9 +280,11 @@ jobs:
           cp "${{ github.workspace }}/build/bin/Release/unit_tests.exe" "$DEPLOY_DIR/"
           cp "${{ github.workspace }}/build/bin/Release/integration_tests.exe" "$DEPLOY_DIR/"
           
-          # Run windeployqt on the main executable
-          # It will find dependencies relative to the .exe
+          echo "Deploying Qt dependencies for CognitivePipelines ..."
           "${QT_ROOT_DIR}/bin/windeployqt.exe" "$DEPLOY_DIR/CognitivePipelines.exe"
+          
+          echo "Deploying Qt dependencies for integration_tests..."
+          "${QT_ROOT_DIR}/bin/windeployqt.exe" "$DEPLOY_DIR/integration_tests.exe"
           
           # Copy QtNodes
           echo "Copying QtNodes library..."
@@ -295,6 +297,9 @@ jobs:
           cp "${VCPKG_BIN_DIR}/"libcrypto*.dll "$DEPLOY_DIR/" || echo "libcrypto*.dll not found."
           cp "${VCPKG_BIN_DIR}/"libssl*.dll "$DEPLOY_DIR/" || echo "libssl*.dll not found."
           cp "${VCPKG_BIN_DIR}/"zlib*.dll "$DEPLOY_DIR/" || echo "zlib*.dll not found."
+          echo "Copying GTest dependencies from vcpkg install tree..."
+          cp "${VCPKG_BIN_DIR}/"gtest*.dll "$DEPLOY_DIR/" || echo "gtest*.dll not found." # also copies gtest_main
+          
           echo "Deployment directory contents:"
           ls -l "$DEPLOY_DIR"  
 
