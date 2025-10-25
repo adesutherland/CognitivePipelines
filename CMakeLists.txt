@@ -13,8 +13,11 @@ project(CognitivePipelines VERSION 0.1.1 LANGUAGES CXX)
 
 # macOS packaging resources
 if(APPLE)
+    # Full path to the .icns and its base file name for CFBundleIconFile
     set(MACOSX_ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.icns)
+    get_filename_component(MACOSX_ICON_NAME "${MACOSX_ICON_FILE}" NAME)
     set(MACOSX_ENTITLEMENTS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.entitlements)
+    set(MACOSX_INFO_PLIST_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in)
 endif()
 
 # --- Standardize Output Directories ---
@@ -283,9 +286,13 @@ endif()
 # macOS: convert executables to .app bundles, apply icon and entitlements
 if(APPLE)
     if(TARGET CognitivePipelines)
+        # Ensure the icon is explicitly packaged and Info.plist is under our control
+        target_sources(CognitivePipelines PRIVATE ${MACOSX_ICON_FILE})
+        set_source_files_properties(${MACOSX_ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
         set_target_properties(CognitivePipelines PROPERTIES
             MACOSX_BUNDLE ON
-            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_FILE}
+            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_NAME}
+            MACOSX_BUNDLE_INFO_PLIST ${MACOSX_INFO_PLIST_TEMPLATE}
             XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
             MACOSX_BUNDLE_GUI_IDENTIFIER com.cognitivepipelines.app
             MACOSX_BUNDLE_BUNDLE_NAME CognitivePipelines
@@ -294,17 +301,31 @@ if(APPLE)
         )
     endif()
     if(TARGET unit_tests)
+        target_sources(unit_tests PRIVATE ${MACOSX_ICON_FILE})
+        set_source_files_properties(${MACOSX_ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
         set_target_properties(unit_tests PROPERTIES
             MACOSX_BUNDLE ON
-            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_FILE}
+            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_NAME}
+            MACOSX_BUNDLE_INFO_PLIST ${MACOSX_INFO_PLIST_TEMPLATE}
             XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
+            MACOSX_BUNDLE_GUI_IDENTIFIER com.cognitivepipelines.unit-tests
+            MACOSX_BUNDLE_BUNDLE_NAME unit_tests
+            MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+            MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
         )
     endif()
     if(TARGET integration_tests)
+        target_sources(integration_tests PRIVATE ${MACOSX_ICON_FILE})
+        set_source_files_properties(${MACOSX_ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
         set_target_properties(integration_tests PROPERTIES
             MACOSX_BUNDLE ON
-            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_FILE}
+            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_NAME}
+            MACOSX_BUNDLE_INFO_PLIST ${MACOSX_INFO_PLIST_TEMPLATE}
             XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
+            MACOSX_BUNDLE_GUI_IDENTIFIER com.cognitivepipelines.integration-tests
+            MACOSX_BUNDLE_BUNDLE_NAME integration_tests
+            MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+            MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
         )
     endif()
 
@@ -341,7 +362,7 @@ if(APPLE)
                                         /opt/homebrew/opt/qt@6/bin)
                     if(MACDEPLOYQT_EXECUTABLE)
                         add_custom_command(TARGET ${tgt} POST_BUILD
-                                COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" -always-overwrite -verbose=2 -codesign=-
+                                COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" -always-overwrite -codesign=-
                                 COMMENT "Running macdeployqt on $<TARGET_BUNDLE_DIR:${tgt}>"
                                 VERBATIM)
                     else()
@@ -383,7 +404,7 @@ if(APPLE AND NOT XCODE)
             add_dependencies(macos_deploy_all CognitivePipelines)
             if(MACDEPLOYQT_EXECUTABLE)
                 add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" -always-overwrite -verbose=2 -codesign=-
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" -always-overwrite -codesign=-
                     COMMENT "macdeployqt CognitivePipelines.app"
                     VERBATIM)
             endif()
@@ -398,7 +419,7 @@ if(APPLE AND NOT XCODE)
             add_dependencies(macos_deploy_all unit_tests)
             if(MACDEPLOYQT_EXECUTABLE)
                 add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:unit_tests>" -always-overwrite -verbose=2 -codesign=-
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:unit_tests>" -always-overwrite -codesign=-
                     COMMENT "macdeployqt unit_tests.app"
                     VERBATIM)
             endif()
@@ -413,7 +434,7 @@ if(APPLE AND NOT XCODE)
             add_dependencies(macos_deploy_all integration_tests)
             if(MACDEPLOYQT_EXECUTABLE)
                 add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:integration_tests>" -always-overwrite -verbose=2 -codesign=-
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:integration_tests>" -always-overwrite -codesign=-
                     COMMENT "macdeployqt integration_tests.app"
                     VERBATIM)
             endif()
