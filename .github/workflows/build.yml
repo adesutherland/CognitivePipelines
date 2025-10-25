@@ -284,8 +284,8 @@ jobs:
           ls "${{ env.VCPKG_ROOT }}/installed/x64-windows" || echo "failed"
           echo "listing ${{ env.VCPKG_ROOT }}/installed/x64-windows/bin"
           ls "${{ env.VCPKG_ROOT }}/installed/x64-windows/bin" || echo "failed"
-          echo "listing ${{ VCPKG_BIN_DIR }}"
-          ls "${{ VCPKG_BIN_DIR }}" || echo "failed"
+          echo "listing ${VCPKG_BIN_DIR}"
+          ls "${VCPKG_BIN_DIR}" || echo "failed"
 
           # Copy the executables to the deployment dir first
           cp "${{ github.workspace }}/build/bin/Release/CognitivePipelines.exe" "$DEPLOY_DIR/"
