@@ -230,6 +230,11 @@ jobs:
         shell: bash
         run: cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
 
+      - name: Deploy and Ad-hoc Sign (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: cmake --build build --target macos_deploy_all --config Release
+
       - name: Deploy Qt dependencies (Linux)
         if: runner.os == 'Linux'
         shell: bash
@@ -303,11 +308,6 @@ jobs:
           echo "Deployment directory contents:"
           ls -l "$DEPLOY_DIR"  
 
-      - name: Deploy Qt dependencies (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          ${{ env.QT_ROOT_DIR }}/bin/macdeployqt ${{ github.workspace }}/build/bin/CognitivePipelines.app
 
       - name: Run Unit Tests (Windows)
         if: runner.os == 'Windows'
@@ -319,7 +319,7 @@ jobs:
         if: runner.os == 'macOS'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: ./build/bin/unit_tests -platform offscreen
+        run: ./build/bin/unit_tests.app/Contents/MacOS/unit_tests
 
       - name: Run Unit Tests (Linux)
         if: runner.os == 'Linux'
@@ -340,7 +340,7 @@ jobs:
         if: runner.os == 'macOS'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: ./build/bin/integration_tests -platform offscreen
+        run: ./build/bin/integration_tests.app/Contents/MacOS/integration_tests
 
       - name: Run Integration Tests (Linux)
         if: runner.os == 'Linux'
@@ -385,5 +385,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cognitive-pipelines-macos-${{ matrix.arch }}
-          path: ${{ github.workspace }}/build/bin/
+          path: ${{ github.workspace }}/build/bin/*.app
           retention-days: 7

@@ -11,6 +11,12 @@ cmake_minimum_required(VERSION 3.21)
 # Project configuration
 project(CognitivePipelines VERSION 0.1.1 LANGUAGES CXX)
 
+# macOS packaging resources
+if(APPLE)
+    set(MACOSX_ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.icns)
+    set(MACOSX_ENTITLEMENTS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.entitlements)
+endif()
+
 # --- Standardize Output Directories ---
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -272,6 +278,155 @@ if(ENABLE_TESTING)
 
     # Add integration tests to CTest (can have the same name as executable)
     add_test(NAME integration_tests COMMAND integration_tests) # Explicitly add to CTest
+endif()
+
+# macOS: convert executables to .app bundles, apply icon and entitlements
+if(APPLE)
+    if(TARGET CognitivePipelines)
+        set_target_properties(CognitivePipelines PROPERTIES
+            MACOSX_BUNDLE ON
+            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_FILE}
+            XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
+            MACOSX_BUNDLE_GUI_IDENTIFIER com.cognitivepipelines.app
+            MACOSX_BUNDLE_BUNDLE_NAME CognitivePipelines
+            MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+            MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+        )
+    endif()
+    if(TARGET unit_tests)
+        set_target_properties(unit_tests PROPERTIES
+            MACOSX_BUNDLE ON
+            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_FILE}
+            XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
+        )
+    endif()
+    if(TARGET integration_tests)
+        set_target_properties(integration_tests PROPERTIES
+            MACOSX_BUNDLE ON
+            MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_FILE}
+            XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
+        )
+    endif()
+
+    # Ensure test bundles can locate Homebrew/VCPKG cpr at runtime without copying
+    if(TARGET unit_tests)
+        set_target_properties(unit_tests PROPERTIES
+            BUILD_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
+            INSTALL_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
+        )
+    endif()
+    if(TARGET integration_tests)
+        set_target_properties(integration_tests PROPERTIES
+            BUILD_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
+            INSTALL_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
+        )
+    endif()
+
+    # For non-Xcode generators, explicitly codesign bundles with entitlements so
+    # macOS App Sandbox permissions (file dialogs, networking) are effective.
+    if(NOT XCODE)
+        find_program(CODESIGN_EXECUTABLE codesign)
+        if(CODESIGN_EXECUTABLE)
+            foreach(tgt IN ITEMS CognitivePipelines unit_tests integration_tests)
+                if(TARGET ${tgt})
+                    # Deploy Qt frameworks into the app bundle so it runs outside the build machine
+                    find_program(MACDEPLOYQT_EXECUTABLE NAMES macdeployqt
+                                    HINTS
+                                        $ENV{HOMEBREW_PREFIX}/opt/qt/bin
+                                        /usr/local/opt/qt/bin
+                                        /opt/homebrew/opt/qt/bin
+                                        /usr/local/opt/qt6/bin
+                                        /opt/homebrew/opt/qt6/bin
+                                        /usr/local/opt/qt@6/bin
+                                        /opt/homebrew/opt/qt@6/bin)
+                    if(MACDEPLOYQT_EXECUTABLE)
+                        add_custom_command(TARGET ${tgt} POST_BUILD
+                                COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" -always-overwrite -verbose=2 -codesign=-
+                                COMMENT "Running macdeployqt on $<TARGET_BUNDLE_DIR:${tgt}>"
+                                VERBATIM)
+                    else()
+                        message(WARNING "macdeployqt not found; Qt frameworks may be missing from ${tgt}.app")
+                    endif()
+
+                    # Ad-hoc sign the resulting bundle so embedded frameworks have a valid cdhash
+                    add_custom_command(TARGET ${tgt} POST_BUILD
+                        COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
+                                --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                                --sign - "$<TARGET_BUNDLE_DIR:${tgt}>"
+                        COMMENT "Ad-hoc codesigning ${tgt}.app with entitlements"
+                        VERBATIM)
+                endif()
+            endforeach()
+        else()
+            message(WARNING "codesign tool not found; macOS entitlements will not be applied to app bundles.")
+        endif()
+    endif()
+endif()
+
+
+# Convenience target to (re)deploy and codesign app bundles even when up-to-date
+# Useful when dyld errors persist due to stale frameworks/signatures.
+if(APPLE AND NOT XCODE)
+    find_program(MACDEPLOYQT_EXECUTABLE NAMES macdeployqt
+        HINTS
+            $ENV{HOMEBREW_PREFIX}/opt/qt/bin
+            /usr/local/opt/qt/bin
+            /opt/homebrew/opt/qt/bin
+            /usr/local/opt/qt6/bin
+            /opt/homebrew/opt/qt6/bin
+            /usr/local/opt/qt@6/bin
+            /opt/homebrew/opt/qt@6/bin)
+    find_program(CODESIGN_EXECUTABLE codesign)
+    if(CODESIGN_EXECUTABLE)
+        add_custom_target(macos_deploy_all)
+        if(TARGET CognitivePipelines)
+            add_dependencies(macos_deploy_all CognitivePipelines)
+            if(MACDEPLOYQT_EXECUTABLE)
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" -always-overwrite -verbose=2 -codesign=-
+                    COMMENT "macdeployqt CognitivePipelines.app"
+                    VERBATIM)
+            endif()
+            add_custom_command(TARGET macos_deploy_all POST_BUILD
+                COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
+                        --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                        --sign - "$<TARGET_BUNDLE_DIR:CognitivePipelines>"
+                COMMENT "Ad-hoc codesigning CognitivePipelines.app with entitlements"
+                VERBATIM)
+        endif()
+        if(TARGET unit_tests)
+            add_dependencies(macos_deploy_all unit_tests)
+            if(MACDEPLOYQT_EXECUTABLE)
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:unit_tests>" -always-overwrite -verbose=2 -codesign=-
+                    COMMENT "macdeployqt unit_tests.app"
+                    VERBATIM)
+            endif()
+            add_custom_command(TARGET macos_deploy_all POST_BUILD
+                COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
+                        --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                        --sign - "$<TARGET_BUNDLE_DIR:unit_tests>"
+                COMMENT "Ad-hoc codesigning unit_tests.app with entitlements"
+                VERBATIM)
+        endif()
+        if(TARGET integration_tests)
+            add_dependencies(macos_deploy_all integration_tests)
+            if(MACDEPLOYQT_EXECUTABLE)
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:integration_tests>" -always-overwrite -verbose=2 -codesign=-
+                    COMMENT "macdeployqt integration_tests.app"
+                    VERBATIM)
+            endif()
+            add_custom_command(TARGET macos_deploy_all POST_BUILD
+                COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
+                        --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                        --sign - "$<TARGET_BUNDLE_DIR:integration_tests>"
+                COMMENT "Ad-hoc codesigning integration_tests.app with entitlements"
+                VERBATIM)
+        endif()
+    else()
+        message(WARNING "codesign tool not found; macOS entitlements will not be applied by macos_deploy_all.")
+    endif()
 endif()
 
 include(CPack)
