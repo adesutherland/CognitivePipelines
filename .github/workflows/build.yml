@@ -280,6 +280,19 @@ jobs:
             "${APPDIR}/usr/share/applications/integration_tests.desktop" \
             -appimage
 
+          # Create a single distributable ZIP containing all AppImages + desktop/icon files
+          echo "Creating Linux bundle zip..."
+          zip -j cognitive-pipelines-ubuntu-bundle.zip \
+            CognitivePipelines-*.AppImage \
+            unit_tests-*.AppImage \
+            integration_tests-*.AppImage \
+            packaging/linux/CognitivePipelines.desktop \
+            packaging/linux/unit_tests.desktop \
+            packaging/linux/integration_tests.desktop \
+            packaging/linux/CognitivePipelines.png || {
+              echo "Zip creation failed"; ls -la; exit 1;
+            }
+
       - name: Deploy Qt dependencies (Windows)
         if: runner.os == 'Windows'
         shell: bash # Use bash to easily access QT_ROOT_DIR env var
@@ -383,22 +396,12 @@ jobs:
           path: ${{ github.workspace }}/deploy/windows/
           retention-days: 7
 
-      - name: cognitive-pipelines-ubuntu-appimages
+      - name: cognitive-pipelines-ubuntu-bundle
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: cognitive-pipelines-ubuntu-appimages
-          path: "*.AppImage"
-          retention-days: 7
-
-      - name: Archive desktop integration files (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: cognitive-pipelines-ubuntu-desktop-files
-          path: |
-            packaging/linux/CognitivePipelines.desktop
-            packaging/linux/CognitivePipelines.png
+          name: cognitive-pipelines-ubuntu-bundle
+          path: cognitive-pipelines-ubuntu-bundle.zip
           retention-days: 7
 
       - name: Archive build artifacts (macOS)

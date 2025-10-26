@@ -39,7 +39,8 @@
 #include "llm_api_client.h"
 
 QString LLMConnector::defaultAccountsFilePath() {
-    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    // Prefer a writable per-user config location (e.g., ~/.config/CognitivePipelines)
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     if (baseDir.isEmpty()) return QString();
     return QDir(baseDir).filePath(QStringLiteral("accounts.json"));
 }
@@ -155,15 +156,9 @@ QString LLMConnector::getApiKey() {
     QStringList candidates;
     auto appendIfUnique = [&candidates](const QString& p){ if (!p.isEmpty() && !candidates.contains(p)) candidates.append(p); };
 
-    // 1) App bundle Resources (e.g., MyApp.app/Contents/Resources/accounts.json)
-    const QString appDir = QCoreApplication::applicationDirPath();
-    const QString resourcesDir = QDir::cleanPath(QDir(appDir).filePath(QStringLiteral("../Resources")));
-    const QString resourcesPath = QDir(resourcesDir).filePath(fileName);
-    appendIfUnique(resourcesPath);
-
-    // 2) Standard writable/readonly config/data locations (sandbox-safe)
+    // 1) Standard writable/readonly config/data locations (prefer user home config first)
     const QList<QStandardPaths::StandardLocation> stdLocs = {
-        QStandardPaths::AppConfigLocation,
+        QStandardPaths::AppConfigLocation,     // e.g., ~/.config/CognitivePipelines/accounts.json
         QStandardPaths::AppDataLocation,
         QStandardPaths::GenericConfigLocation,
         QStandardPaths::GenericDataLocation
@@ -175,19 +170,25 @@ QString LLMConnector::getApiKey() {
         }
     }
 
-    // 3) Start from CWD and walk up (works in non-sandbox / dev runs)
+    // 2) Start from CWD and walk up (works in non-sandbox / dev runs)
     QDir dirCwd = QDir::current();
     while (true) {
         appendIfUnique(dirCwd.filePath(fileName));
         if (!dirCwd.cdUp()) break;
     }
 
-    // 4) Start from application dir (inside .app/Contents/MacOS) and walk up to root
+    // 3) Start from application dir and walk up to root
+    const QString appDir = QCoreApplication::applicationDirPath();
     QDir dirApp(appDir);
     while (true) {
         appendIfUnique(dirApp.filePath(fileName));
         if (!dirApp.cdUp()) break;
     }
+
+    // 4) Finally, check app bundle Resources (e.g., MyApp.app/Contents/Resources/accounts.json)
+    const QString resourcesDir = QDir::cleanPath(QDir(appDir).filePath(QStringLiteral("../Resources")));
+    const QString resourcesPath = QDir(resourcesDir).filePath(fileName);
+    appendIfUnique(resourcesPath);
 
     for (const QString& path : candidates) {
         QFile f(path);
