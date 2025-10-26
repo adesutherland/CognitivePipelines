@@ -55,6 +55,12 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QStandardPaths>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QSaveFile>
+
+#include "LLMConnector.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
@@ -144,6 +150,11 @@ void MainWindow::createActions() {
     saveAsAction_->setStatusTip(tr("Save the current pipeline to a file"));
     connect(saveAsAction_, &QAction::triggered, this, &MainWindow::onSaveAs);
 
+    // Credentials editor
+    editCredentialsAction_ = new QAction(tr("Edit Credentials..."), this);
+    editCredentialsAction_->setStatusTip(tr("Open or create accounts.json in the standard app data location"));
+    connect(editCredentialsAction_, &QAction::triggered, this, &MainWindow::onEditCredentials);
+
     // Run action (moved from toolbar to the Pipeline menu)
     runAction_ = new QAction(tr("&Run"), this);
     runAction_->setStatusTip(tr("Execute the current pipeline"));
@@ -175,6 +186,8 @@ void MainWindow::createMenus() {
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(openAction_);
     fileMenu->addAction(saveAsAction_);
+    fileMenu->addSeparator();
+    fileMenu->addAction(editCredentialsAction_);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAction);
 
@@ -283,6 +296,48 @@ void MainWindow::onSaveAs()
     file.close();
 
     statusBar()->showMessage(tr("Saved to %1").arg(QFileInfo(fileName).fileName()), 3000);
+}
+
+void MainWindow::onEditCredentials()
+{
+    const QString path = LLMConnector::defaultAccountsFilePath();
+    if (path.isEmpty()) {
+        QMessageBox::warning(this, tr("Cannot determine location"), tr("Could not resolve a writable AppData location for accounts.json."));
+        return;
+    }
+
+    const QFileInfo fi(path);
+    const QString dirPath = fi.dir().absolutePath();
+    if (!QDir().mkpath(dirPath)) {
+        QMessageBox::warning(this, tr("Cannot create folder"), tr("Failed to create directory: %1").arg(dirPath));
+        return;
+    }
+
+    if (!fi.exists()) {
+        // Create a minimal template
+        static const QByteArray kTemplate = R"({
+  "accounts": [ { "name": "default_openai", "api_key": "YOUR_API_KEY_HERE" } ]
+}
+)";
+        QSaveFile sf(path);
+        if (!sf.open(QIODevice::WriteOnly)) {
+            QMessageBox::warning(this, tr("Cannot create file"), tr("Failed to create %1").arg(path));
+            return;
+        }
+        sf.write(kTemplate);
+        if (!sf.commit()) {
+            QMessageBox::warning(this, tr("Cannot write file"), tr("Failed to save %1").arg(path));
+            return;
+        }
+#ifdef Q_OS_UNIX
+        QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+#endif
+    }
+
+    const bool ok = QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+    if (!ok) {
+        QMessageBox::information(this, tr("Open manually"), tr("Please open this file in your editor: %1").arg(path));
+    }
 }
 
 void MainWindow::onOpen()

@@ -189,6 +189,7 @@ if(ENABLE_TESTING)
             tests/test_llm_api_client.cpp
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
+            tests/test_api_key_search.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/llm_api_client.cpp
             ${SRC_DIR}/llm_api_client.h

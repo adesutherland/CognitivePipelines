@@ -68,6 +68,7 @@ private slots:
     void onAbout();
     void onOpen();
     void onSaveAs();
+    void onEditCredentials();
 
     // Selection handling
     void onNodeSelected(QtNodes::NodeId nodeId);
@@ -88,6 +89,7 @@ private:
     QAction* runAction_ {nullptr};
     QAction* showDebugLogAction_ {nullptr};
     QAction* enableDebugLoggingAction_ {nullptr};
+    QAction* editCredentialsAction_ {nullptr};
     ExecutionEngine* execEngine_ {nullptr};
 
     NodeGraphModel* _graphModel {nullptr};

@@ -60,8 +60,10 @@ public:
     static constexpr const char* kInputPromptId = "prompt";
     static constexpr const char* kOutputResponseId = "response";
 
-private:
-    QString getApiKey() const;
+    // Exposed for testing: resolves API key via env or accounts.json search up to filesystem root
+    static QString getApiKey();
+    // Canonical default location for the accounts.json credential file
+    static QString defaultAccountsFilePath();
 
 private:
     QString m_prompt;

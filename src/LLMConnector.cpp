@@ -34,8 +34,15 @@
 #include <QDir>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QStandardPaths>
 
 #include "llm_api_client.h"
+
+QString LLMConnector::defaultAccountsFilePath() {
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (baseDir.isEmpty()) return QString();
+    return QDir(baseDir).filePath(QStringLiteral("accounts.json"));
+}
 
 LLMConnector::LLMConnector(QObject* parent)
     : QObject(parent) {
@@ -87,13 +94,6 @@ QWidget* LLMConnector::createConfigurationWidget(QWidget* parent) {
 }
 
 QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
-    // Resolve API key at runtime from accounts.json or environment
-    const QString apiKey = getApiKey();
-    if (apiKey.isEmpty()) {
-        qDebug() << "LLMConnector: API key not found. Provide accounts.json with 'openai' account or set OPENAI_API_KEY.";
-        return QFuture<DataPacket>(); // fail fast: do not attempt to call the API
-    }
-
     // Read incoming prompt if present
     const QString incomingPrompt = inputs.value(QString::fromLatin1(kInputPromptId)).toString();
 
@@ -110,11 +110,18 @@ QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
         return panelPrompt + QStringLiteral("\n\n-----\n\n") + incomingPrompt; // both
     }();
 
-    return QtConcurrent::run([apiKey, combinedPrompt]() -> DataPacket {
+    return QtConcurrent::run([combinedPrompt]() -> DataPacket {
         DataPacket output;
 
         if (combinedPrompt.trimmed().isEmpty()) {
             output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: Prompt is empty.")));
+            return output;
+        }
+
+        // Resolve API key at actual execution time (deferred)
+        const QString apiKey = getApiKey();
+        if (apiKey.isEmpty()) {
+            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(QStringLiteral("ERROR: API key not found. Provide accounts.json with 'openai' account or set OPENAI_API_KEY.")));
             return output;
         }
 
@@ -137,18 +144,50 @@ void LLMConnector::loadState(const QJsonObject& data) {
     }
 }
 
-QString LLMConnector::getApiKey() const {
+QString LLMConnector::getApiKey() {
     // Prefer environment variable to avoid relying on any committed files in CI
     const QByteArray envKey = qgetenv("OPENAI_API_KEY");
     if (!envKey.isEmpty()) return QString::fromUtf8(envKey);
 
     const QString fileName = QStringLiteral("accounts.json");
 
-    const QStringList candidates = {
-        QDir::current().filePath(fileName),
-        QCoreApplication::applicationDirPath() + QLatin1Char('/') + fileName,
-        QDir(QCoreApplication::applicationDirPath() + QLatin1String("/..")).filePath(fileName)
+    // Build candidate paths prioritizing sandbox-friendly locations
+    QStringList candidates;
+    auto appendIfUnique = [&candidates](const QString& p){ if (!p.isEmpty() && !candidates.contains(p)) candidates.append(p); };
+
+    // 1) App bundle Resources (e.g., MyApp.app/Contents/Resources/accounts.json)
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QString resourcesDir = QDir::cleanPath(QDir(appDir).filePath(QStringLiteral("../Resources")));
+    const QString resourcesPath = QDir(resourcesDir).filePath(fileName);
+    appendIfUnique(resourcesPath);
+
+    // 2) Standard writable/readonly config/data locations (sandbox-safe)
+    const QList<QStandardPaths::StandardLocation> stdLocs = {
+        QStandardPaths::AppConfigLocation,
+        QStandardPaths::AppDataLocation,
+        QStandardPaths::GenericConfigLocation,
+        QStandardPaths::GenericDataLocation
     };
+    for (auto loc : stdLocs) {
+        const QStringList paths = QStandardPaths::standardLocations(loc);
+        for (const QString& base : paths) {
+            appendIfUnique(QDir(base).filePath(fileName));
+        }
+    }
+
+    // 3) Start from CWD and walk up (works in non-sandbox / dev runs)
+    QDir dirCwd = QDir::current();
+    while (true) {
+        appendIfUnique(dirCwd.filePath(fileName));
+        if (!dirCwd.cdUp()) break;
+    }
+
+    // 4) Start from application dir (inside .app/Contents/MacOS) and walk up to root
+    QDir dirApp(appDir);
+    while (true) {
+        appendIfUnique(dirApp.filePath(fileName));
+        if (!dirApp.cdUp()) break;
+    }
 
     for (const QString& path : candidates) {
         QFile f(path);
@@ -162,7 +201,7 @@ QString LLMConnector::getApiKey() const {
         for (const QJsonValue& v : accounts) {
             const QJsonObject acc = v.toObject();
             const QString name = acc.value(QStringLiteral("name")).toString();
-            if (name == QStringLiteral("openai")) {
+            if (name == QStringLiteral("openai") || name == QStringLiteral("default_openai")) {
                 const QString key = acc.value(QStringLiteral("api_key")).toString();
                 if (!key.isEmpty()) return key;
             }
