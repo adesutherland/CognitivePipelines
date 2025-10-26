@@ -271,8 +271,8 @@ jobs:
             "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
             -appimage
           # Also package test executables as AppImages for consistent runtime dependencies
-          linuxdeployqt ./build/bin/unit_tests -appimage
-          linuxdeployqt ./build/bin/integration_tests -appimage
+          ./linuxdeployqt ./build/bin/unit_tests -appimage
+          ./linuxdeployqt ./build/bin/integration_tests -appimage
 
       - name: Deploy Qt dependencies (Windows)
         if: runner.os == 'Windows'
