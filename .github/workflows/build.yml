@@ -242,6 +242,8 @@ jobs:
           # Download linuxdeployqt AppImage
           curl -LO https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage
           chmod +x linuxdeployqt-continuous-x86_64.AppImage
+          # Create a convenience symlink so we can call 'linuxdeployqt' directly (matches docs/requirements)
+          ln -sf ./linuxdeployqt-continuous-x86_64.AppImage linuxdeployqt
         
           # Prepare deployment directory structure (AppDir standard)
           APPDIR="AppDir" # Define AppDir name
@@ -268,6 +270,9 @@ jobs:
           ./linuxdeployqt-continuous-x86_64.AppImage \
             "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
             -appimage
+          # Also package test executables as AppImages for consistent runtime dependencies
+          linuxdeployqt ./build/bin/unit_tests -appimage
+          linuxdeployqt ./build/bin/integration_tests -appimage
 
       - name: Deploy Qt dependencies (Windows)
         if: runner.os == 'Windows'
@@ -372,12 +377,22 @@ jobs:
           path: ${{ github.workspace }}/deploy/windows/
           retention-days: 7
 
-      - name: Archive build artifacts (Linux)
+      - name: cognitive-pipelines-ubuntu-appimages
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: cognitive-pipelines-ubuntu-appimage
-          path: CognitivePipelines*.AppImage
+          name: cognitive-pipelines-ubuntu-appimages
+          path: "*.AppImage"
+          retention-days: 7
+
+      - name: Archive desktop integration files (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognitive-pipelines-ubuntu-desktop-files
+          path: |
+            packaging/linux/CognitivePipelines.desktop
+            packaging/linux/CognitivePipelines.png
           retention-days: 7
 
       - name: Archive build artifacts (macOS)
