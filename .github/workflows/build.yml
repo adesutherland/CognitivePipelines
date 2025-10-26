@@ -257,8 +257,10 @@ jobs:
           # Copy Tests
           cp build/bin/unit_tests "${APPDIR}/usr/bin/"
           cp build/bin/integration_tests "${APPDIR}/usr/bin/"
-          # ---Copy desktop file and icon ---
+          # ---Copy desktop files and icon ---
           cp packaging/linux/CognitivePipelines.desktop "${APPDIR}/usr/share/applications/"
+          cp packaging/linux/unit_tests.desktop "${APPDIR}/usr/share/applications/"
+          cp packaging/linux/integration_tests.desktop "${APPDIR}/usr/share/applications/"
           cp packaging/linux/CognitivePipelines.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/"
           # Run linuxdeployqt
           export PATH="${QT_ROOT_DIR}/bin:$PATH"
@@ -270,9 +272,13 @@ jobs:
           ./linuxdeployqt-continuous-x86_64.AppImage \
             "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
             -appimage
-          # Also package test executables as AppImages for consistent runtime dependencies
-          ./linuxdeployqt ./build/bin/unit_tests -appimage
-          ./linuxdeployqt ./build/bin/integration_tests -appimage
+          # Also package test executables as AppImages using their .desktop files inside AppDir
+          ./linuxdeployqt-continuous-x86_64.AppImage \
+            "${APPDIR}/usr/share/applications/unit_tests.desktop" \
+            -appimage
+          ./linuxdeployqt-continuous-x86_64.AppImage \
+            "${APPDIR}/usr/share/applications/integration_tests.desktop" \
+            -appimage
 
       - name: Deploy Qt dependencies (Windows)
         if: runner.os == 'Windows'
