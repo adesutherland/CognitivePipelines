@@ -2,7 +2,7 @@
 Type=Application
 Name=CognitivePipelines
 Comment=Design and execute cognitive pipelines
-Exec=CognitivePipelines
-Icon=CognitivePipelines
+Exec=CognitivePipelines.png
+Icon=CognitivePipelines.AppImage
 Categories=Utility;Development;
 Terminal=false

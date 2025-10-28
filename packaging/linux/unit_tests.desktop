@@ -2,8 +2,7 @@
 Type=Application
 Name=CognitivePipelines Unit Tests
 Comment=Run GoogleTest unit test suite for CognitivePipelines
-Exec=unit_tests
+Exec=unit_tests.AppImage
 Terminal=true
 Categories=Utility;Development;
-# Use the shared app icon; linuxdeployqt will pick it via -i argument
-Icon=CognitivePipelines
+Icon=CognitivePipelines.png
