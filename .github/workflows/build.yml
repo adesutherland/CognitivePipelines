@@ -271,15 +271,23 @@ jobs:
           PROJECT_VERSION=$(grep -oP 'project\(CognitivePipelines VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
           export VERSION=${PROJECT_VERSION:-0.0.0} # Set VERSION env var, default to 0.0.0 if not found
           echo "Setting AppImage version to: $VERSION"
-          ./linuxdeployqt-continuous-x86_64.AppImage \
-            "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
-            -appimage
-          # Also package test executables as AppImages using their .desktop files inside AppDir
+          
+          # Package test executables as AppImages using their .desktop files inside AppDir
           ./linuxdeployqt-continuous-x86_64.AppImage \
             "${APPDIR}/usr/share/applications/unit_tests.desktop" \
             -appimage
+          # This incorrectly creates it under the name 'CognitivePipelines-0.1.1-x86_64.AppImage' and needs renaming
+          mv "CognitivePipelines-${VERSION}-x86_64.AppImage" "unit_tests-${VERSION}-x86_64.AppImage"
+          
           ./linuxdeployqt-continuous-x86_64.AppImage \
             "${APPDIR}/usr/share/applications/integration_tests.desktop" \
+            -appimage
+          # This incorrectly creates it under the name 'CognitivePipelines-0.1.1-x86_64.AppImage' and needs renaming
+          mv "CognitivePipelines-${VERSION}-x86_64.AppImage" "integration_tests-${VERSION}-x86_64.AppImage"
+          
+          # Package main app
+          ./linuxdeployqt-continuous-x86_64.AppImage \
+            "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
             -appimage
 
           # Create a single distributable ZIP containing all AppImages + desktop/icon files
