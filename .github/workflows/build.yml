@@ -272,6 +272,13 @@ jobs:
           export VERSION=${PROJECT_VERSION:-0.0.0} # Set VERSION env var, default to 0.0.0 if not found
           echo "Setting AppImage version to: $VERSION"
           
+          # Package main app
+          ./linuxdeployqt-continuous-x86_64.AppImage \
+            "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
+            -appimage
+          # Save it under a temp name
+          mv "CognitivePipelines-${VERSION}-x86_64.AppImage" "temp.AppImage"
+          
           # Package test executables as AppImages using their .desktop files inside AppDir
           ./linuxdeployqt-continuous-x86_64.AppImage \
             "${APPDIR}/usr/share/applications/unit_tests.desktop" \
@@ -285,10 +292,8 @@ jobs:
           # This incorrectly creates it under the name 'CognitivePipelines-0.1.1-x86_64.AppImage' and needs renaming
           mv "CognitivePipelines-${VERSION}-x86_64.AppImage" "integration_tests-${VERSION}-x86_64.AppImage"
           
-          # Package main app
-          ./linuxdeployqt-continuous-x86_64.AppImage \
-            "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
-            -appimage
+          # Rename the temp app AppImage back to the right name
+          mv "temp.AppImage" "CognitivePipelines-${VERSION}-x86_64.AppImage" 
 
           # Create a single distributable ZIP containing all AppImages + desktop/icon files
           echo "Creating Linux bundle zip..."
