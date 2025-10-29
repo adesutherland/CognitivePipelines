@@ -5,4 +5,4 @@ Comment=Run GoogleTest unit test suite for CognitivePipelines
 Exec=unit_tests
 Terminal=true
 Categories=Development;
-Icon=unit_tests.png
+Icon=unit_tests

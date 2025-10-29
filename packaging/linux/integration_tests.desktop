@@ -5,4 +5,4 @@ Comment=Run Qt-based integration test suite for CognitivePipelines
 Exec=integration_tests
 Terminal=true
 Categories=Development;
-Icon=integration_tests.png
+Icon=integration_tests
