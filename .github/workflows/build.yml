@@ -239,6 +239,9 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
+          # Exit immediately if a command fails
+          set -e
+          
           # Download linuxdeployqt AppImage
           curl -LO https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage
           chmod +x linuxdeployqt-continuous-x86_64.AppImage
@@ -272,28 +275,50 @@ jobs:
           export VERSION=${PROJECT_VERSION:-0.0.0} # Set VERSION env var, default to 0.0.0 if not found
           echo "Setting AppImage version to: $VERSION"
           
-          # Package main app
-          ./linuxdeployqt-continuous-x86_64.AppImage \
-            "${APPDIR}/usr/share/applications/CognitivePipelines.desktop" \
-            -appimage
-          # Save it under a temp name
-          mv "CognitivePipelines-${VERSION}-x86_64.AppImage" "temp.AppImage"
+          # Define the master AppDir that your build process creates
+          MASTER_APPDIR="${APPDIR}"
           
-          # Package test executables as AppImages using their .desktop files inside AppDir
-          ./linuxdeployqt-continuous-x86_64.AppImage \
-            "${APPDIR}/usr/share/applications/unit_tests.desktop" \
-            -appimage
-          # This incorrectly creates it under the name 'CognitivePipelines-0.1.1-x86_64.AppImage' and needs renaming
-          mv "CognitivePipelines-${VERSION}-x86_64.AppImage" "unit_tests-${VERSION}-x86_64.AppImage"
+          # --- 1. Create temporary copies of the populated AppDir ---
+          echo "Creating separate AppDir copies..."
+          cp -r "${MASTER_APPDIR}" "AppDir_Main"
+          cp -r "${MASTER_APPDIR}" "AppDir_Unit"
+          cp -r "${MASTER_APPDIR}" "AppDir_Integration"
           
+          # --- 2. Build Main App ---
+          echo "Building CognitivePipelines AppImage..."
+          # Clean up the other .desktop files so linuxdeployqt isn't confused
+          rm "AppDir_Main/usr/share/applications/unit_tests.desktop"
+          rm "AppDir_Main/usr/share/applications/integration_tests.desktop"
+          # Run linuxdeployqt on its own clean directory
           ./linuxdeployqt-continuous-x86_64.AppImage \
-            "${APPDIR}/usr/share/applications/integration_tests.desktop" \
-            -appimage
-          # This incorrectly creates it under the name 'CognitivePipelines-0.1.1-x86_64.AppImage' and needs renaming
-          mv "CognitivePipelines-${VERSION}-x86_64.AppImage" "integration_tests-${VERSION}-x86_64.AppImage"
+            "AppDir_Main/usr/share/applications/CognitivePipelines.desktop" -appimage
+          # This will correctly create 'CognitivePipelines-....AppImage'
           
-          # Rename the temp app AppImage back to the right name
-          mv "temp.AppImage" "CognitivePipelines-${VERSION}-x86_64.AppImage" 
+          # --- 3. Build Unit Tests ---
+          echo "Building unit_tests AppImage..."
+          # Clean up the other .desktop files
+          rm "AppDir_Unit/usr/share/applications/CognitivePipelines.desktop"
+          rm "AppDir_Unit/usr/share/applications/integration_tests.desktop"
+          # Run linuxdeployqt on its own clean directory
+          ./linuxdeployqt-continuous-x86_64.AppImage \
+            "AppDir_Unit/usr/share/applications/unit_tests.desktop" -appimage
+          # This will correctly create 'unit_tests-....AppImage'
+          
+          # --- 4. Build Integration Tests ---
+          echo "Building integration_tests AppImage..."
+          # Clean up the other .desktop files
+          rm "AppDir_Integration/usr/share/applications/CognitivePipelines.desktop"
+          rm "AppDir_Integration/usr/share/applications/unit_tests.desktop"
+          # Run linuxdeployqt on its own clean directory
+          ./linuxdeployqt-continuous-x86_64.AppImage \
+            "AppDir_Integration/usr/share/applications/integration_tests.desktop" -appimage
+          # This will correctly create 'integration_tests-....AppImage'
+          
+          # --- 5. Clean up temporary directories ---
+          echo "Cleaning up temporary AppDirs..."
+          rm -rf "AppDir_Main" "AppDir_Unit" "AppDir_Integration"
+          
+          echo "All AppImages created successfully."          
 
           # Create a single distributable ZIP containing all AppImages + desktop/icon files
           echo "Creating Linux bundle zip..."
