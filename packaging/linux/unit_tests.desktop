@@ -2,7 +2,7 @@
 Type=Application
 Name=CognitivePipelines Unit Tests
 Comment=Run GoogleTest unit test suite for CognitivePipelines
-Exec=unit_tests.AppImage
+Exec=unit_tests
 Terminal=true
-Categories=Utility;Development;
+Categories=Development;
 Icon=unit_tests.png
