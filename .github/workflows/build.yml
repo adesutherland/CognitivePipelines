@@ -239,15 +239,12 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          # Exit immediately if a command fails
           set -e
-          
           # Download linuxdeployqt AppImage
           curl -LO https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage
           chmod +x linuxdeployqt-continuous-x86_64.AppImage
           # Create a convenience symlink so we can call 'linuxdeployqt' directly (matches docs/requirements)
           ln -sf ./linuxdeployqt-continuous-x86_64.AppImage linuxdeployqt
-        
           # Prepare deployment directory structure (AppDir standard)
           APPDIR="AppDir" # Define AppDir name
           mkdir -p "${APPDIR}/usr/bin"
@@ -273,18 +270,15 @@ jobs:
           # Extract version from CMakeLists.txt (example, might need refinement based on your exact file)
           PROJECT_VERSION=$(grep -oP 'project\(CognitivePipelines VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
           export VERSION=${PROJECT_VERSION:-0.0.0} # Set VERSION env var, default to 0.0.0 if not found
-          echo "Setting AppImage version to: $VERSION"
-          
-          # Define the master AppDir that your build process creates
+          echo "Setting AppImage version to: $VERSION"          
+          # Define the master AppDir we duplicate
           MASTER_APPDIR="${APPDIR}"
-          
-          # --- 1. Create temporary copies of the populated AppDir ---
+          # Create temporary copies of the populated AppDir ---
           echo "Creating separate AppDir copies..."
           cp -r "${MASTER_APPDIR}" "AppDir_Main"
           cp -r "${MASTER_APPDIR}" "AppDir_Unit"
           cp -r "${MASTER_APPDIR}" "AppDir_Integration"
-          
-          # --- 2. Build Main App ---
+          # Build Main App ---
           echo "Building CognitivePipelines AppImage..."
           # Clean up the other .desktop files so linuxdeployqt isn't confused
           rm "AppDir_Main/usr/share/applications/unit_tests.desktop"
@@ -292,9 +286,8 @@ jobs:
           # Run linuxdeployqt on its own clean directory
           ./linuxdeployqt-continuous-x86_64.AppImage \
             "AppDir_Main/usr/share/applications/CognitivePipelines.desktop" -appimage
-          # This will correctly create 'CognitivePipelines-....AppImage'
-          
-          # --- 3. Build Unit Tests ---
+          # This will create 'CognitivePipelines-....AppImage'
+          # Build Unit Tests ---
           echo "Building unit_tests AppImage..."
           # Clean up the other .desktop files
           rm "AppDir_Unit/usr/share/applications/CognitivePipelines.desktop"
@@ -302,9 +295,8 @@ jobs:
           # Run linuxdeployqt on its own clean directory
           ./linuxdeployqt-continuous-x86_64.AppImage \
             "AppDir_Unit/usr/share/applications/unit_tests.desktop" -appimage
-          # This will correctly create 'unit_tests-....AppImage'
-          
-          # --- 4. Build Integration Tests ---
+          # This will create 'CognitivePipelines_unit_tests-....AppImage'
+          # Build Integration Tests ---
           echo "Building integration_tests AppImage..."
           # Clean up the other .desktop files
           rm "AppDir_Integration/usr/share/applications/CognitivePipelines.desktop"
@@ -312,22 +304,17 @@ jobs:
           # Run linuxdeployqt on its own clean directory
           ./linuxdeployqt-continuous-x86_64.AppImage \
             "AppDir_Integration/usr/share/applications/integration_tests.desktop" -appimage
-          # This will correctly create 'integration_tests-....AppImage'
-          
-          # --- 5. Clean up temporary directories ---
+          # This will create 'CognitivePipelines_integration_tests-....AppImage'
+          # Clean up temporary directories ---
           echo "Cleaning up temporary AppDirs..."
           rm -rf "AppDir_Main" "AppDir_Unit" "AppDir_Integration"
-          
           echo "All AppImages created successfully."          
-
           # Create a single distributable ZIP containing all AppImages + desktop/icon files
           echo "Creating Linux bundle zip..."
           echo "Contents"
           ls -l
           zip -j cognitive-pipelines-ubuntu-bundle.zip \
             CognitivePipelines*.AppImage \
-            unit_tests*.AppImage \
-            integration_tests*.AppImage \
             packaging/linux/CognitivePipelines.desktop \
             packaging/linux/unit_tests.desktop \
             packaging/linux/integration_tests.desktop \
