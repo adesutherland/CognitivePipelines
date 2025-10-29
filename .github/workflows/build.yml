@@ -262,6 +262,8 @@ jobs:
           cp packaging/linux/unit_tests.desktop "${APPDIR}/usr/share/applications/"
           cp packaging/linux/integration_tests.desktop "${APPDIR}/usr/share/applications/"
           cp packaging/linux/CognitivePipelines.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/"
+          cp packaging/linux/unit_tests.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/"
+          cp packaging/linux/integration_tests.png "${APPDIR}/usr/share/icons/hicolor/256x256/apps/"
           # Run linuxdeployqt
           export PATH="${QT_ROOT_DIR}/bin:$PATH"
           export LD_LIBRARY_PATH="${QT_ROOT_DIR}/lib:$LD_LIBRARY_PATH"
@@ -283,13 +285,15 @@ jobs:
           # Create a single distributable ZIP containing all AppImages + desktop/icon files
           echo "Creating Linux bundle zip..."
           zip -j cognitive-pipelines-ubuntu-bundle.zip \
-            CognitivePipelines-*.AppImage \
-            unit_tests-*.AppImage \
-            integration_tests-*.AppImage \
+            CognitivePipelines*.AppImage \
+            unit_tests*.AppImage \
+            integration_tests*.AppImage \
             packaging/linux/CognitivePipelines.desktop \
             packaging/linux/unit_tests.desktop \
             packaging/linux/integration_tests.desktop \
-            packaging/linux/CognitivePipelines.png || {
+            packaging/linux/CognitivePipelines.png \
+            packaging/linux/unit_tests.png \
+            packaging/linux/integration_tests.png || {
               echo "Zip creation failed"; ls -la; exit 1;
             }
 
