@@ -284,6 +284,8 @@ jobs:
 
           # Create a single distributable ZIP containing all AppImages + desktop/icon files
           echo "Creating Linux bundle zip..."
+          echo "Contents"
+          ls -l
           zip -j cognitive-pipelines-ubuntu-bundle.zip \
             CognitivePipelines*.AppImage \
             unit_tests*.AppImage \
