@@ -61,6 +61,7 @@
 #include <QSaveFile>
 
 #include "LLMConnector.h"
+#include "CredentialsEditorDialog.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
@@ -300,44 +301,14 @@ void MainWindow::onSaveAs()
 
 void MainWindow::onEditCredentials()
 {
-    const QString path = LLMConnector::defaultAccountsFilePath();
-    if (path.isEmpty()) {
-        QMessageBox::warning(this, tr("Cannot determine location"), tr("Could not resolve a writable AppData location for accounts.json."));
+    const QString filePath = LLMConnector::defaultAccountsFilePath();
+    if (filePath.isEmpty()) {
+        QMessageBox::critical(this, tr("Error"), tr("Could not find or create accounts.json file."));
         return;
     }
 
-    const QFileInfo fi(path);
-    const QString dirPath = fi.dir().absolutePath();
-    if (!QDir().mkpath(dirPath)) {
-        QMessageBox::warning(this, tr("Cannot create folder"), tr("Failed to create directory: %1").arg(dirPath));
-        return;
-    }
-
-    if (!fi.exists()) {
-        // Create a minimal template
-        static const QByteArray kTemplate = R"({
-  "accounts": [ { "name": "default_openai", "api_key": "YOUR_API_KEY_HERE" } ]
-}
-)";
-        QSaveFile sf(path);
-        if (!sf.open(QIODevice::WriteOnly)) {
-            QMessageBox::warning(this, tr("Cannot create file"), tr("Failed to create %1").arg(path));
-            return;
-        }
-        sf.write(kTemplate);
-        if (!sf.commit()) {
-            QMessageBox::warning(this, tr("Cannot write file"), tr("Failed to save %1").arg(path));
-            return;
-        }
-#ifdef Q_OS_UNIX
-        QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-#endif
-    }
-
-    const bool ok = QDesktopServices::openUrl(QUrl::fromLocalFile(path));
-    if (!ok) {
-        QMessageBox::information(this, tr("Open manually"), tr("Please open this file in your editor: %1").arg(path));
-    }
+    CredentialsEditorDialog dialog(filePath, this);
+    dialog.exec();
 }
 
 void MainWindow::onOpen()
