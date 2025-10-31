@@ -258,6 +258,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ToolNodeDelegate.h
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
+            ${SRC_DIR}/CredentialsEditorDialog.cpp
+            ${SRC_DIR}/CredentialsEditorDialog.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
 
