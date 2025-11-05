@@ -9,7 +9,15 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.1.1 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.1.2 LANGUAGES CXX)
+
+# Release build switch: control code signing identity for macOS
+option(RELEASE_BUILD "Enable full codesigning for release" OFF)
+if(RELEASE_BUILD)
+    set(APPLE_SIGN_IDENTITY "Developer ID Application")
+else()
+    set(APPLE_SIGN_IDENTITY "-") # Use fast ad-hoc signing
+endif()
 
 # macOS packaging resources
 if(APPLE)
@@ -63,6 +71,7 @@ find_package(GTest REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
 
+
 # Windows resource file for application icon
 if(WIN32)
     set(WIN32_RESOURCE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/app.rc)
@@ -92,6 +101,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/TextInputNode.h
     ${SRC_DIR}/TextInputPropertiesWidget.cpp
     ${SRC_DIR}/TextInputPropertiesWidget.h
+    ${SRC_DIR}/ProcessConnector.cpp
+    ${SRC_DIR}/ProcessConnector.h
+    ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
+    ${SRC_DIR}/ProcessConnectorPropertiesWidget.h
     ${SRC_DIR}/NodeGraphModel.cpp
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp
@@ -109,6 +122,7 @@ add_executable(CognitivePipelines
 target_include_directories(CognitivePipelines PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${SRC_DIR}
+    ${Boost_INCLUDE_DIRS}
 )
 
 target_link_libraries(CognitivePipelines PRIVATE
@@ -213,6 +227,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/LLMConnector.h
             ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
             ${SRC_DIR}/LLMConnectorPropertiesWidget.h
+            ${SRC_DIR}/ProcessConnector.cpp
+            ${SRC_DIR}/ProcessConnector.h
+            ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
+            ${SRC_DIR}/ProcessConnectorPropertiesWidget.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
     target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -260,6 +278,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ExecutionEngine.h
             ${SRC_DIR}/CredentialsEditorDialog.cpp
             ${SRC_DIR}/CredentialsEditorDialog.h
+            ${SRC_DIR}/ProcessConnector.cpp
+            ${SRC_DIR}/ProcessConnector.h
+            ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
+            ${SRC_DIR}/ProcessConnectorPropertiesWidget.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
 
@@ -299,6 +321,7 @@ if(APPLE)
             MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_NAME}
             MACOSX_BUNDLE_INFO_PLIST ${MACOSX_INFO_PLIST_TEMPLATE}
             XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
+            XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "${APPLE_SIGN_IDENTITY}"
             MACOSX_BUNDLE_GUI_IDENTIFIER com.cognitivepipelines.app
             MACOSX_BUNDLE_BUNDLE_NAME CognitivePipelines
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
@@ -313,6 +336,7 @@ if(APPLE)
             MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_NAME}
             MACOSX_BUNDLE_INFO_PLIST ${MACOSX_INFO_PLIST_TEMPLATE}
             XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
+            XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "${APPLE_SIGN_IDENTITY}"
             MACOSX_BUNDLE_GUI_IDENTIFIER com.cognitivepipelines.unit-tests
             MACOSX_BUNDLE_BUNDLE_NAME unit_tests
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
@@ -327,6 +351,7 @@ if(APPLE)
             MACOSX_BUNDLE_ICON_FILE ${MACOSX_ICON_NAME}
             MACOSX_BUNDLE_INFO_PLIST ${MACOSX_INFO_PLIST_TEMPLATE}
             XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${MACOSX_ENTITLEMENTS_FILE}
+            XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "${APPLE_SIGN_IDENTITY}"
             MACOSX_BUNDLE_GUI_IDENTIFIER com.cognitivepipelines.integration-tests
             MACOSX_BUNDLE_BUNDLE_NAME integration_tests
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
@@ -378,7 +403,7 @@ if(APPLE)
                     add_custom_command(TARGET ${tgt} POST_BUILD
                         COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
                                 --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                                --sign - "$<TARGET_BUNDLE_DIR:${tgt}>"
+                                --sign "${APPLE_SIGN_IDENTITY}" "$<TARGET_BUNDLE_DIR:${tgt}>"
                         COMMENT "Ad-hoc codesigning ${tgt}.app with entitlements"
                         VERBATIM)
                 endif()
