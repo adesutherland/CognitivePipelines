@@ -210,6 +210,8 @@ jobs:
               -DENABLE_TESTING=ON"
           
             if [[ "${{ runner.os }}" == "macOS" ]]; then
+              # Add the release signing flag ONLY for macOS
+              CMAKE_FLAGS="$CMAKE_FLAGS -DRELEASE_BUILD=ON" 
               if [ "${{ matrix.arch }}" == "x86_64" ]; then
                 CMAKE_FLAGS="$CMAKE_FLAGS -DCMAKE_OSX_ARCHITECTURES='x86_64' -DVCPKG_TARGET_TRIPLET=x64-osx"
               else
