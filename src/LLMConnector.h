@@ -27,17 +27,19 @@
 #include <QWidget>
 #include <QFuture>
 #include <QString>
+#include <memory>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
 
+class LlmApiClient; // forward declaration
 
 class LLMConnector : public QObject, public IToolConnector {
     Q_OBJECT
     Q_INTERFACES(IToolConnector)
 public:
     explicit LLMConnector(QObject* parent = nullptr);
-    ~LLMConnector() override = default;
+    ~LLMConnector() override;
 
     // IToolConnector interface
     NodeDescriptor GetDescriptor() const override;
@@ -51,20 +53,30 @@ public:
 
 public slots:
     void setPrompt(const QString& prompt);
+    // New parameters from properties widget
+    void onTemperatureChanged(double temp);
+    void onMaxTokensChanged(int tokens);
+    void onModelNameChanged(const QString& modelName);
 
 signals:
     void promptChanged(const QString& prompt);
 
 public:
     // Constants for pin IDs
+    static constexpr const char* kInputSystemId = "system";
     static constexpr const char* kInputPromptId = "prompt";
     static constexpr const char* kOutputResponseId = "response";
 
-    // Exposed for testing: resolves API key via env or accounts.json search up to filesystem root
+    // Resolve API key: OPENAI_API_KEY env var, then accounts.json at defaultAccountsFilePath()
     static QString getApiKey();
     // Canonical default location for the accounts.json credential file
     static QString defaultAccountsFilePath();
 
 private:
-    QString m_prompt;
+    // Properties/state
+    QString m_prompt; // free-form text from properties panel (used as default system message if no input)
+    double m_temperature = 0.7;
+    int m_maxTokens = 1024;
+    QString m_modelName = QStringLiteral("gpt-4o-mini");
+    std::unique_ptr<LlmApiClient> m_apiClient;
 };

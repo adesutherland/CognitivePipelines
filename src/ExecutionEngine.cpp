@@ -240,6 +240,17 @@ void ExecutionEngine::run()
             emit nodeLog(QString::fromLatin1("Node Finished: %1 %2 with OUTPUT: {%3}")
                              .arg(QString::number(nodeId)).arg(nodeName).arg(outputsStr));
 
+            // If the node reported an error via the special key, stop the pipeline here
+            const QString errorMsg = result.value(QStringLiteral("__error")).toString();
+            if (!errorMsg.trimmed().isEmpty()) {
+                emit nodeLog(QString::fromLatin1("ExecutionEngine: Error reported by node %1 %2: %3")
+                                 .arg(QString::number(nodeId)).arg(nodeName).arg(errorMsg));
+                watcher->deleteLater();
+                emit pipelineFinished(result);
+                delete state;
+                return;
+            }
+
             watcher->deleteLater();
             state->index++;
             // Queue next execution to avoid deep recursion and keep UI responsive

@@ -25,14 +25,36 @@
 
 #include <string>
 
+// Qt
+#include <QString>
+#include <QJsonObject>
+
 // A simple LLM API client using cpr to send a hardcoded chat completion request.
 // This class sends a prompt to a standard chat completion endpoint and returns
 // the first message content from the response, or an error description string on failure.
 class LlmApiClient {
 public:
-    // Sends the given promptText to the LLM using the provided apiKey.
-    // Returns the extracted assistant message content on success, or a human-readable
-    // error message string if the HTTP call fails or the response is malformed.
+    // Multi‑provider support
+    enum class ApiProvider { OpenAI, Google };
+
+    // New provider-aware API using robust QJson request building.
+    // Note: this variant currently performs the request synchronously and
+    // intentionally does not return a value (API surface placeholder for future async refactor).
+    // The legacy API below still returns the response text for callers that need it.
+    QString sendPrompt(ApiProvider provider,
+                    const QString &apiKey,
+                    const QString &model,
+                    double temperature,
+                    int maxTokens,
+                    const QString &systemPrompt,
+                    const QString &userPrompt);
+
+    // New API key accessor that reads a specific provider key from accounts.json
+    // (e.g., providerKey = "openai_api_key").
+    QString getApiKey(const QString &providerKey) const;
+
+    // Legacy single-provider API kept for compatibility with existing callers/tests.
+    // Sends the given promptText to the LLM using the provided apiKey and returns result or error.
     std::string sendPrompt(const std::string& apiKey, const std::string& promptText);
 
 private:

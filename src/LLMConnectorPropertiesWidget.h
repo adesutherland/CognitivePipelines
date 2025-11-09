@@ -28,6 +28,10 @@
 #include <QFormLayout>
 #include <QLabel>
 
+class QDoubleSpinBox;
+class QSpinBox;
+class QLineEdit;
+
 // Simple property editor widget for LLMConnector
 class LLMConnectorPropertiesWidget : public QWidget {
     Q_OBJECT
@@ -41,9 +45,26 @@ public:
     // Read current values
     QString promptText() const;
 
+    // New parameters: Temperature and Max Tokens
+    double getTemperature() const;
+    void setTemperature(double temp);
+
+    int getMaxTokens() const;
+    void setMaxTokens(int tokens);
+
+    // Model name (required by LlmApiClient)
+    QString getModelName() const;
+    void setModelName(const QString &modelName);
+
 signals:
     void promptChanged(const QString& text);
+    void temperatureChanged(double temp);
+    void maxTokensChanged(int tokens);
+    void modelNameChanged(const QString &modelName);
 
 private:
     QTextEdit* m_promptEdit {nullptr};
+    QDoubleSpinBox* temperatureSpinBox {nullptr};
+    QSpinBox* maxTokensSpinBox {nullptr};
+    QLineEdit* modelLineEdit {nullptr};
 };

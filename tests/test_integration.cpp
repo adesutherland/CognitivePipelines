@@ -108,8 +108,12 @@ void IntegrationTests::test_SaveLoad()
 
 void IntegrationTests::test_FullPipelineExecution()
 {
-    if (qEnvironmentVariableIsEmpty("OPENAI_API_KEY")) {
-        QSKIP("OPENAI_API_KEY not set; skipping live integration test.");
+    QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
+    if (apiKey.isEmpty()) {
+        apiKey = LLMConnector::getApiKey();
+    }
+    if (apiKey.isEmpty()) {
+        QSKIP("Neither OPENAI_API_KEY is set nor accounts.json (standard app config dir) found; skipping live integration test.");
     }
 
     QVERIFY(model_ != nullptr);

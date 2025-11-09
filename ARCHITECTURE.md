@@ -18,7 +18,7 @@
 - Connectors (Tools)
   - IToolConnector (include/IToolConnector.h): Abstract interface for pipeline tools; defines node descriptor, configuration UI, and async Execute API.
   - LLMConnector (src/LLMConnector.h/.cpp): Single‑input (Prompt) to single‑output (Response) connector; performs work off the main thread via QtConcurrent using LlmApiClient.
-  - LLMConnectorPropertiesWidget (src/LLMConnectorPropertiesWidget.h/.cpp): Properties editor for Prompt and API Key.
+  - LLMConnectorPropertiesWidget (src/LLMConnectorPropertiesWidget.h/.cpp): Properties editor for model, prompt, temperature, and tokens.
   - PromptBuilderNode (src/PromptBuilderNode.h/.cpp): Template‑based text transform; has a corresponding PromptBuilderPropertiesWidget.
   - TextInputNode (src/TextInputNode.h/.cpp): Emits user text; has a TextInputPropertiesWidget.
   - PythonScriptConnector (src/PythonScriptConnector.h/.cpp): Placeholder for a future external script tool.
@@ -60,7 +60,7 @@ CI/CD (GitHub Actions):
 
 ## Configuration Management
 - Runtime: API key and prompt are set via the LLMConnector Properties panel.
-- Tests: API key may be provided via OPENAI_API_KEY or an accounts.json in the repo root.
+- Credentials resolution (app and tests): 1) OPENAI_API_KEY environment variable; 2) accounts.json at the canonical per-user location (see LLMConnector::defaultAccountsFilePath).
 
 accounts.json structure:
 ```

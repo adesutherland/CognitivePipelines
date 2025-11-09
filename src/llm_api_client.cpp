@@ -26,6 +26,17 @@
 #include <cpr/cpr.h>
 #include <sstream>
 
+// Qt
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QFile>
+#include <QDir>
+#include <QCoreApplication>
+#include <QStandardPaths>
+#include <QDebug>
+#include "LLMConnector.h"
+
 namespace {
 // naive string search helper
 static size_t find_after(const std::string& s, const std::string& needle, size_t pos = 0) {
@@ -34,31 +45,84 @@ static size_t find_after(const std::string& s, const std::string& needle, size_t
 }
 }
 
+// New provider-aware API using robust QJson request building
+QString LlmApiClient::sendPrompt(ApiProvider provider,
+                              const QString &apiKey,
+                              const QString &model,
+                              double temperature,
+                              int maxTokens,
+                              const QString &systemPrompt,
+                              const QString &userPrompt) {
+    switch (provider) {
+        case ApiProvider::OpenAI: {
+            const std::string url = "https://api.openai.com/v1/chat/completions";
+
+            // Build messages array [{role: system, content: ...}, {role: user, content: ...}]
+            QJsonObject sysMsg;
+            sysMsg.insert(QStringLiteral("role"), QStringLiteral("system"));
+            sysMsg.insert(QStringLiteral("content"), systemPrompt);
+
+            QJsonObject userMsg;
+            userMsg.insert(QStringLiteral("role"), QStringLiteral("user"));
+            userMsg.insert(QStringLiteral("content"), userPrompt);
+
+            QJsonArray messages;
+            messages.append(sysMsg);
+            messages.append(userMsg);
+
+            QJsonObject root;
+            root.insert(QStringLiteral("model"), model);
+            root.insert(QStringLiteral("temperature"), temperature);
+            root.insert(QStringLiteral("max_tokens"), maxTokens);
+            root.insert(QStringLiteral("messages"), messages);
+
+            const QByteArray jsonBytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+
+            cpr::Header headers{
+                {"Authorization", std::string("Bearer ") + apiKey.toStdString()},
+                {"Content-Type", "application/json"}
+            };
+
+            // Perform POST synchronously and return raw body on success or error to allow caller to parse JSON errors
+            auto response = cpr::Post(cpr::Url{url}, headers, cpr::Body{jsonBytes.constData()}, cpr::Timeout{60000});
+            if (response.error) {
+                return QStringLiteral("Network error: %1").arg(QString::fromStdString(response.error.message));
+            }
+            if (response.status_code != 200) {
+                // Return raw error body if available so the caller can parse {"error":{...}}
+                if (!response.text.empty()) {
+                    return QString::fromStdString(response.text);
+                }
+                return QStringLiteral("HTTP %1").arg(response.status_code);
+            }
+            // Success: return raw JSON body for the caller to parse
+            return QString::fromStdString(response.text);
+        }
+        case ApiProvider::Google: {
+            qWarning("Google provider not yet implemented");
+            return QStringLiteral("Google provider not yet implemented");
+        }
+    }
+    return QString();
+}
+
 std::string LlmApiClient::sendPrompt(const std::string& apiKey, const std::string& promptText) {
     // Endpoint: OpenAI-compatible chat completions
     const std::string url = "https://api.openai.com/v1/chat/completions";
 
-    // Construct minimal JSON payload as a string
-    // Note: we escape embedded quotes in promptText very simply. For robust escaping, use a JSON library.
-    std::string escapedPrompt;
-    escapedPrompt.reserve(promptText.size() + 16);
-    for (char c : promptText) {
-        if (c == '"') escapedPrompt += "\\\"";
-        else if (c == '\\') escapedPrompt += "\\\\";
-        else if (c == '\n') escapedPrompt += "\\n";
-        else if (c == '\r') escapedPrompt += "\\r";
-        else if (c == '\t') escapedPrompt += "\\t";
-        else escapedPrompt += c;
-    }
+    // Build JSON payload using Qt JSON (remove hand-rolled string construction)
+    QJsonObject userMsg;
+    userMsg.insert(QStringLiteral("role"), QStringLiteral("user"));
+    userMsg.insert(QStringLiteral("content"), QString::fromStdString(promptText));
 
-    std::ostringstream oss;
-    oss << "{\n"
-        << "  \"model\": \"gpt-4o-mini\",\n"
-        << "  \"messages\": [\n"
-        << "    { \"role\": \"user\", \"content\": \"" << escapedPrompt << "\" }\n"
-        << "  ]\n"
-        << "}";
-    const std::string payload = oss.str();
+    QJsonArray messages;
+    messages.append(userMsg);
+
+    QJsonObject root;
+    root.insert(QStringLiteral("model"), QStringLiteral("gpt-4o-mini"));
+    root.insert(QStringLiteral("messages"), messages);
+
+    const QByteArray jsonBytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
 
     // Headers
     cpr::Header headers{
@@ -67,7 +131,7 @@ std::string LlmApiClient::sendPrompt(const std::string& apiKey, const std::strin
     };
 
     // Perform POST request
-    auto response = cpr::Post(cpr::Url{url}, headers, cpr::Body{payload}, cpr::Timeout{60000});
+    auto response = cpr::Post(cpr::Url{url}, headers, cpr::Body{jsonBytes.constData()}, cpr::Timeout{60000});
 
     if (response.error) {
         std::ostringstream err;
@@ -82,7 +146,7 @@ std::string LlmApiClient::sendPrompt(const std::string& apiKey, const std::strin
         return err.str();
     }
 
-    // Extract first choice.message.content from JSON body
+    // Extract first choice.message.content from JSON body (keep brittle parsing for now)
     const std::string content = extractFirstMessageContent(response.text);
     if (content.empty()) {
         return "Failed to parse response: message content not found.";
@@ -151,4 +215,64 @@ std::string LlmApiClient::extractFirstMessageContent(const std::string& jsonBody
     }
 
     return value;
+}
+
+
+QString LlmApiClient::getApiKey(const QString &providerKey) const {
+    // 1) Environment variable takes precedence
+    const QByteArray envKey = qgetenv("OPENAI_API_KEY");
+    if (!envKey.isEmpty()) return QString::fromUtf8(envKey);
+
+    // 2) Single canonical location shared with the app/tests
+    const QString path = LLMConnector::defaultAccountsFilePath();
+    if (path.isEmpty()) {
+        qWarning() << "API key file base path unavailable (QStandardPaths returned empty).";
+        return {};
+    }
+
+    QFile f(path);
+    if (!f.exists()) {
+        qWarning() << "API key file not found at:" << path;
+        return {};
+    }
+    if (!f.open(QIODevice::ReadOnly)) {
+        qWarning() << "Failed to open API key file at" << path << ":" << f.errorString();
+        return {};
+    }
+    const QByteArray data = f.readAll();
+    f.close();
+
+    const QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isObject()) {
+        qWarning() << "Invalid JSON in API key file at:" << path;
+        return {};
+    }
+    const QJsonObject root = doc.object();
+
+    // 2a) Direct key lookup at the root, e.g., { "openai_api_key": "..." }
+    if (root.contains(providerKey)) {
+        const QString key = root.value(providerKey).toString();
+        if (!key.isEmpty()) return key;
+    }
+
+    // 2b) accounts[] shape: { accounts: [{ name: "openai"|"default_openai", api_key: "..." }] }
+    const QJsonArray accounts = root.value(QStringLiteral("accounts")).toArray();
+    if (!accounts.isEmpty()) {
+        const QStringList openAiNames = {
+            QStringLiteral("openai"),
+            QStringLiteral("default_openai"),
+            QStringLiteral("OpenAI")
+        };
+        for (const QJsonValue &v : accounts) {
+            const QJsonObject acc = v.toObject();
+            const QString name = acc.value(QStringLiteral("name")).toString();
+            if (openAiNames.contains(name)) {
+                const QString key = acc.value(QStringLiteral("api_key")).toString();
+                if (!key.isEmpty()) return key;
+            }
+        }
+    }
+
+    qWarning() << "API key not found in file at:" << path << "(checked keys '" << providerKey << "' and accounts[].api_key)";
+    return {};
 }

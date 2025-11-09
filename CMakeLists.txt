@@ -205,7 +205,7 @@ if(ENABLE_TESTING)
             tests/test_llm_api_client.cpp
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
-            tests/test_api_key_search.cpp
+            tests/test_invalid_model_pipeline.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/llm_api_client.cpp
             ${SRC_DIR}/llm_api_client.h
@@ -245,7 +245,11 @@ if(ENABLE_TESTING)
     )
     # Add unit tests to CTest
     include(GoogleTest)
-    gtest_discover_tests(unit_tests) # Discover tests FOR the unit_tests target
+    # Discover tests for the unit_tests target; working directory is project root (not used for credentials anymore)
+    gtest_discover_tests(unit_tests 
+        DISCOVERY_MODE=POST_BUILD 
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
 
     # Integration tests (Qt Test based, headless) - Definition looks okay
     add_executable(integration_tests

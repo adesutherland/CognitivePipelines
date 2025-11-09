@@ -10,7 +10,7 @@ Cognitive Pipelines is a Qt 6 desktop application for composing and running node
   - TextInputNode: emits user‑provided text
   - PromptBuilderNode: formats a template using upstream text
   - LLMConnector: calls an OpenAI‑compatible Chat Completions endpoint (via cpr)
-- Properties panel for configuring the selected node (e.g., LLM prompt and API key)
+- Properties panel for configuring the selected node (e.g., LLM prompt, model, temperature, tokens)
 - Run action that executes the graph in topological order; work is performed asynchronously per node via QtConcurrent
 - Pipeline Output dock and optional Debug Log dock
 - About dialog (version, git hash, build date/time, Qt runtime)
@@ -62,9 +62,14 @@ Enable tests (optional):
 Runtime:
 - Configure the LLMConnector’s API Key and Prompt via the Properties panel.
 
-Tests:
-- Provide an API key via either an accounts.json file (project root) or the OPENAI_API_KEY environment variable.
-- accounts.json.example is provided as a template; copy it to accounts.json and set your key.
+Tests and app credentials resolution:
+- Order: 1) OPENAI_API_KEY environment variable; 2) accounts.json in the standard per-user app config directory.
+- accounts.json.example is provided as a template; copy it to the canonical location below and set your key.
+
+Canonical accounts.json location (see LLMConnector::defaultAccountsFilePath):
+- macOS: ~/Library/Application Support/CognitivePipelines/accounts.json
+- Linux: ~/.config/CognitivePipelines/accounts.json
+- Windows: %APPDATA%/CognitivePipelines/accounts.json (e.g., C:\\Users\\<You>\\AppData\\Roaming\\CognitivePipelines\\accounts.json)
 
 accounts.json structure:
 ```
@@ -79,7 +84,7 @@ accounts.json structure:
 ```
 
 Notes:
-- The application itself does not auto‑load accounts.json; it relies on the Properties panel. The test suite looks for OPENAI_API_KEY or accounts.json and skips if none is available.
+- The application and tests resolve credentials in this order: OPENAI_API_KEY, then accounts.json in the standard per-user app config directory. If neither is available, networked tests SKIP and the LLMConnector reports a clear error.
 
 ## CI/CD
 - Matrix builds on Ubuntu, macOS, and Windows

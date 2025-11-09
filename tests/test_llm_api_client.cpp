@@ -24,6 +24,7 @@
 
 #include <gtest/gtest.h>
 #include "llm_api_client.h"
+#include "LLMConnector.h"
 
 #include <cstdlib>
 #include <string>
@@ -95,10 +96,15 @@ TEST(LlmApiClientIntegrationTest, ShouldReceiveValidResponseForSimplePrompt) {
         apiKey = keyEnv;
     }
     if (apiKey.empty()) {
-        apiKey = findApiKeyFromAccountsJson();
+        // Use the same resolver as the application: single canonical accounts.json path
+        LlmApiClient client;
+        const QString key = client.getApiKey(QStringLiteral("openai_api_key"));
+        apiKey = key.toStdString();
     }
     if (apiKey.empty()) {
-        GTEST_SKIP() << "No API key provided. Set OPENAI_API_KEY or add accounts.json at the project root.";
+        const QString canonicalPath = LLMConnector::defaultAccountsFilePath();
+        qWarning() << "No API key available. The canonical accounts.json path checked would be:" << canonicalPath;
+        GTEST_SKIP() << "No API key provided. Set OPENAI_API_KEY or add accounts.json at: " << canonicalPath.toStdString();
     }
 
     LlmApiClient client;
