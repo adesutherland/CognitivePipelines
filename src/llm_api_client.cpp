@@ -255,18 +255,13 @@ QString LlmApiClient::getApiKey(const QString &providerKey) const {
         if (!key.isEmpty()) return key;
     }
 
-    // 2b) accounts[] shape: { accounts: [{ name: "openai"|"default_openai", api_key: "..." }] }
+    // 2b) accounts[] shape: { accounts: [{ name: "<provider>", api_key: "..." }] }
     const QJsonArray accounts = root.value(QStringLiteral("accounts")).toArray();
     if (!accounts.isEmpty()) {
-        const QStringList openAiNames = {
-            QStringLiteral("openai"),
-            QStringLiteral("default_openai"),
-            QStringLiteral("OpenAI")
-        };
         for (const QJsonValue &v : accounts) {
             const QJsonObject acc = v.toObject();
             const QString name = acc.value(QStringLiteral("name")).toString();
-            if (openAiNames.contains(name)) {
+            if (name == providerKey) {
                 const QString key = acc.value(QStringLiteral("api_key")).toString();
                 if (!key.isEmpty()) return key;
             }

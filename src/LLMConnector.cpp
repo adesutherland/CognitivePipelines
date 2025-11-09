@@ -162,9 +162,9 @@ QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
             return output;
         }
 
-        // Resolve API key using legacy helper or new client accessor
+        // Resolve API key using the new provider-name lookup first, with legacy fallback
         LlmApiClient legacyClient;
-        QString apiKey = legacyClient.getApiKey(QStringLiteral("openai_api_key"));
+        QString apiKey = legacyClient.getApiKey(QStringLiteral("openai"));
         if (apiKey.isEmpty()) apiKey = LLMConnector::getApiKey();
         if (apiKey.isEmpty()) {
             const QString err = QStringLiteral("ERROR: API key not found. Set OPENAI_API_KEY or place accounts.json in the standard app config directory (see README).");

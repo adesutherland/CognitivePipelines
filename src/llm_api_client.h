@@ -50,7 +50,8 @@ public:
                     const QString &userPrompt);
 
     // New API key accessor that reads a specific provider key from accounts.json
-    // (e.g., providerKey = "openai_api_key").
+    // Expected: providerKey matches accounts[i].name (e.g., "openai", "google").
+    // Back-compat: if providerKey matches a legacy root key (e.g., "openai_api_key"), that is also checked.
     QString getApiKey(const QString &providerKey) const;
 
     // Legacy single-provider API kept for compatibility with existing callers/tests.

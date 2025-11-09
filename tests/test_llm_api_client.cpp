@@ -98,7 +98,7 @@ TEST(LlmApiClientIntegrationTest, ShouldReceiveValidResponseForSimplePrompt) {
     if (apiKey.empty()) {
         // Use the same resolver as the application: single canonical accounts.json path
         LlmApiClient client;
-        const QString key = client.getApiKey(QStringLiteral("openai_api_key"));
+        const QString key = client.getApiKey(QStringLiteral("openai"));
         apiKey = key.toStdString();
     }
     if (apiKey.empty()) {
