@@ -52,6 +52,12 @@ AboutDialog::AboutDialog(QWidget* parent)
     auto* versionLabel = new QLabel(tr("Version: %1").arg(QString::fromUtf8(APP_VERSION)), this);
     layout->addWidget(versionLabel);
 
+    // Copyright and License
+    auto* copyrightLabel = new QLabel(tr("Copyright (c) 2025 Adrian Sutherland"), this);
+    layout->addWidget(copyrightLabel);
+    auto* licenseLabel = new QLabel(tr("Licensed under the MIT License. See LICENSE."), this);
+    layout->addWidget(licenseLabel);
+
     // Git hash
     auto* gitLabel = new QLabel(tr("Git Hash: %1").arg(QString::fromUtf8(GIT_COMMIT_HASH)), this);
     layout->addWidget(gitLabel);

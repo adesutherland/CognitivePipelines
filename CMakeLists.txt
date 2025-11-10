@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.1.2 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.2.0 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)

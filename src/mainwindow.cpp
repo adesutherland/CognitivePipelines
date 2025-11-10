@@ -151,6 +151,11 @@ void MainWindow::createActions() {
     saveAsAction_->setStatusTip(tr("Save the current pipeline to a file"));
     connect(saveAsAction_, &QAction::triggered, this, &MainWindow::onSaveAs);
 
+    // Clear Canvas action
+    clearCanvasAction_ = new QAction(tr("Clear Canvas"), this);
+    clearCanvasAction_->setStatusTip(tr("Clear all nodes and connections from the canvas"));
+    connect(clearCanvasAction_, &QAction::triggered, this, &MainWindow::onClearCanvas);
+
     // Credentials editor
     editCredentialsAction_ = new QAction(tr("Edit Credentials..."), this);
     editCredentialsAction_->setStatusTip(tr("Open or create accounts.json in the standard app data location"));
@@ -161,6 +166,11 @@ void MainWindow::createActions() {
     runAction_->setStatusTip(tr("Execute the current pipeline"));
     // Keep the same behavior: trigger the execution engine
     connect(runAction_, &QAction::triggered, execEngine_, &ExecutionEngine::run);
+
+    // Save last output action (Pipeline menu)
+    saveOutputAction_ = new QAction(tr("Save Last Output..."), this);
+    saveOutputAction_->setStatusTip(tr("Save the text content from the Pipeline Output dock to a file"));
+    connect(saveOutputAction_, &QAction::triggered, this, &MainWindow::onSaveOutput);
 
     // View menu action to toggle debug log dock
     showDebugLogAction_ = new QAction(tr("Show Debug Log"), this);
@@ -187,6 +197,7 @@ void MainWindow::createMenus() {
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(openAction_);
     fileMenu->addAction(saveAsAction_);
+    fileMenu->addAction(clearCanvasAction_);
     fileMenu->addSeparator();
     fileMenu->addAction(editCredentialsAction_);
     fileMenu->addSeparator();
@@ -200,6 +211,7 @@ void MainWindow::createMenus() {
     QMenu* pipelineMenu = menuBar()->addMenu(tr("&Pipeline"));
     pipelineMenu->addAction(runAction_);
     pipelineMenu->addSeparator();
+    pipelineMenu->addAction(saveOutputAction_);
     pipelineMenu->addAction(enableDebugLoggingAction_);
 
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
@@ -406,6 +418,17 @@ void MainWindow::onOpen()
     statusBar()->showMessage(tr("Loaded from %1").arg(QFileInfo(fileName).fileName()), 3000);
 }
 
+void MainWindow::onClearCanvas()
+{
+    // Clear all nodes and connections from the graph model
+    if (_graphModel) {
+        _graphModel->clear();
+    }
+
+    // Reset the properties panel so it doesn't hold stale pointers
+    setPropertiesWidget(nullptr);
+}
+
 void MainWindow::onAbout() {
     AboutDialog dlg(this);
     dlg.exec();
@@ -465,4 +488,42 @@ MainWindow::~MainWindow()
             delete scene;
         }
     }
+}
+
+
+void MainWindow::onSaveOutput()
+{
+    // Prompt user for destination file
+    QString fileName = QFileDialog::getSaveFileName(this,
+                                                    tr("Save Output As"),
+                                                    QDir::homePath(),
+                                                    tr("Text Files (*.txt);;All Files (*)"));
+    if (fileName.isEmpty()) {
+        // User canceled
+        return;
+    }
+
+    if (!pipelineOutputText_) {
+        return;
+    }
+
+    const QString text = pipelineOutputText_->toPlainText();
+
+    QFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        QMessageBox::warning(this, tr("Save Failed"),
+                             tr("Could not open file for writing:\n%1").arg(file.errorString()));
+        return;
+    }
+
+    const QByteArray bytes = text.toUtf8();
+    if (file.write(bytes) != bytes.size()) {
+        QMessageBox::warning(this, tr("Save Failed"),
+                             tr("Could not write all data to file:\n%1").arg(file.errorString()));
+        file.close();
+        return;
+    }
+
+    file.close();
+    statusBar()->showMessage(tr("Output saved to %1").arg(QFileInfo(fileName).fileName()), 3000);
 }
