@@ -93,6 +93,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/LLMConnector.h
     ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
     ${SRC_DIR}/LLMConnectorPropertiesWidget.h
+    ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.cpp
+    ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
+    ${SRC_DIR}/GoogleLLMConnector.cpp
+    ${SRC_DIR}/GoogleLLMConnector.h
     ${SRC_DIR}/PromptBuilderNode.cpp
     ${SRC_DIR}/PromptBuilderNode.h
     ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
@@ -227,6 +231,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/LLMConnector.h
             ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
             ${SRC_DIR}/LLMConnectorPropertiesWidget.h
+            ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.cpp
+            ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
+            ${SRC_DIR}/GoogleLLMConnector.cpp
+            ${SRC_DIR}/GoogleLLMConnector.h
             ${SRC_DIR}/ProcessConnector.cpp
             ${SRC_DIR}/ProcessConnector.h
             ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
@@ -266,6 +274,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/LLMConnector.h
             ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
             ${SRC_DIR}/LLMConnectorPropertiesWidget.h
+            ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.cpp
+            ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
+            ${SRC_DIR}/GoogleLLMConnector.cpp
+            ${SRC_DIR}/GoogleLLMConnector.h
             ${SRC_DIR}/PromptBuilderNode.cpp
             ${SRC_DIR}/PromptBuilderNode.h
             ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
@@ -312,6 +324,30 @@ if(ENABLE_TESTING)
 
     # Add integration tests to CTest (can have the same name as executable)
     add_test(NAME integration_tests COMMAND integration_tests) # Explicitly add to CTest
+
+    # --- Google LLM Connector Qt tests ---
+    add_executable(google_llm_connector_tests
+        tests/TestGoogleLLMConnector/TestGoogleLLMConnector.cpp
+        ${SRC_DIR}/GoogleLLMConnector.cpp
+        ${SRC_DIR}/GoogleLLMConnector.h
+        ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.cpp
+        ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
+        ${SRC_DIR}/llm_api_client.cpp
+        ${SRC_DIR}/llm_api_client.h
+        ${SRC_DIR}/LLMConnector.cpp
+        ${SRC_DIR}/LLMConnector.h
+        ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
+        ${SRC_DIR}/LLMConnectorPropertiesWidget.h
+    )
+    target_include_directories(google_llm_connector_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(google_llm_connector_tests PRIVATE
+        Qt6::Core
+        Qt6::Test
+        Qt6::Widgets
+        cpr::cpr
+        Boost::boost
+    )
+    add_test(NAME TestGoogleLLMConnector COMMAND google_llm_connector_tests)
 endif()
 
 # macOS: convert executables to .app bundles, apply icon and entitlements
@@ -372,6 +408,12 @@ if(APPLE)
     endif()
     if(TARGET integration_tests)
         set_target_properties(integration_tests PROPERTIES
+            BUILD_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
+            INSTALL_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
+        )
+    endif()
+    if(TARGET google_llm_connector_tests)
+        set_target_properties(google_llm_connector_tests PROPERTIES
             BUILD_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
             INSTALL_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
         )

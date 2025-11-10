@@ -1,8 +1,12 @@
 {
   "accounts": [
     {
-      "name": "default_openai",
-      "api_key": "YOUR_API_KEY_HERE"
+      "name": "openai",
+      "api_key": "sk-..."
+    },
+    {
+      "name": "google",
+      "api_key": "AIza..."
     }
   ]
 }

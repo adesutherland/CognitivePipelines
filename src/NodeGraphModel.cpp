@@ -29,6 +29,7 @@
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
 #include "ProcessConnector.h"
+#include "GoogleLLMConnector.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -59,6 +60,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // Register ProcessConnector under the "Connectors" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto connector = std::make_shared<ProcessConnector>();
+        return std::make_unique<ToolNodeDelegate>(connector);
+    }, QStringLiteral("Connectors"));
+
+    // Register GoogleLLMConnector under the "Connectors" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto connector = std::make_shared<GoogleLLMConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
     }, QStringLiteral("Connectors"));
 }

@@ -25,6 +25,8 @@
 
 #include <cpr/cpr.h>
 #include <sstream>
+#include <cstdlib>
+#include <cstring>
 
 // Qt
 #include <QJsonArray>
@@ -99,8 +101,47 @@ QString LlmApiClient::sendPrompt(ApiProvider provider,
             return QString::fromStdString(response.text);
         }
         case ApiProvider::Google: {
-            qWarning("Google provider not yet implemented");
-            return QStringLiteral("Google provider not yet implemented");
+            // Google Generative Language API (Gemini) endpoint uses API key in URL query, not Authorization header.
+            const std::string url = std::string("https://generativelanguage.googleapis.com/v1beta/models/")
+                                    + model.toStdString()
+                                    + ":generateContent?key="
+                                    + apiKey.toStdString();
+
+            // Build Google-specific JSON payload
+            // contents: [ { parts: [ {text: systemPrompt}, {text: userPrompt} ] } ]
+            QJsonObject systemPart; systemPart.insert(QStringLiteral("text"), systemPrompt);
+            QJsonObject userPart;   userPart.insert(QStringLiteral("text"), userPrompt);
+
+            QJsonArray parts; parts.append(systemPart); parts.append(userPart);
+            QJsonObject content; content.insert(QStringLiteral("parts"), parts);
+            QJsonArray contents; contents.append(content);
+
+            QJsonObject generationConfig;
+            generationConfig.insert(QStringLiteral("temperature"), temperature);
+            generationConfig.insert(QStringLiteral("maxOutputTokens"), maxTokens);
+
+            QJsonObject root;
+            root.insert(QStringLiteral("contents"), contents);
+            root.insert(QStringLiteral("generationConfig"), generationConfig);
+
+            const QByteArray jsonBytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+
+            // Do NOT set Authorization header for Google; only Content-Type
+            cpr::Header headers{
+                {"Content-Type", "application/json"}
+            };
+
+            auto response = cpr::Post(cpr::Url{url}, headers, cpr::Body{jsonBytes.constData()}, cpr::Timeout{60000});
+            if (response.error) {
+                return QStringLiteral("Network error: %1").arg(QString::fromStdString(response.error.message));
+            }
+            if (response.status_code != 200) {
+                if (!response.text.empty()) {
+                    return QString::fromStdString(response.text);
+                }
+                return QStringLiteral("HTTP %1").arg(response.status_code);
+            }
+            return QString::fromStdString(response.text);
         }
     }
     return QString();
@@ -219,9 +260,16 @@ std::string LlmApiClient::extractFirstMessageContent(const std::string& jsonBody
 
 
 QString LlmApiClient::getApiKey(const QString &providerKey) const {
-    // 1) Environment variable takes precedence
-    const QByteArray envKey = qgetenv("OPENAI_API_KEY");
-    if (!envKey.isEmpty()) return QString::fromUtf8(envKey);
+    // 1) Environment variable takes precedence (provider-specific)
+    if (providerKey == QStringLiteral("openai")) {
+        const QByteArray envKey = qgetenv("OPENAI_API_KEY");
+        if (!envKey.isEmpty()) return QString::fromUtf8(envKey);
+    } else if (providerKey == QStringLiteral("google")) {
+        const char* apiKeyEnv = std::getenv("GOOGLE_API_KEY");
+        if (apiKeyEnv != nullptr && std::strlen(apiKeyEnv) > 0) {
+            return QString::fromStdString(apiKeyEnv);
+        }
+    }
 
     // 2) Single canonical location shared with the app/tests
     const QString path = LLMConnector::defaultAccountsFilePath();
