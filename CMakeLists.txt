@@ -347,7 +347,7 @@ if(ENABLE_TESTING)
         cpr::cpr
         Boost::boost
     )
-    add_test(NAME TestGoogleLLMConnector COMMAND google_llm_connector_tests)
+    add_test(NAME TestGoogleLLMConnector COMMAND $<TARGET_FILE:google_llm_connector_tests>)
 endif()
 
 # macOS: convert executables to .app bundles, apply icon and entitlements
