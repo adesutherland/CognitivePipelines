@@ -30,6 +30,7 @@
 #include "TextInputNode.h"
 #include "ProcessConnector.h"
 #include "GoogleLLMConnector.h"
+#include "PythonScriptConnector.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -68,6 +69,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto connector = std::make_shared<GoogleLLMConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
     }, QStringLiteral("Connectors"));
+
+    // Register PythonScriptConnector under the "Scripting" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto connector = std::make_shared<PythonScriptConnector>();
+        return std::make_unique<ToolNodeDelegate>(connector);
+    }, QStringLiteral("Scripting"));
 }
 
 void NodeGraphModel::clear()

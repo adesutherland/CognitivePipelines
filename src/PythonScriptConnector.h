@@ -30,6 +30,7 @@
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
+#include "PythonScriptConnectorPropertiesWidget.h"
 
 
 class PythonScriptConnector : public QObject, public IToolConnector {
@@ -43,15 +44,25 @@ public:
     NodeDescriptor GetDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
     QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    QJsonObject saveState() const override;
+    void loadState(const QJsonObject& data) override;
 
     // Optional setters for future implementation
     void setPythonExecutable(const QString& exe) { pythonExecutable_ = exe; }
     void setScriptPath(const QString& path) { scriptPath_ = path; }
     void setTimeoutMs(int ms) { timeoutMs_ = ms; }
 
+private slots:
+    void onExecutableChanged(const QString& executable);
+    void onScriptContentChanged(const QString& scriptContent);
+
 private:
     // Configuration (mutable by the UI)
     QString pythonExecutable_ = QStringLiteral("python3");
     QString scriptPath_;
     int timeoutMs_ = 30000; // 30 seconds default
+
+    // New state bound to the properties widget
+    QString m_executable;       // e.g., "python3 -u"
+    QString m_scriptContent;    // Python script text
 };
