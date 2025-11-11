@@ -30,6 +30,7 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QProcess>
 #include <QTemporaryFile>
+#include <QFileInfo>
 #include <QDebug>
 
 PythonScriptConnector::PythonScriptConnector(QObject* parent)
@@ -120,6 +121,11 @@ QFuture<DataPacket> PythonScriptConnector::Execute(const DataPacket& inputs)
         const QString outKey = QStringLiteral("stdout");
         const QString errKey = QStringLiteral("stderr");
 
+        qInfo() << "PythonScriptConnector::Execute invoked";
+        qInfo() << "PythonScriptConnector: executable =" << executable;
+        qInfo() << "PythonScriptConnector: stdin length =" << stdinText.toUtf8().size();
+        qInfo().noquote() << "PythonScriptConnector: stdin content:\n" << stdinText;
+
         if (executable.isEmpty()) {
             const QString msg = QStringLiteral("ERROR: Python executable/command is empty.");
             packet.insert(outKey, QString());
@@ -153,6 +159,11 @@ QFuture<DataPacket> PythonScriptConnector::Execute(const DataPacket& inputs)
         }
 
         const QString scriptPath = tempFile.fileName();
+        {
+            QFileInfo fi(scriptPath);
+            qInfo() << "PythonScriptConnector: scriptPath =" << scriptPath;
+            qInfo() << "PythonScriptConnector: script exists?" << fi.exists() << ", size =" << fi.size();
+        }
 
         // Prepare process
         QProcess proc;
@@ -164,30 +175,47 @@ QFuture<DataPacket> PythonScriptConnector::Execute(const DataPacket& inputs)
         const QString cmd = executable + QStringLiteral(" ") + QStringLiteral("\"") + scriptPath + QStringLiteral("\"");
         proc.setProgram(QStringLiteral("cmd"));
         proc.setArguments({QStringLiteral("/C"), cmd});
+        qInfo().noquote() << "PythonScriptConnector: Windows cmd string =" << cmd;
 #else
         // Single-quote the path for POSIX shell
         const QString cmd = executable + QStringLiteral(" '") + scriptPath + QStringLiteral("'");
         proc.setProgram(QStringLiteral("/bin/sh"));
         proc.setArguments({QStringLiteral("-lc"), cmd});
+        qInfo().noquote() << "PythonScriptConnector: POSIX cmd string =" << cmd;
 #endif
+        qInfo() << "PythonScriptConnector: program =" << proc.program() << ", args =" << proc.arguments();
 
         // Start the process
+        qInfo() << "PythonScriptConnector: starting process...";
         proc.start();
-        if (!proc.waitForStarted(10000)) { // 10s to start
+        const bool started = proc.waitForStarted(10000); // 10s to start
+        if (!started) {
+            const QString err = QStringLiteral("Failed to start process: ") + proc.errorString();
+            qWarning() << "PythonScriptConnector:" << err
+                       << ", qprocess error =" << static_cast<int>(proc.error())
+                       << ", state =" << static_cast<int>(proc.state());
             packet.insert(outKey, QString());
-            packet.insert(errKey, QStringLiteral("Failed to start process: ") + proc.errorString());
+            packet.insert(errKey, err);
             return packet;
         }
+        qInfo() << "PythonScriptConnector: process started, pid =" << static_cast<qint64>(proc.processId())
+                << ", state =" << static_cast<int>(proc.state());
 
         // Write stdin and close
         if (!stdinText.isEmpty()) {
             const QByteArray bytes = stdinText.toUtf8();
-            Q_UNUSED(proc.write(bytes));
+            const qint64 written = proc.write(bytes);
+            qInfo() << "PythonScriptConnector: wrote" << written << "bytes to stdin";
+        } else {
+            qInfo() << "PythonScriptConnector: no stdin to write";
         }
         proc.closeWriteChannel();
+        qInfo() << "PythonScriptConnector: closed write channel";
 
         // Wait for finish with timeout (60s)
+        qInfo() << "PythonScriptConnector: waiting for process to finish (timeout 60000 ms)";
         if (!proc.waitForFinished(60000)) {
+            qWarning() << "PythonScriptConnector: process timeout, killing...";
             proc.kill();
             proc.waitForFinished();
             packet.insert(outKey, QString());
@@ -195,8 +223,17 @@ QFuture<DataPacket> PythonScriptConnector::Execute(const DataPacket& inputs)
             return packet;
         }
 
+        const int exitCode = proc.exitCode();
+        const QProcess::ExitStatus exitStatus = proc.exitStatus();
+        qInfo() << "PythonScriptConnector: process finished, exitCode =" << exitCode
+                << ", exitStatus =" << (exitStatus == QProcess::NormalExit ? "NormalExit" : "CrashExit");
+
         const QString stdoutStr = QString::fromUtf8(proc.readAllStandardOutput());
         const QString stderrStr = QString::fromUtf8(proc.readAllStandardError());
+        qInfo() << "PythonScriptConnector: stdout length =" << stdoutStr.toUtf8().size()
+                << ", stderr length =" << stderrStr.toUtf8().size();
+        qInfo().noquote() << "PythonScriptConnector: RAW STDOUT:\n" << stdoutStr;
+        qInfo().noquote() << "PythonScriptConnector: RAW STDERR:\n" << stderrStr;
 
         packet.insert(outKey, stdoutStr);
         packet.insert(errKey, stderrStr);
