@@ -169,20 +169,21 @@ QFuture<DataPacket> PythonScriptConnector::Execute(const DataPacket& inputs)
         QProcess proc;
         proc.setProcessChannelMode(QProcess::SeparateChannels);
 
-        // Build command: <executable> <scriptPath>
-#if defined(Q_OS_WIN)
-        // Quote the script path for cmd
-        const QString cmd = executable + QStringLiteral(" ") + QStringLiteral("\"") + scriptPath + QStringLiteral("\"");
-        proc.setProgram(QStringLiteral("cmd"));
-        proc.setArguments({QStringLiteral("/C"), cmd});
-        qInfo().noquote() << "PythonScriptConnector: Windows cmd string =" << cmd;
-#else
-        // Single-quote the path for POSIX shell
-        const QString cmd = executable + QStringLiteral(" '") + scriptPath + QStringLiteral("'");
-        proc.setProgram(QStringLiteral("/bin/sh"));
-        proc.setArguments({QStringLiteral("-lc"), cmd});
-        qInfo().noquote() << "PythonScriptConnector: POSIX cmd string =" << cmd;
-#endif
+        // Build command by splitting the executable into program + args and appending the script path as its own arg.
+        // Avoid shell wrappers (cmd/sh) to prevent quoting issues across platforms.
+        QStringList tokens = QProcess::splitCommand(executable);
+        if (tokens.isEmpty()) {
+            const QString msg = QStringLiteral("ERROR: Invalid Python executable/command: '") + executable + QStringLiteral("'");
+            packet.insert(outKey, QString());
+            packet.insert(errKey, msg);
+            qWarning() << "PythonScriptConnector:" << msg;
+            return packet;
+        }
+        const QString program = tokens.takeFirst();
+        QStringList args = tokens;
+        args << scriptPath;
+        proc.setProgram(program);
+        proc.setArguments(args);
         qInfo() << "PythonScriptConnector: program =" << proc.program() << ", args =" << proc.arguments();
 
         // Start the process
