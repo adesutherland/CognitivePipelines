@@ -3,6 +3,9 @@
 #include <QApplication>
 #include <QFuture>
 #include <QtConcurrent/QtConcurrent>
+#include <QDebug>
+#include <QtGlobal>
+#include <cstdio>
 
 #include "TextInputNode.h"
 #include "TextInputPropertiesWidget.h"
@@ -13,10 +16,38 @@
 #include <QLineEdit>
 #include <QTextEdit>
 
+// Install a Qt message handler to force all Qt logs to stderr (helps Windows CI capture qInfo/qWarning output)
+static void qtTestMessageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg)
+{
+    const char* level = "INFO";
+    switch (type) {
+        case QtDebugMsg: level = "DEBUG"; break;
+        case QtInfoMsg: level = "INFO"; break;
+        case QtWarningMsg: level = "WARN"; break;
+        case QtCriticalMsg: level = "CRIT"; break;
+        case QtFatalMsg: level = "FATAL"; break;
+    }
+    QByteArray loc = msg.toLocal8Bit();
+    const char* file = ctx.file ? ctx.file : "?";
+    const char* func = ctx.function ? ctx.function : "?";
+    fprintf(stderr, "[QT][%s] %s (%s:%d, %s)\n", level, loc.constData(), file, ctx.line, func);
+    fflush(stderr);
+    if (type == QtFatalMsg) {
+        abort();
+    }
+}
+
 // Ensure a QApplication exists for widget-based property editors used by nodes.
 static QApplication* ensureApp()
 {
     static QApplication* app = nullptr;
+    static bool handlerInstalled = false;
+    if (!handlerInstalled) {
+        // Direct all Qt logs to stderr and request console logging explicitly
+        qInstallMessageHandler(qtTestMessageHandler);
+        qputenv("QT_LOGGING_TO_CONSOLE", QByteArray("1"));
+        handlerInstalled = true;
+    }
     if (!app) {
         static int argc = 1;
         static char appName[] = "unit_tests";
