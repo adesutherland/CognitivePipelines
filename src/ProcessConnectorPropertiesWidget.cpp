@@ -57,8 +57,12 @@ void ProcessConnectorPropertiesWidget::setCommand(const QString& command)
         return;
 
     if (commandLineEdit->text() == command)
-        return; // No change, avoid spurious emissions
+        return; // No change
 
-    QSignalBlocker blocker(commandLineEdit);
-    commandLineEdit->setText(command);
+    {
+        QSignalBlocker blocker(commandLineEdit);
+        commandLineEdit->setText(command);
+    }
+    // Explicitly emit our signal to propagate programmatic changes to listeners (e.g., ProcessConnector)
+    emit commandChanged(command);
 }

@@ -99,33 +99,43 @@ QFuture<DataPacket> ProcessConnector::Execute(const DataPacket& inputs)
         QProcess proc;
         proc.setProcessChannelMode(QProcess::SeparateChannels);
 
-#if defined(Q_OS_WIN)
-        proc.setProgram(QStringLiteral("cmd"));
-        proc.setArguments({QStringLiteral("/C"), command});
-#else
-        // Use a login shell to allow path/env and common shell syntax
-        proc.setProgram(QStringLiteral("/bin/sh"));
-        proc.setArguments({QStringLiteral("-lc"), command});
-#endif
+        // Build command by splitting the user-provided command string into program + args
+        // Avoid shell wrappers (cmd/sh) to prevent quoting issues across platforms.
+        QStringList tokens = QProcess::splitCommand(command);
+        if (tokens.isEmpty()) {
+            const QString msg = QStringLiteral("ERROR: Invalid command: '") + command + QStringLiteral("'");
+            packet.insert(outKey, QString());
+            packet.insert(errKey, msg);
+            qWarning() << "ProcessConnector:" << msg;
+            return packet;
+        }
+        const QString program = tokens.takeFirst();
+        const QStringList args = tokens;
+        proc.setProgram(program);
+        proc.setArguments(args);
 
         // Start the process
         proc.start();
         if (!proc.waitForStarted(10000)) { // 10s to start
+            const QString err = QStringLiteral("Failed to start process: ") + proc.errorString();
+            qWarning() << "ProcessConnector:" << err
+                       << ", qprocess error =" << static_cast<int>(proc.error())
+                       << ", state =" << static_cast<int>(proc.state());
             packet.insert(outKey, QString());
-            packet.insert(errKey, QStringLiteral("Failed to start process: ") + proc.errorString());
+            packet.insert(errKey, err);
             return packet;
         }
 
         // Feed stdin (if any) and close write channel to signal EOF
         if (!stdinText.isEmpty()) {
             const QByteArray bytes = stdinText.toUtf8();
-            qint64 written = proc.write(bytes);
-            Q_UNUSED(written);
+            proc.write(bytes);
         }
         proc.closeWriteChannel();
 
         // Wait for process to finish (60s default to mirror other connectors)
         if (!proc.waitForFinished(60000)) {
+            qWarning() << "ProcessConnector: process timeout, killing...";
             proc.kill();
             proc.waitForFinished();
             packet.insert(outKey, QString());

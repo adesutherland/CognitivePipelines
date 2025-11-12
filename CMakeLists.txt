@@ -63,7 +63,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # Dependencies resolved from the system (no FetchContent)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql)
 find_package(Boost 1.70 REQUIRED)
 find_package(cpr REQUIRED)
 find_package(GTest REQUIRED)
@@ -137,6 +137,7 @@ target_link_libraries(CognitivePipelines PRIVATE
     Qt6::Widgets
     Qt6::Network
     Qt6::Concurrent
+    Qt6::Sql
     QtNodes::QtNodes
     Boost::boost
     cpr::cpr
@@ -212,6 +213,9 @@ if(ENABLE_TESTING)
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
             tests/test_invalid_model_pipeline.cpp
+            tests/test_process_connector.cpp
+            tests/test_google_llm_connector.cpp
+            tests/test_logging.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/llm_api_client.cpp
             ${SRC_DIR}/llm_api_client.h
@@ -333,29 +337,6 @@ if(ENABLE_TESTING)
     # Add integration tests to CTest (can have the same name as executable)
     add_test(NAME integration_tests COMMAND integration_tests) # Explicitly add to CTest
 
-    # --- Google LLM Connector Qt tests ---
-    add_executable(google_llm_connector_tests
-        tests/TestGoogleLLMConnector/TestGoogleLLMConnector.cpp
-        ${SRC_DIR}/GoogleLLMConnector.cpp
-        ${SRC_DIR}/GoogleLLMConnector.h
-        ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.cpp
-        ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
-        ${SRC_DIR}/llm_api_client.cpp
-        ${SRC_DIR}/llm_api_client.h
-        ${SRC_DIR}/LLMConnector.cpp
-        ${SRC_DIR}/LLMConnector.h
-        ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
-        ${SRC_DIR}/LLMConnectorPropertiesWidget.h
-    )
-    target_include_directories(google_llm_connector_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(google_llm_connector_tests PRIVATE
-        Qt6::Core
-        Qt6::Test
-        Qt6::Widgets
-        cpr::cpr
-        Boost::boost
-    )
-    add_test(NAME TestGoogleLLMConnector COMMAND $<TARGET_FILE:google_llm_connector_tests>)
 endif()
 
 # macOS: convert executables to .app bundles, apply icon and entitlements
@@ -416,12 +397,6 @@ if(APPLE)
     endif()
     if(TARGET integration_tests)
         set_target_properties(integration_tests PROPERTIES
-            BUILD_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
-            INSTALL_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
-        )
-    endif()
-    if(TARGET google_llm_connector_tests)
-        set_target_properties(google_llm_connector_tests PROPERTIES
             BUILD_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
             INSTALL_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
         )

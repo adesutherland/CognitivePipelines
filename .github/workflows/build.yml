@@ -236,7 +236,7 @@ jobs:
 
       - name: Build (Release)
         shell: bash
-        run: cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests google_llm_connector_tests -j 2
+        run: cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
 
       - name: Deploy and Ad-hoc Sign (macOS)
         if: runner.os == 'macOS'
@@ -371,30 +371,17 @@ jobs:
           echo "Deployment directory contents:"
           ls -l "$DEPLOY_DIR"  
 
-
-      - name: Run Google LLM Connector Tests (Windows)
-        if: runner.os == 'Windows'
-        run: .\\build\\bin\\Release\\google_llm_connector_tests.exe
-
       - name: Run Unit Tests (Windows)
         if: runner.os == 'Windows'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: .\\build\\bin\\Release\\unit_tests.exe
 
-      - name: Run Google LLM Connector Tests (macOS)
-        if: runner.os == 'macOS'
-        run: ./build/bin/google_llm_connector_tests
-
       - name: Run Unit Tests (macOS)
         if: runner.os == 'macOS'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: ./build/bin/unit_tests.app/Contents/MacOS/unit_tests
-
-      - name: Run Google LLM Connector Tests (Linux)
-        if: runner.os == 'Linux'
-        run: xvfb-run ./build/bin/google_llm_connector_tests
 
       - name: Run Unit Tests (Linux)
         if: runner.os == 'Linux'
