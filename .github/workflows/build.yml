@@ -275,10 +275,17 @@ jobs:
           # Run linuxdeployqt
           export PATH="${QT_ROOT_DIR}/bin:$PATH"
           export LD_LIBRARY_PATH="${QT_ROOT_DIR}/lib:$LD_LIBRARY_PATH"
+          # Prune Qt SQL drivers that require external client libraries.
+          # We only need the SQLite driver (libqsqlite.so); removing others avoids linuxdeployqt ldd failures
+          # such as 'libmimerapi.so => not found' for libqsqlmimer.so on CI runners.
+          if [ -d "${QT_ROOT_DIR}/plugins/sqldrivers" ]; then
+            echo "Pruning Qt SQL drivers to keep only SQLite..."
+            find "${QT_ROOT_DIR}/plugins/sqldrivers" -maxdepth 1 -type f -name 'libqsql*.so' ! -name '*sqlite*' -print -delete || true
+          fi
           # Extract version from CMakeLists.txt (example, might need refinement based on your exact file)
           PROJECT_VERSION=$(grep -oP 'project\(CognitivePipelines VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt)
           export VERSION=${PROJECT_VERSION:-0.0.0} # Set VERSION env var, default to 0.0.0 if not found
-          echo "Setting AppImage version to: $VERSION"          
+          echo "Setting AppImage version to: $VERSION"         
           # Define the master AppDir we duplicate
           MASTER_APPDIR="${APPDIR}"
           # Create temporary copies of the populated AppDir ---
