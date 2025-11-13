@@ -31,6 +31,7 @@
 #include "ProcessConnector.h"
 #include "GoogleLLMConnector.h"
 #include "PythonScriptConnector.h"
+#include "DatabaseConnector.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -75,6 +76,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto connector = std::make_shared<PythonScriptConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
     }, QStringLiteral("Scripting"));
+
+    // Register DatabaseConnector under the "Data" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto connector = std::make_shared<DatabaseConnector>();
+        return std::make_unique<ToolNodeDelegate>(connector);
+    }, QStringLiteral("Data"));
 }
 
 void NodeGraphModel::clear()

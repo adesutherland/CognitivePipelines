@@ -15,6 +15,10 @@
 #include "PythonScriptConnectorPropertiesWidget.h"
 #include <QLineEdit>
 #include <QTextEdit>
+#include <QTemporaryFile>
+
+#include "DatabaseConnector.h"
+#include "DatabaseConnectorPropertiesWidget.h"
 
 // Install a Qt message handler to force all Qt logs to stderr (helps Windows CI capture qInfo/qWarning output)
 static void qtTestMessageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg)
@@ -185,6 +189,66 @@ TEST(PythonScriptConnectorTest, ExecutesScriptAndHandlesIO)
     // Validate that stdout echoed stdin and stderr contains the test marker
     EXPECT_TRUE(stdoutStr.contains(kStdin));
     EXPECT_TRUE(stderrStr.contains(QStringLiteral("PythonScriptConnector: Test message to stderr.")));
+
+    delete w;
+}
+
+
+TEST(DatabaseConnectorTest, ExecutesQueries)
+{
+    ensureApp();
+
+    // Use a temporary file to get a unique database path
+    QTemporaryFile tempFile;
+    ASSERT_TRUE(tempFile.open());
+    const QString dbPath = tempFile.fileName();
+    tempFile.close(); // allow SQLite to open it exclusively if needed
+
+    DatabaseConnector node;
+
+    // Configure via properties widget (simulate user interaction)
+    QWidget* w = node.createConfigurationWidget(nullptr);
+    ASSERT_NE(w, nullptr);
+    auto* props = dynamic_cast<DatabaseConnectorPropertiesWidget*>(w);
+    ASSERT_NE(props, nullptr);
+
+    props->setDatabasePath(dbPath);
+    QApplication::processEvents();
+
+    // 1) CREATE TABLE
+    {
+        DataPacket in;
+        in.insert(QStringLiteral("sql"), QStringLiteral("CREATE TABLE test (id INT, name TEXT);"));
+        QFuture<DataPacket> fut = node.Execute(in);
+        fut.waitForFinished();
+        const DataPacket out = fut.result();
+        const QString stderrStr = out.value(QStringLiteral("stderr")).toString();
+        EXPECT_TRUE(stderrStr.isEmpty()) << stderrStr.toStdString();
+    }
+
+    // 2) INSERT row
+    {
+        DataPacket in;
+        in.insert(QStringLiteral("sql"), QStringLiteral("INSERT INTO test VALUES (1, 'Hello');"));
+        QFuture<DataPacket> fut = node.Execute(in);
+        fut.waitForFinished();
+        const DataPacket out = fut.result();
+        const QString stderrStr = out.value(QStringLiteral("stderr")).toString();
+        EXPECT_TRUE(stderrStr.isEmpty()) << stderrStr.toStdString();
+    }
+
+    // 3) SELECT and verify contents
+    {
+        DataPacket in;
+        in.insert(QStringLiteral("sql"), QStringLiteral("SELECT * FROM test;"));
+        QFuture<DataPacket> fut = node.Execute(in);
+        fut.waitForFinished();
+        const DataPacket out = fut.result();
+        const QString stderrStr = out.value(QStringLiteral("stderr")).toString();
+        const QString stdoutStr = out.value(QStringLiteral("stdout")).toString();
+        EXPECT_TRUE(stderrStr.isEmpty()) << stderrStr.toStdString();
+        EXPECT_TRUE(stdoutStr.contains(QStringLiteral("Hello"))) << stdoutStr.toStdString();
+    }
 
     delete w;
 }

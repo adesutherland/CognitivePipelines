@@ -111,6 +111,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ProcessConnectorPropertiesWidget.h
     ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.cpp
     ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.h
+    ${SRC_DIR}/DatabaseConnector.cpp
+    ${SRC_DIR}/DatabaseConnector.h
+    ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
+    ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
     ${SRC_DIR}/NodeGraphModel.cpp
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp
@@ -249,6 +253,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/PythonScriptConnector.h
             ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.cpp
             ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.h
+            ${SRC_DIR}/DatabaseConnector.cpp
+            ${SRC_DIR}/DatabaseConnector.h
+            ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
+            ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
     target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -258,6 +266,7 @@ if(ENABLE_TESTING)
             Qt6::Core
             Qt6::Widgets
             Qt6::Concurrent
+            Qt6::Sql
             QtNodes::QtNodes
             Boost::boost
     )
@@ -310,6 +319,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ProcessConnector.h
             ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
             ${SRC_DIR}/ProcessConnectorPropertiesWidget.h
+            ${SRC_DIR}/DatabaseConnector.cpp
+            ${SRC_DIR}/DatabaseConnector.h
+            ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
+            ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
 
@@ -321,6 +334,7 @@ if(ENABLE_TESTING)
             Qt6::Widgets
             Qt6::Network
             Qt6::Concurrent
+            Qt6::Sql
             QtNodes::QtNodes
             Boost::boost
             cpr::cpr
