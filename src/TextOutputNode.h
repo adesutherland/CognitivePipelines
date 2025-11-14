@@ -23,25 +23,34 @@
 //
 #pragma once
 
-#include <QtNodes/DataFlowGraphModel>
-
 #include <QObject>
-#include <QVariant>
+#include <QWidget>
+#include <QFuture>
+#include <QString>
 
-class NodeGraphModel : public QtNodes::DataFlowGraphModel
-{
+#include "IToolConnector.h"
+#include "CommonDataTypes.h"
+#include "TextOutputPropertiesWidget.h"
+
+// Skeleton TextOutput node: consumes text and presents it in a read-only widget
+class TextOutputNode : public QObject, public IToolConnector {
     Q_OBJECT
+    Q_INTERFACES(IToolConnector)
+public:
+    explicit TextOutputNode(QObject* parent = nullptr);
+    ~TextOutputNode() override = default;
+
+    // IToolConnector interface
+    NodeDescriptor GetDescriptor() const override;
+    QWidget* createConfigurationWidget(QWidget* parent) override;
+    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    QJsonObject saveState() const override;
+    void loadState(const QJsonObject& data) override;
 
 public:
-    explicit NodeGraphModel(QObject* parent = nullptr);
+    static constexpr const char* kInputId = "text";
 
-    // Convenience: remove all nodes and connections from the model
-    void clear();
-
-    // Disable reactive data propagation from the base model. Our pipelines execute only via ExecutionEngine.
-    bool setPortData(QtNodes::NodeId nodeId,
-                     QtNodes::PortType portType,
-                     QtNodes::PortIndex portIndex,
-                     QVariant const &value,
-                     QtNodes::PortRole role = QtNodes::PortRole::Data) override;
+private:
+    TextOutputPropertiesWidget* m_propertiesWidget = nullptr; // cached UI widget
+    QString m_loadedText; // cached text from loaded state to apply on widget creation
 };

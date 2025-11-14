@@ -21,27 +21,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#pragma once
+#include "TextOutputPropertiesWidget.h"
 
-#include <QtNodes/DataFlowGraphModel>
-
-#include <QObject>
-#include <QVariant>
-
-class NodeGraphModel : public QtNodes::DataFlowGraphModel
+TextOutputPropertiesWidget::TextOutputPropertiesWidget(QWidget* parent)
+    : QWidget(parent)
 {
-    Q_OBJECT
+    auto* vbox = new QVBoxLayout(this);
+    vbox->setContentsMargins(4, 4, 4, 4);
 
-public:
-    explicit NodeGraphModel(QObject* parent = nullptr);
+    m_textEdit = new QTextEdit(this);
+    m_textEdit->setReadOnly(true);
 
-    // Convenience: remove all nodes and connections from the model
-    void clear();
+    vbox->addWidget(m_textEdit);
+}
 
-    // Disable reactive data propagation from the base model. Our pipelines execute only via ExecutionEngine.
-    bool setPortData(QtNodes::NodeId nodeId,
-                     QtNodes::PortType portType,
-                     QtNodes::PortIndex portIndex,
-                     QVariant const &value,
-                     QtNodes::PortRole role = QtNodes::PortRole::Data) override;
-};
+void TextOutputPropertiesWidget::onSetText(const QString& text)
+{
+    if (m_textEdit) {
+        m_textEdit->setMarkdown(text);
+    }
+}

@@ -23,25 +23,21 @@
 //
 #pragma once
 
-#include <QtNodes/DataFlowGraphModel>
+#include <QWidget>
+#include <QTextEdit>
+#include <QVBoxLayout>
 
-#include <QObject>
-#include <QVariant>
-
-class NodeGraphModel : public QtNodes::DataFlowGraphModel
-{
+// Properties widget for TextOutputNode
+class TextOutputPropertiesWidget : public QWidget {
     Q_OBJECT
-
 public:
-    explicit NodeGraphModel(QObject* parent = nullptr);
+    explicit TextOutputPropertiesWidget(QWidget* parent = nullptr);
+    ~TextOutputPropertiesWidget() override = default;
 
-    // Convenience: remove all nodes and connections from the model
-    void clear();
+public slots:
+    // Update the displayed text
+    void onSetText(const QString& text);
 
-    // Disable reactive data propagation from the base model. Our pipelines execute only via ExecutionEngine.
-    bool setPortData(QtNodes::NodeId nodeId,
-                     QtNodes::PortType portType,
-                     QtNodes::PortIndex portIndex,
-                     QVariant const &value,
-                     QtNodes::PortRole role = QtNodes::PortRole::Data) override;
+private:
+    QTextEdit* m_textEdit {nullptr};
 };

@@ -449,7 +449,7 @@ void MainWindow::onPipelineFinished(const DataPacket& finalOutput)
         text = tr("<no output>");
     }
     if (pipelineOutputText_) {
-        pipelineOutputText_->setPlainText(text);
+        pipelineOutputText_->setMarkdown(text);
     }
     if (pipelineOutputDock_ && !pipelineOutputDock_->isVisible()) {
         pipelineOutputDock_->show();

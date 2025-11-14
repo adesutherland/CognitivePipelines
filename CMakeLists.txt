@@ -105,6 +105,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/TextInputNode.h
     ${SRC_DIR}/TextInputPropertiesWidget.cpp
     ${SRC_DIR}/TextInputPropertiesWidget.h
+    ${SRC_DIR}/TextOutputNode.cpp
+    ${SRC_DIR}/TextOutputNode.h
+    ${SRC_DIR}/TextOutputPropertiesWidget.cpp
+    ${SRC_DIR}/TextOutputPropertiesWidget.h
     ${SRC_DIR}/ProcessConnector.cpp
     ${SRC_DIR}/ProcessConnector.h
     ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
@@ -237,6 +241,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/TextInputNode.h
             ${SRC_DIR}/TextInputPropertiesWidget.cpp
             ${SRC_DIR}/TextInputPropertiesWidget.h
+            ${SRC_DIR}/TextOutputNode.cpp
+            ${SRC_DIR}/TextOutputNode.h
+            ${SRC_DIR}/TextOutputPropertiesWidget.cpp
+            ${SRC_DIR}/TextOutputPropertiesWidget.h
             ${SRC_DIR}/LLMConnector.cpp
             ${SRC_DIR}/LLMConnector.h
             ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
@@ -265,6 +273,7 @@ if(ENABLE_TESTING)
             cpr::cpr
             Qt6::Core
             Qt6::Widgets
+            Qt6::Test
             Qt6::Concurrent
             Qt6::Sql
             QtNodes::QtNodes
@@ -307,6 +316,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/TextInputNode.h
             ${SRC_DIR}/TextInputPropertiesWidget.cpp
             ${SRC_DIR}/TextInputPropertiesWidget.h
+            ${SRC_DIR}/TextOutputNode.cpp
+            ${SRC_DIR}/TextOutputNode.h
+            ${SRC_DIR}/TextOutputPropertiesWidget.cpp
+            ${SRC_DIR}/TextOutputPropertiesWidget.h
             ${SRC_DIR}/NodeGraphModel.cpp
             ${SRC_DIR}/NodeGraphModel.h
             ${SRC_DIR}/ToolNodeDelegate.cpp

@@ -16,6 +16,10 @@
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QTemporaryFile>
+#include <QTest>
+
+#include "TextOutputNode.h"
+#include "TextOutputPropertiesWidget.h"
 
 #include "DatabaseConnector.h"
 #include "DatabaseConnectorPropertiesWidget.h"
@@ -117,6 +121,37 @@ TEST(PromptBuilderNodeTest, FormatsTemplateWithInput)
     ASSERT_TRUE(out.contains(QString::fromLatin1(PromptBuilderNode::kOutputId)));
     EXPECT_EQ(out.value(QString::fromLatin1(PromptBuilderNode::kOutputId)).toString(),
               QStringLiteral("Hi Alice! This is Alice."));
+
+    delete w;
+}
+
+TEST(TextOutputNodeTest, UpdatesWidgetOnExecute)
+{
+    ensureApp();
+
+    TextOutputNode node;
+
+    QWidget* w = node.createConfigurationWidget(nullptr);
+    ASSERT_NE(w, nullptr);
+    auto* props = dynamic_cast<TextOutputPropertiesWidget*>(w);
+    ASSERT_NE(props, nullptr);
+
+    // Prepare input packet with text
+    const QString kText = QStringLiteral("Hello, TextOutput!");
+    DataPacket in;
+    in.insert(QString::fromLatin1(TextOutputNode::kInputId), kText);
+
+    // Execute: this posts a queued call to the widget's onSetText
+    QFuture<DataPacket> fut = node.Execute(in);
+    fut.waitForFinished(); // immediately finished, but keeps symmetry with other tests
+
+    // Allow the event loop to process the queued UI update
+    QTest::qWait(100);
+
+    // Find the QTextEdit inside the properties widget and verify contents
+    auto* edit = w->findChild<QTextEdit*>();
+    ASSERT_NE(edit, nullptr);
+    EXPECT_EQ(edit->toPlainText(), kText);
 
     delete w;
 }

@@ -32,11 +32,17 @@
 #include "GoogleLLMConnector.h"
 #include "PythonScriptConnector.h"
 #include "DatabaseConnector.h"
+#include "TextOutputNode.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
 {
     Q_UNUSED(parent);
+
+    // IMPORTANT: Disable reactive propagation by default.
+    // Our ExecutionEngine is the only mechanism that should trigger execution.
+    // By overriding setPortData below to return false without forwarding to NodeDelegateModel,
+    // we prevent QtNodes from calling ToolNodeDelegate::setInData during connection changes/load.
 
     // Register LLMConnector via the generic ToolNodeDelegate adapter
     auto registry = dataModelRegistry();
@@ -58,6 +64,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto tool = std::make_shared<TextInputNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Inputs"));
+
+    // Register TextOutputNode under the "Output" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<TextOutputNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Output"));
 
     // Register ProcessConnector under the "Connectors" category via ToolNodeDelegate
     registry->registerModel([this]() {
@@ -94,4 +106,22 @@ void NodeGraphModel::clear()
     for (auto id : ids) {
         deleteNode(id);
     }
+}
+
+
+bool NodeGraphModel::setPortData(QtNodes::NodeId nodeId,
+                                 QtNodes::PortType portType,
+                                 QtNodes::PortIndex portIndex,
+                                 QVariant const &value,
+                                 QtNodes::PortRole role)
+{
+    Q_UNUSED(nodeId);
+    Q_UNUSED(portType);
+    Q_UNUSED(portIndex);
+    Q_UNUSED(value);
+    Q_UNUSED(role);
+
+    // Intentionally do nothing to prevent QtNodes' reactive data propagation.
+    // Execution is controlled exclusively by our ExecutionEngine.
+    return false;
 }
