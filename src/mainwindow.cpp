@@ -27,6 +27,8 @@
 #include "NodeGraphModel.h"
 #include "ToolNodeDelegate.h"
 #include "ExecutionEngine.h"
+#include "ExecutionAwarePainters.h"
+#include "ExecutionStateModel.h"
 
 #include <QAction>
 #include <QApplication>
@@ -59,6 +61,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QSaveFile>
+#include "ExecutionIdUtils.h"
 
 #include "LLMConnector.h"
 #include "CredentialsEditorDialog.h"
@@ -76,6 +79,22 @@ MainWindow::MainWindow(QWidget* parent)
 
     // Create execution engine
     execEngine_ = new ExecutionEngine(_graphModel, this);
+
+    // Live execution-state highlighting: install custom painters and wire signals
+    execStateModel_ = std::make_shared<ExecutionStateModel>(this);
+    scene->setNodePainter(std::unique_ptr<QtNodes::AbstractNodePainter>(
+        new ExecutionAwareNodePainter(execStateModel_)));
+    scene->setConnectionPainter(std::unique_ptr<QtNodes::AbstractConnectionPainter>(
+        new ExecutionAwareConnectionPainter(execStateModel_)));
+
+    // Forward engine status updates to the state model
+    connect(execEngine_, &ExecutionEngine::nodeStatusChanged,
+            execStateModel_.get(), &ExecutionStateModel::onNodeStatusChanged);
+    connect(execEngine_, &ExecutionEngine::connectionStatusChanged,
+            execStateModel_.get(), &ExecutionStateModel::onConnectionStatusChanged);
+
+    // Repaint the scene when any state changes
+    connect(execStateModel_.get(), &ExecutionStateModel::stateChanged, scene, [scene]() { scene->update(); });
 
     createActions();
     createMenus();
@@ -123,6 +142,10 @@ MainWindow::MainWindow(QWidget* parent)
             this, &MainWindow::onPipelineFinished);
     connect(execEngine_, &ExecutionEngine::nodeLog,
             this, &MainWindow::onNodeLog);
+
+    // Repaint specific node on status changes to force painter invocation
+    connect(execEngine_, &ExecutionEngine::nodeStatusChanged,
+            this, [this](const QUuid &nodeId, int /*state*/) { onNodeRepaint(nodeId); });
 
     // Connect selection signals
     connect(scene, &QtNodes::BasicGraphicsScene::nodeSelected,
@@ -490,6 +513,36 @@ MainWindow::~MainWindow()
     }
 }
 
+
+void MainWindow::onNodeRepaint(const QUuid& nodeUuid)
+{
+    // Find the node by deterministic execution UUID and repaint its graphics object
+    auto *qscene = _graphView ? _graphView->scene() : nullptr;
+    auto *scene = qscene ? dynamic_cast<QtNodes::BasicGraphicsScene*>(qscene) : nullptr;
+    if (!scene || !_graphModel)
+        return;
+
+    QtNodes::NodeId foundId = 0;
+    bool found = false;
+    for (auto nid : _graphModel->allNodeIds()) {
+        if (ExecIds::nodeUuid(nid) == nodeUuid) {
+            foundId = nid;
+            found = true;
+            break;
+        }
+    }
+
+    if (found) {
+        if (auto *ngo = scene->nodeGraphicsObject(foundId)) {
+            // Trigger a repaint of this specific item so our custom painter runs
+            ngo->update();
+            return;
+        }
+    }
+
+    // Fallback: if not found, update the whole scene (should be rare)
+    scene->update();
+}
 
 void MainWindow::onSaveOutput()
 {

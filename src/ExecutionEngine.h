@@ -24,11 +24,13 @@
 #pragma once
 
 #include <QObject>
+#include <QUuid>
 #include <QPointer>
 #include <QMap>
 #include <QSet>
 
 #include "CommonDataTypes.h"
+#include "ExecutionState.h"
 
 namespace QtNodes { class DataFlowGraphModel; using NodeId = unsigned int; }
 
@@ -45,9 +47,14 @@ signals:
     void pipelineFinished(const DataPacket& finalOutput);
     // Emitted for detailed per-node execution logs
     void nodeLog(const QString& message);
+    // Emitted when a node's status changes (state is one of ExecutionState)
+    void nodeStatusChanged(const QUuid& nodeId, int state);
+    // Emitted when a connection's status changes (state is one of ExecutionState)
+    void connectionStatusChanged(const QUuid& connectionId, int state);
 
 public slots:
     void run();
+    void setExecutionDelay(int ms);
 
 private:
     // Adjacency list: from nodeId -> set of downstream nodeIds
@@ -57,4 +64,6 @@ private:
     QMap<QtNodes::NodeId, DataPacket> _nodeOutputs;
 
     NodeGraphModel* _graphModel {nullptr};
+
+    int m_executionDelay = 0;
 };

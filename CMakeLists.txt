@@ -265,6 +265,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/DatabaseConnector.h
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
+            ${SRC_DIR}/ExecutionAwarePainters.cpp
+            ${SRC_DIR}/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
     target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -336,6 +338,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/DatabaseConnector.h
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
+            ${SRC_DIR}/ExecutionAwarePainters.cpp
+            ${SRC_DIR}/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
 
@@ -537,3 +541,10 @@ if(APPLE AND NOT XCODE)
 endif()
 
 include(CPack)
+
+
+# Live execution-state highlighting sources
+target_sources(CognitivePipelines PRIVATE
+    ${SRC_DIR}/ExecutionAwarePainters.cpp
+    ${SRC_DIR}/ExecutionStateModel.cpp
+)

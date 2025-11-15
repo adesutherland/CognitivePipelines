@@ -27,6 +27,7 @@
 #include <QMainWindow>
 #include "llm_api_client.h"
 #include "ExecutionEngine.h"
+#include "ExecutionStateModel.h"
 
 #include <memory>
 #include <QPointer>
@@ -76,6 +77,9 @@ private slots:
     void onNodeSelected(QtNodes::NodeId nodeId);
     void onSelectionChanged();
 
+    // Execution highlighting: repaint a specific node by execution QUuid
+    void onNodeRepaint(const QUuid& nodeUuid);
+
 private:
     void createActions();
     void createMenus();
@@ -112,4 +116,7 @@ private:
 
     QDockWidget* debugLogDock_ {nullptr};
     QTextEdit* debugLogText_ {nullptr};
+
+    // Live execution highlighting
+    std::shared_ptr<ExecutionStateModel> execStateModel_;
 };
