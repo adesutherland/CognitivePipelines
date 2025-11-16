@@ -27,6 +27,7 @@
 #include <QWidget>
 #include <QFuture>
 #include <QString>
+#include <QStringList>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
@@ -46,18 +47,22 @@ public:
     void loadState(const QJsonObject& data) override;
 
     // Accessors
-    QString templateText() const { return m_templateText; }
+    QString templateText() const { return m_template; }
 
 public slots:
     void setTemplateText(const QString& text);
+    void onTemplateChanged(const QString& newTemplate, const QStringList& newVariables);
 
 signals:
     void templateTextChanged(const QString& text);
+    // Request the delegate to update input pins to match the variable list
+    void inputPinsUpdateRequested(const QStringList& newVariables);
 
 public:
-    static constexpr const char* kInputId = "input";
+    static constexpr const char* kInputId = "input"; // legacy convenience variable
     static constexpr const char* kOutputId = "prompt";
 
 private:
-    QString m_templateText { QStringLiteral("{input}") };
+    QString m_template { QStringLiteral("{input}") };
+    QStringList m_variables { QStringList{ QString::fromLatin1(kInputId) } };
 };

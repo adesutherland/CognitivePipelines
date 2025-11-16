@@ -22,6 +22,8 @@
 // SOFTWARE.
 //
 #include "PromptBuilderPropertiesWidget.h"
+#include <QRegularExpression>
+#include <QSet>
 
 PromptBuilderPropertiesWidget::PromptBuilderPropertiesWidget(QWidget* parent)
     : QWidget(parent)
@@ -31,24 +33,67 @@ PromptBuilderPropertiesWidget::PromptBuilderPropertiesWidget(QWidget* parent)
     form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
     m_templateEdit = new QTextEdit(this);
-    m_templateEdit->setPlaceholderText(tr("Write your prompt template here, e.g., 'Summarize this: {input}'"));
+    m_templateEdit->setPlaceholderText(tr("Write your prompt template here, e.g., 'Summarize this: {question} {context}'"));
     m_templateEdit->setAcceptRichText(false);
 
     form->addRow(tr("Template"), m_templateEdit);
 
-    connect(m_templateEdit, &QTextEdit::textChanged, this, [this]() {
-        emit templateChanged(m_templateEdit->toPlainText());
-    });
+    // Debounce timer to avoid heavy parsing on every keystroke
+    m_debounceTimer = new QTimer(this);
+    m_debounceTimer->setSingleShot(true);
+    m_debounceTimer->setInterval(300); // 300ms debounce
+
+    // Ensure no lingering connections exist between the editor and this widget (defensive cleanup)
+    QObject::disconnect(m_templateEdit, nullptr, this, nullptr);
+
+    // When text changes, (re)start the debounce timer.
+    connect(m_templateEdit, &QTextEdit::textChanged, this, &PromptBuilderPropertiesWidget::onTextChanged);
+
+    // When the timer fires, parse and emit the canonical update.
+    connect(m_debounceTimer, &QTimer::timeout, this, &PromptBuilderPropertiesWidget::onDebounceTimeout);
 }
 
 void PromptBuilderPropertiesWidget::setTemplateText(const QString& text)
 {
     if (m_templateEdit && m_templateEdit->toPlainText() != text) {
         m_templateEdit->setPlainText(text);
+        // For programmatic updates (e.g., load state), emit immediately to keep UI and node in sync.
+        if (m_debounceTimer) m_debounceTimer->stop();
+        onDebounceTimeout();
     }
 }
 
 QString PromptBuilderPropertiesWidget::templateText() const
 {
     return m_templateEdit ? m_templateEdit->toPlainText() : QString();
+}
+
+void PromptBuilderPropertiesWidget::onTextChanged()
+{
+    if (m_debounceTimer) {
+        m_debounceTimer->start();
+    }
+}
+
+void PromptBuilderPropertiesWidget::onDebounceTimeout()
+{
+    const QString text = m_templateEdit ? m_templateEdit->toPlainText() : QString();
+    // Parse unique variables of the form {var}
+    static const QRegularExpression re(QStringLiteral("\\{([^{}]+)\\}"));
+    QStringList vars;
+    QSet<QString> seen;
+    auto it = re.globalMatch(text);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        const QString var = m.captured(1).trimmed();
+        if (!var.isEmpty() && !seen.contains(var)) {
+            seen.insert(var);
+            vars.append(var);
+        }
+    }
+    // Ensure at least one convenience input exists so users always have an input pin
+    if (vars.isEmpty()) {
+        vars.append(QStringLiteral("input"));
+    }
+    emit templateChanged(text, vars);
 }

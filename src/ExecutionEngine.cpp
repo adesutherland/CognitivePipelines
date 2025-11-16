@@ -162,24 +162,10 @@ void ExecutionEngine::run()
         return;
     }
 
-    // Helper to translate port index to our pin id based on connector descriptor
+    // Helper to translate port index to our pin id using the delegate's dynamic mapping
     auto pinIdForIndex = [](ToolNodeDelegate* del, QtNodes::PortType portType, QtNodes::PortIndex idx) -> QString {
         if (!del) return {};
-        auto conn = del->connector();
-        if (!conn) return {};
-        NodeDescriptor desc = conn->GetDescriptor();
-        if (portType == QtNodes::PortType::In) {
-            int i = 0;
-            for (auto it = desc.inputPins.constBegin(); it != desc.inputPins.constEnd(); ++it, ++i) {
-                if (static_cast<int>(idx) == i) return it.key();
-            }
-        } else if (portType == QtNodes::PortType::Out) {
-            int i = 0;
-            for (auto it = desc.outputPins.constBegin(); it != desc.outputPins.constEnd(); ++it, ++i) {
-                if (static_cast<int>(idx) == i) return it.key();
-            }
-        }
-        return {};
+        return del->pinIdForIndex(portType, idx);
     };
 
     // Run the pipeline in a worker thread and emit status signals from there
@@ -193,7 +179,9 @@ void ExecutionEngine::run()
         }
 
         bool aborted = false;
-        DataPacket finalOutput;
+        DataPacket mainPacket;
+        // Ensure the cumulative packet starts clean at the beginning of each run
+        mainPacket.clear();
 
         // Iterate through nodes in topological order
         for (int idx = 0; idx < order.size(); ++idx) {
@@ -220,19 +208,34 @@ void ExecutionEngine::run()
                 }
             }
 
-            // Build input packet from upstream outputs
+            // Build input packet from main (cumulative) packet
+            // New scheme: namespace values by source Node UUID and provide both current and old values.
             DataPacket inputPacket;
             for (const auto &connId : attached) {
                 if (connId.inNodeId != nodeId) continue; // only incoming
+
                 auto *srcDelegate = graphModel->delegateModel<ToolNodeDelegate>(connId.outNodeId);
                 const QString srcPinId = pinIdForIndex(srcDelegate, QtNodes::PortType::Out, connId.outPortIndex);
                 const QString dstPinId = pinIdForIndex(delegate, QtNodes::PortType::In, connId.inPortIndex);
-                QVariant v;
-                if (_nodeOutputs.contains(connId.outNodeId)) {
-                    const auto &srcPacket = _nodeOutputs.value(connId.outNodeId);
-                    v = srcPacket.value(srcPinId);
+
+                // Compute namespaced keys for source node's output pins
+                const QUuid srcNodeUuid = nodeUuid(connId.outNodeId);
+                const QString nsPrefix = srcNodeUuid.toString();
+                const QString currentKey = nsPrefix + QLatin1String(".") + srcPinId;
+                const QString oldKey = nsPrefix + QLatin1String(".old.") + srcPinId;
+
+                // Look up Current and Old values from the cumulative packet
+                QVariant currentVal = mainPacket.value(currentKey);
+                const QVariant oldVal = mainPacket.value(oldKey);
+
+                // Backward compatibility: if namespaced current is missing or empty, fall back to plain key
+                const bool currentMissing = !currentVal.isValid() || (currentVal.metaType().id() == QMetaType::QString && currentVal.toString().isEmpty());
+                if (currentMissing && mainPacket.contains(srcPinId)) {
+                    currentVal = mainPacket.value(srcPinId);
                 }
-                inputPacket[dstPinId] = v;
+
+                inputPacket.insert(dstPinId, currentVal);
+                inputPacket.insert(dstPinId + QLatin1String(".old"), oldVal);
             }
 
             const QString nodeName = connector->GetDescriptor().name;
@@ -275,6 +278,25 @@ void ExecutionEngine::run()
 
             _nodeOutputs[nodeId] = result;
 
+            // Merge output into the main (cumulative) packet using namespaced CURRENT/OLD keys per pin
+            const QUuid thisNodeUuid = nodeUuid(nodeId);
+            const QString thisPrefix = thisNodeUuid.toString();
+            for (auto it = result.cbegin(); it != result.cend(); ++it) {
+                const QString &outputKey = it.key();
+                const QVariant &newVal = it.value();
+
+                const QString currentKey = thisPrefix + QLatin1String(".") + outputKey;
+                const QString oldKey = thisPrefix + QLatin1String(".old.") + outputKey;
+
+                // Swap: move existing current to old, then write new to current
+                const QVariant previousVal = mainPacket.value(currentKey);
+                mainPacket.insert(oldKey, previousVal);
+                mainPacket.insert(currentKey, newVal);
+
+                // Maintain non-namespaced key for compatibility with existing nodes/tests
+                mainPacket.insert(outputKey, newVal);
+            }
+
             QString outputsStr;
             for (auto it = result.cbegin(); it != result.cend(); ++it) {
                 if (!outputsStr.isEmpty()) outputsStr += ", ";
@@ -296,13 +318,11 @@ void ExecutionEngine::run()
             if (!errorMsg.trimmed().isEmpty()) {
                 emit nodeLog(QString::fromLatin1("ExecutionEngine: Error reported by node %1 %2: %3")
                                  .arg(QString::number(nodeId)).arg(nodeName).arg(errorMsg));
-                finalOutput = result;
+                // Ensure error flag is visible in main packet as well
+                mainPacket.insert(QStringLiteral("__error"), errorMsg);
                 aborted = true;
                 break;
             }
-
-            // Track potential final output
-            finalOutput = result;
 
             // Execution delay if configured
             if (m_executionDelay > 0) {
@@ -312,7 +332,7 @@ void ExecutionEngine::run()
 
         // Emit chain finished/pipeline result
         emit nodeLog(QStringLiteral("ExecutionEngine: Chain finished."));
-        emit pipelineFinished(finalOutput);
+        emit pipelineFinished(mainPacket);
     });
 }
 

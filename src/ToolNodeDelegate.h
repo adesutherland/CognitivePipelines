@@ -87,6 +87,13 @@ private:
     QString inputPinIdForIndex(QtNodes::PortIndex idx) const;
     QString outputPinIdForIndex(QtNodes::PortIndex idx) const;
 
+public:
+    // Public helper for external components (ExecutionEngine) to map indices to pin ids
+    QString pinIdForIndex(QtNodes::PortType portType, QtNodes::PortIndex idx) const;
+
+private Q_SLOTS:
+    void onConnectorInputPinsUpdateRequested(const QStringList& newVariables);
+
 private:
     std::shared_ptr<IToolConnector> _connector;
 

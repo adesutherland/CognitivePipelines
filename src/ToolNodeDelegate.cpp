@@ -28,12 +28,28 @@
 #include <QtNodes/NodeDelegateModelRegistry>
 
 #include <QJsonObject>
+#include <QSet>
+
+#include "PromptBuilderNode.h"
 
 using namespace QtNodes;
 
 ToolNodeDelegate::ToolNodeDelegate(std::shared_ptr<IToolConnector> connector)
     : _connector(std::move(connector))
 {
+    // If the connector is a PromptBuilderNode that can notify about dynamic input pin changes, listen for updates.
+    if (auto* pb = dynamic_cast<PromptBuilderNode*>(_connector.get())) {
+        QObject::connect(pb, &PromptBuilderNode::inputPinsUpdateRequested,
+                         this, &ToolNodeDelegate::onConnectorInputPinsUpdateRequested);
+    }
+
+    // Initialize default dynamic inputs for known dynamic models (e.g., PromptBuilder)
+    if (_connector) {
+        const auto id = _connector->GetDescriptor().id;
+        if (id == QStringLiteral("prompt-builder")) {
+            onConnectorInputPinsUpdateRequested(QStringList{ QStringLiteral("input") });
+        }
+    }
 }
 
 QString ToolNodeDelegate::name() const
@@ -115,6 +131,49 @@ std::shared_ptr<NodeData> ToolNodeDelegate::outData(PortIndex const port)
     return std::make_shared<VariantNodeData>(t, v);
 }
 
+void ToolNodeDelegate::onConnectorInputPinsUpdateRequested(const QStringList& newVariables)
+{
+    ensureDescriptorCached();
+
+    // If the list is identical, avoid churn to preserve existing connections.
+    QStringList current;
+    current.reserve(static_cast<int>(_inputOrder.size()));
+    for (const auto &id : _inputOrder) current.push_back(id);
+    if (current == newVariables) return;
+
+    // Compute old and new counts; for simplicity, replace entire input set
+    const unsigned int oldCount = static_cast<unsigned int>(_inputOrder.size());
+    if (oldCount > 0) {
+        emit portsAboutToBeDeleted(PortType::In, 0, static_cast<PortIndex>(oldCount - 1));
+        _descriptor.inputPins.clear();
+        _inputOrder.clear();
+        // prune runtime inputs
+        QMap<QString, QVariant> newInputs;
+        for (const QString& v : newVariables) {
+            if (_inputs.contains(v)) newInputs.insert(v, _inputs.value(v));
+        }
+        _inputs.swap(newInputs);
+        emit portsDeleted();
+    }
+
+    const unsigned int newCount = static_cast<unsigned int>(newVariables.size());
+    if (newCount > 0) {
+        emit portsAboutToBeInserted(PortType::In, 0, static_cast<PortIndex>(newCount - 1));
+        for (const QString& var : newVariables) {
+            PinDefinition in;
+            in.direction = PinDirection::Input;
+            in.id = var;
+            in.name = var;
+            in.type = QStringLiteral("text");
+            _descriptor.inputPins.insert(in.id, in);
+            _inputOrder.push_back(in.id);
+        }
+        emit portsInserted();
+        // Hint the scene that the node geometry may have changed due to port layout
+        emit embeddedWidgetSizeUpdated();
+    }
+}
+
 QWidget *ToolNodeDelegate::embeddedWidget()
 {
     // Do not embed any configuration UI inside the node itself.
@@ -152,13 +211,23 @@ void ToolNodeDelegate::ensureDescriptorCached() const
 
 QString ToolNodeDelegate::inputPinIdForIndex(PortIndex idx) const
 {
+    ensureDescriptorCached();
     if (idx < _inputOrder.size()) return _inputOrder[idx];
     return QString();
 }
 
 QString ToolNodeDelegate::outputPinIdForIndex(PortIndex idx) const
 {
+    ensureDescriptorCached();
     if (idx < _outputOrder.size()) return _outputOrder[idx];
+    return QString();
+}
+
+QString ToolNodeDelegate::pinIdForIndex(PortType portType, PortIndex idx) const
+{
+    ensureDescriptorCached();
+    if (portType == PortType::In) return inputPinIdForIndex(idx);
+    if (portType == PortType::Out) return outputPinIdForIndex(idx);
     return QString();
 }
 

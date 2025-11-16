@@ -30,6 +30,7 @@
 #include <QFuture>
 #include <QPromise>
 #include <QTextEdit>
+#include <QThread>
 
 TextOutputNode::TextOutputNode(QObject* parent)
     : QObject(parent)
@@ -60,9 +61,15 @@ QWidget* TextOutputNode::createConfigurationWidget(QWidget* parent)
 {
     if (!m_propertiesWidget) {
         m_propertiesWidget = new TextOutputPropertiesWidget(parent);
-        // Apply any text loaded from persisted state
-        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", Qt::QueuedConnection,
-                                  Q_ARG(QString, m_loadedText));
+        // If we have a pending value from a previous Execute before the widget existed,
+        // apply it immediately. Otherwise, fall back to any text loaded from state.
+        if (m_hasPendingText) {
+            m_propertiesWidget->onSetText(m_lastText);
+            m_hasPendingText = false; // consumed
+        } else if (!m_loadedText.isEmpty()) {
+            QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", Qt::QueuedConnection,
+                                      Q_ARG(QString, m_loadedText));
+        }
     } else if (m_propertiesWidget->parent() != parent && parent) {
         m_propertiesWidget->setParent(parent);
     }
@@ -72,10 +79,20 @@ QWidget* TextOutputNode::createConfigurationWidget(QWidget* parent)
 QFuture<DataPacket> TextOutputNode::Execute(const DataPacket& inputs)
 {
     const QString text = inputs.value(QString::fromLatin1(kInputId)).toString();
+    // Remember the last text even if the widget is not created yet (fan-out first run case)
+    m_lastText = text;
+    m_hasPendingText = (m_propertiesWidget == nullptr);
 
     // Forward to properties widget on the UI thread safely
     if (m_propertiesWidget) {
-        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", Qt::QueuedConnection,
+        // Block the worker thread until the UI has processed the update to avoid
+        // a race where the displayed text lags behind by one execution step.
+        // Use a direct call if we're already on the same thread to avoid deadlocks.
+        const bool crossThread = QThread::currentThread() != m_propertiesWidget->thread();
+        const Qt::ConnectionType type = crossThread
+                                        ? Qt::BlockingQueuedConnection
+                                        : Qt::DirectConnection;
+        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", type,
                                   Q_ARG(QString, text));
     }
 
@@ -89,6 +106,10 @@ QFuture<DataPacket> TextOutputNode::Execute(const DataPacket& inputs)
 QJsonObject TextOutputNode::saveState() const
 {
     QString textToSave = m_loadedText;
+    if (!m_propertiesWidget && m_hasPendingText) {
+        // If a value was received but the widget hasn't been created yet, prefer that
+        textToSave = m_lastText;
+    }
     if (m_propertiesWidget) {
         // Try to read the current contents directly from the QTextEdit
         if (auto* edit = m_propertiesWidget->findChild<QTextEdit*>()) {

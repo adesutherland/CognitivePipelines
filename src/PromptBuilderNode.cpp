@@ -26,6 +26,8 @@
 
 #include <QtConcurrent/QtConcurrent>
 #include <QJsonObject>
+#include <QRegularExpression>
+#include <QSet>
 
 PromptBuilderNode::PromptBuilderNode(QObject* parent)
     : QObject(parent)
@@ -34,9 +36,37 @@ PromptBuilderNode::PromptBuilderNode(QObject* parent)
 
 void PromptBuilderNode::setTemplateText(const QString& text)
 {
-    if (m_templateText == text) return;
-    m_templateText = text;
-    emit templateTextChanged(m_templateText);
+    if (m_template == text) return;
+
+    // Parse variables from the provided template and route through the main slot
+    static const QRegularExpression re(QStringLiteral("\\{([^{}]+)\\}"));
+    QStringList vars;
+    QSet<QString> seen;
+    auto it = re.globalMatch(text);
+    while (it.hasNext()) {
+        const auto m = it.next();
+        const QString var = m.captured(1).trimmed();
+        if (!var.isEmpty() && !seen.contains(var)) {
+            seen.insert(var);
+            vars.append(var);
+        }
+    }
+    if (vars.isEmpty()) {
+        // Keep a convenient default variable for quick usage
+        vars.append(QString::fromLatin1(kInputId));
+    }
+    onTemplateChanged(text, vars);
+}
+
+void PromptBuilderNode::onTemplateChanged(const QString& newTemplate, const QStringList& newVariables)
+{
+    // Notify delegate to update ports first
+    emit inputPinsUpdateRequested(newVariables);
+
+    // Update internal state and notify UI
+    m_template = newTemplate;
+    m_variables = newVariables;
+    emit templateTextChanged(m_template);
 }
 
 NodeDescriptor PromptBuilderNode::GetDescriptor() const
@@ -46,13 +76,7 @@ NodeDescriptor PromptBuilderNode::GetDescriptor() const
     desc.name = QStringLiteral("Prompt Builder");
     desc.category = QStringLiteral("Text");
 
-    PinDefinition in;
-    in.direction = PinDirection::Input;
-    in.id = QString::fromLatin1(kInputId);
-    in.name = QStringLiteral("Input");
-    in.type = QStringLiteral("text");
-    desc.inputPins.insert(in.id, in);
-
+    // Only declare the static output pin here. Inputs are dynamic and managed via ToolNodeDelegate.
     PinDefinition out;
     out.direction = PinDirection::Output;
     out.id = QString::fromLatin1(kOutputId);
@@ -67,11 +91,11 @@ QWidget* PromptBuilderNode::createConfigurationWidget(QWidget* parent)
 {
     auto* w = new PromptBuilderPropertiesWidget(parent);
     // Initialize from current state
-    w->setTemplateText(m_templateText);
+    w->setTemplateText(m_template);
 
     // UI -> Node (live updates)
     QObject::connect(w, &PromptBuilderPropertiesWidget::templateChanged,
-                     this, &PromptBuilderNode::setTemplateText);
+                     this, &PromptBuilderNode::onTemplateChanged);
     // Node -> UI (reflect programmatic changes)
     QObject::connect(this, &PromptBuilderNode::templateTextChanged,
                      w, &PromptBuilderPropertiesWidget::setTemplateText);
@@ -82,14 +106,17 @@ QWidget* PromptBuilderNode::createConfigurationWidget(QWidget* parent)
 QFuture<DataPacket> PromptBuilderNode::Execute(const DataPacket& inputs)
 {
     // Capture state for background execution
-    const QString tpl = m_templateText;
-    const QString inputText = inputs.value(QString::fromLatin1(kInputId)).toString();
+    const QString tpl = m_template;
+    const QStringList vars = m_variables;
 
-    return QtConcurrent::run([tpl, inputText]() -> DataPacket {
+    return QtConcurrent::run([tpl, vars, inputs]() -> DataPacket {
         DataPacket output;
         QString result = tpl;
-        // simple replacement; if no placeholder, just append? requirement: replace {input}
-        result.replace(QStringLiteral("{input}"), inputText);
+        for (const QString& var : vars) {
+            const QString key = QStringLiteral("{") + var + QStringLiteral("}");
+            const QString value = inputs.value(var).toString();
+            result.replace(key, value);
+        }
         output.insert(QString::fromLatin1(kOutputId), result);
         return output;
     });
@@ -99,7 +126,7 @@ QFuture<DataPacket> PromptBuilderNode::Execute(const DataPacket& inputs)
 QJsonObject PromptBuilderNode::saveState() const
 {
     QJsonObject obj;
-    obj.insert(QStringLiteral("template"), m_templateText);
+    obj.insert(QStringLiteral("template"), m_template);
     return obj;
 }
 

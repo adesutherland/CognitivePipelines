@@ -53,4 +53,8 @@ public:
 private:
     TextOutputPropertiesWidget* m_propertiesWidget = nullptr; // cached UI widget
     QString m_loadedText; // cached text from loaded state to apply on widget creation
+    // Cache the last value received via Execute so that if the widget wasn't yet created,
+    // we can display it immediately upon widget creation (fixes first-run fan-out cases).
+    QString m_lastText;
+    bool m_hasPendingText {false};
 };

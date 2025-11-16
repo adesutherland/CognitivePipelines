@@ -220,6 +220,7 @@ if(ENABLE_TESTING)
             tests/test_llm_api_client.cpp
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
+            tests/test_text_output_fanout.cpp
             tests/test_invalid_model_pipeline.cpp
             tests/test_process_connector.cpp
             tests/test_google_llm_connector.cpp

@@ -26,6 +26,8 @@
 #include <QWidget>
 #include <QTextEdit>
 #include <QFormLayout>
+#include <QStringList>
+#include <QTimer>
 
 // Property editor widget for PromptBuilderNode
 class PromptBuilderPropertiesWidget : public QWidget {
@@ -41,8 +43,15 @@ public:
     QString templateText() const;
 
 signals:
-    void templateChanged(const QString& text);
+    // Emitted whenever the template text changes in the editor. Provides the
+    // full template and the extracted unique variable list (order of first occurrence).
+    void templateChanged(const QString& newTemplate, const QStringList& newVariables);
 
 private:
     QTextEdit* m_templateEdit {nullptr};
+    QTimer* m_debounceTimer {nullptr};
+
+private slots:
+    void onTextChanged();
+    void onDebounceTimeout();
 };
