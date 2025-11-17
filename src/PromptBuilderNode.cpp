@@ -36,7 +36,9 @@ PromptBuilderNode::PromptBuilderNode(QObject* parent)
 
 void PromptBuilderNode::setTemplateText(const QString& text)
 {
-    if (m_template == text) return;
+    if (m_template == text) {
+        return;
+    }
 
     // Parse variables from the provided template and route through the main slot
     static const QRegularExpression re(QStringLiteral("\\{([^{}]+)\\}"));

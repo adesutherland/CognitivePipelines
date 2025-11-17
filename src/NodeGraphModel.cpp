@@ -108,6 +108,57 @@ void NodeGraphModel::clear()
     }
 }
 
+QtNodes::NodeId NodeGraphModel::addNode(QString const nodeType)
+{
+    // Call base class to create the node
+    QtNodes::NodeId nodeId = DataFlowGraphModel::addNode(nodeType);
+    
+    if (nodeId != QtNodes::InvalidNodeId) {
+        // Get the delegate model for the new node
+        auto model = delegateModel<QtNodes::NodeDelegateModel>(nodeId);
+        if (model) {
+            // Connect port change signals to our slots
+            // When ports are inserted/deleted, we need to emit nodeUpdated(nodeId)
+            // to trigger geometry recalculation in BasicGraphicsScene
+            connect(model, &QtNodes::NodeDelegateModel::portsInserted,
+                    this, &NodeGraphModel::onNodePortsInserted);
+            connect(model, &QtNodes::NodeDelegateModel::portsDeleted,
+                    this, &NodeGraphModel::onNodePortsDeleted);
+        }
+    }
+    
+    return nodeId;
+}
+
+void NodeGraphModel::onNodePortsInserted()
+{
+    notifyNodeGeometryChanged();
+}
+
+void NodeGraphModel::onNodePortsDeleted()
+{
+    notifyNodeGeometryChanged();
+}
+
+void NodeGraphModel::notifyNodeGeometryChanged()
+{
+    // Find which node emitted the signal by checking if the sender is one of the delegates
+    auto senderModel = qobject_cast<QtNodes::NodeDelegateModel*>(sender());
+    if (!senderModel) {
+        return;
+    }
+
+    // Search all nodes to find which one owns this delegate
+    for (auto nodeId : allNodeIds()) {
+        // Get the delegate model for this node
+        auto model = delegateModel<QtNodes::NodeDelegateModel>(nodeId);
+        if (model == senderModel) {
+            // Found the node! Emit nodeUpdated to trigger geometry recalculation
+            Q_EMIT nodeUpdated(nodeId);
+            return;
+        }
+    }
+}
 
 bool NodeGraphModel::setPortData(QtNodes::NodeId nodeId,
                                  QtNodes::PortType portType,

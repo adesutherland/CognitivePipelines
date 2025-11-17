@@ -38,10 +38,22 @@ public:
     // Convenience: remove all nodes and connections from the model
     void clear();
 
+    // Override to connect port change signals when nodes are added
+    QtNodes::NodeId addNode(QString const nodeType = QString()) override;
+
     // Disable reactive data propagation from the base model. Our pipelines execute only via ExecutionEngine.
     bool setPortData(QtNodes::NodeId nodeId,
                      QtNodes::PortType portType,
                      QtNodes::PortIndex portIndex,
                      QVariant const &value,
                      QtNodes::PortRole role = QtNodes::PortRole::Data) override;
+
+public Q_SLOTS:
+    // Slots to handle port changes and trigger geometry recalculation
+    void onNodePortsInserted();
+    void onNodePortsDeleted();
+
+private:
+    // Helper to emit nodeUpdated for the sender node (triggers geometry recalculation)
+    void notifyNodeGeometryChanged();
 };

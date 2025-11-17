@@ -139,12 +139,16 @@ void ToolNodeDelegate::onConnectorInputPinsUpdateRequested(const QStringList& ne
     QStringList current;
     current.reserve(static_cast<int>(_inputOrder.size()));
     for (const auto &id : _inputOrder) current.push_back(id);
-    if (current == newVariables) return;
+    
+    if (current == newVariables) {
+        return;
+    }
 
     // Compute old and new counts; for simplicity, replace entire input set
     const unsigned int oldCount = static_cast<unsigned int>(_inputOrder.size());
     if (oldCount > 0) {
         emit portsAboutToBeDeleted(PortType::In, 0, static_cast<PortIndex>(oldCount - 1));
+        
         _descriptor.inputPins.clear();
         _inputOrder.clear();
         // prune runtime inputs
@@ -153,12 +157,14 @@ void ToolNodeDelegate::onConnectorInputPinsUpdateRequested(const QStringList& ne
             if (_inputs.contains(v)) newInputs.insert(v, _inputs.value(v));
         }
         _inputs.swap(newInputs);
+        
         emit portsDeleted();
     }
 
     const unsigned int newCount = static_cast<unsigned int>(newVariables.size());
     if (newCount > 0) {
         emit portsAboutToBeInserted(PortType::In, 0, static_cast<PortIndex>(newCount - 1));
+        
         for (const QString& var : newVariables) {
             PinDefinition in;
             in.direction = PinDirection::Input;
@@ -168,7 +174,9 @@ void ToolNodeDelegate::onConnectorInputPinsUpdateRequested(const QStringList& ne
             _descriptor.inputPins.insert(in.id, in);
             _inputOrder.push_back(in.id);
         }
+        
         emit portsInserted();
+        
         // Hint the scene that the node geometry may have changed due to port layout
         emit dataUpdated(0);
     }
