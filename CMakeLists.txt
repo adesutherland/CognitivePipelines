@@ -85,6 +85,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/mainwindow.h
     ${SRC_DIR}/about_dialog.cpp
     ${SRC_DIR}/about_dialog.h
+    ${SRC_DIR}/UserInputDialog.cpp
+    ${SRC_DIR}/UserInputDialog.h
     ${SRC_DIR}/PythonScriptConnector.cpp
     ${SRC_DIR}/PythonScriptConnector.h
     ${SRC_DIR}/llm_api_client.cpp
@@ -109,6 +111,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/TextOutputNode.h
     ${SRC_DIR}/TextOutputPropertiesWidget.cpp
     ${SRC_DIR}/TextOutputPropertiesWidget.h
+    ${SRC_DIR}/HumanInputNode.cpp
+    ${SRC_DIR}/HumanInputNode.h
+    ${SRC_DIR}/HumanInputPropertiesWidget.cpp
+    ${SRC_DIR}/HumanInputPropertiesWidget.h
     ${SRC_DIR}/ProcessConnector.cpp
     ${SRC_DIR}/ProcessConnector.h
     ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
@@ -246,6 +252,18 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/TextOutputNode.h
             ${SRC_DIR}/TextOutputPropertiesWidget.cpp
             ${SRC_DIR}/TextOutputPropertiesWidget.h
+            ${SRC_DIR}/HumanInputNode.cpp
+            ${SRC_DIR}/HumanInputNode.h
+            ${SRC_DIR}/HumanInputPropertiesWidget.cpp
+            ${SRC_DIR}/HumanInputPropertiesWidget.h
+            ${SRC_DIR}/mainwindow.cpp
+            ${SRC_DIR}/mainwindow.h
+            ${SRC_DIR}/UserInputDialog.cpp
+            ${SRC_DIR}/UserInputDialog.h
+            ${SRC_DIR}/about_dialog.cpp
+            ${SRC_DIR}/about_dialog.h
+            ${SRC_DIR}/CredentialsEditorDialog.cpp
+            ${SRC_DIR}/CredentialsEditorDialog.h
             ${SRC_DIR}/LLMConnector.cpp
             ${SRC_DIR}/LLMConnector.h
             ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
@@ -323,6 +341,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/TextOutputNode.h
             ${SRC_DIR}/TextOutputPropertiesWidget.cpp
             ${SRC_DIR}/TextOutputPropertiesWidget.h
+            ${SRC_DIR}/HumanInputNode.cpp
+            ${SRC_DIR}/HumanInputNode.h
+            ${SRC_DIR}/HumanInputPropertiesWidget.cpp
+            ${SRC_DIR}/HumanInputPropertiesWidget.h
             ${SRC_DIR}/NodeGraphModel.cpp
             ${SRC_DIR}/NodeGraphModel.h
             ${SRC_DIR}/ToolNodeDelegate.cpp

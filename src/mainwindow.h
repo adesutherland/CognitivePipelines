@@ -28,6 +28,7 @@
 #include "llm_api_client.h"
 #include "ExecutionEngine.h"
 #include "ExecutionStateModel.h"
+#include "UserInputDialog.h"
 
 #include <memory>
 #include <QPointer>
@@ -64,6 +65,9 @@ public slots:
     void onPipelineFinished(const DataPacket& finalOutput);
     // Per-node debug logging
     void onNodeLog(const QString& message);
+
+    // Request user input from worker thread (blocking)
+    Q_INVOKABLE QString requestUserInput(const QString& prompt);
 
 private slots:
     void onAbout();

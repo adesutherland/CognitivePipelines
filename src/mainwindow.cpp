@@ -65,6 +65,7 @@
 
 #include "LLMConnector.h"
 #include "CredentialsEditorDialog.h"
+#include "UserInputDialog.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
@@ -487,6 +488,15 @@ void MainWindow::onNodeLog(const QString& message)
     if (debugLogText_) {
         debugLogText_->append(message);
     }
+}
+
+QString MainWindow::requestUserInput(const QString& prompt)
+{
+    UserInputDialog dialog(prompt, this);
+    if (dialog.exec() == QDialog::Accepted) {
+        return dialog.getText();
+    }
+    return QString(); // Return empty if canceled
 }
 
 

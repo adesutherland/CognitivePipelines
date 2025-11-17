@@ -33,6 +33,7 @@
 #include "PythonScriptConnector.h"
 #include "DatabaseConnector.h"
 #include "TextOutputNode.h"
+#include "HumanInputNode.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -94,6 +95,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto connector = std::make_shared<DatabaseConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
     }, QStringLiteral("Data"));
+
+    // Register HumanInputNode under the "I/O" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<HumanInputNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("I/O"));
 }
 
 void NodeGraphModel::clear()
