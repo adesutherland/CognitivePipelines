@@ -219,6 +219,7 @@ QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
                 }
             }
             {
+                qWarning() << "LLMConnector: Invalid response structure. Raw JSON:" << response;
                 const QString err = QStringLiteral("Invalid JSON response structure");
                 output.insert(QString::fromLatin1(kOutputResponseId), err);
                 output.insert(QStringLiteral("__error"), err);
@@ -228,7 +229,7 @@ QFuture<DataPacket> LLMConnector::Execute(const DataPacket& inputs) {
 
         if (parseError.error != QJsonParseError::NoError) {
             // Not JSON — treat as plain text; fall through to fallback below
-            qDebug() << "LLMConnector: non-JSON response; using plain text.";
+            qWarning() << "LLMConnector: non-JSON response; using plain text.";
             // Do not set output here; fallback below will forward raw response text
         }
 

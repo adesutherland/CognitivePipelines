@@ -196,9 +196,20 @@ QFuture<DataPacket> GoogleLLMConnector::Execute(const DataPacket& inputs) {
                     return output;
                 }
             }
+            
+            // If parts array is missing or empty, extract finishReason for diagnostics
+            const QString finishReason = firstCand.value(QStringLiteral("finishReason")).toString();
+            if (!finishReason.isEmpty()) {
+                const QString err = QStringLiteral("Google API response incomplete. Reason: %1").arg(finishReason);
+                qWarning() << "GoogleLLMConnector:" << err << "| Raw JSON:" << raw;
+                output.insert(QStringLiteral("response"), err);
+                output.insert(QStringLiteral("__error"), err);
+                return output;
+            }
         }
 
         // If structure unexpected
+        qWarning() << "GoogleLLMConnector: Invalid response structure. Raw JSON:" << raw;
         const QString err = QStringLiteral("Invalid Google JSON response structure");
         output.insert(QStringLiteral("response"), err);
         output.insert(QStringLiteral("__error"), err);
@@ -246,9 +257,20 @@ void GoogleLLMConnector::onPromptFinished(const QString& response) {
                 return;
             }
         }
+        
+        // If parts array is missing or empty, extract finishReason for diagnostics
+        const QString finishReason = cand0.value(QStringLiteral("finishReason")).toString();
+        if (!finishReason.isEmpty()) {
+            const QString err = QStringLiteral("Google API response incomplete. Reason: %1").arg(finishReason);
+            qWarning() << "GoogleLLMConnector:" << err << "| Raw JSON:" << response;
+            m_lastOutput.insert(QStringLiteral("response"), err);
+            m_lastOutput.insert(QStringLiteral("__error"), err);
+            return;
+        }
     }
 
     const QString err = QStringLiteral("Invalid Google JSON response structure");
+    qWarning() << "GoogleLLMConnector: Invalid response structure. Raw JSON:" << response;
     m_lastOutput.insert(QStringLiteral("response"), err);
     m_lastOutput.insert(QStringLiteral("__error"), err);
 }

@@ -297,6 +297,27 @@ void ExecutionEngine::run()
                 mainPacket.insert(outputKey, newVal);
             }
 
+            // Error handling: check for error _before_ emitting any Finished states
+            const QString errorMsg = result.value(QStringLiteral("__error")).toString();
+            if (!errorMsg.trimmed().isEmpty()) {
+                emit nodeLog(QString::fromLatin1("ExecutionEngine: Error reported by node %1 %2: %3")
+                                 .arg(QString::number(nodeId)).arg(nodeName).arg(errorMsg));
+                // Ensure error flag is visible in main packet as well
+                mainPacket.insert(QStringLiteral("__error"), errorMsg);
+
+                // Mark node and its incoming connections as Error
+                emit nodeStatusChanged(nodeUuid(nodeId), static_cast<int>(ExecutionState::Error));
+                for (const auto &cid : attached) {
+                    if (cid.inNodeId == nodeId) {
+                        emit connectionStatusChanged(connectionUuid(cid), static_cast<int>(ExecutionState::Error));
+                    }
+                }
+
+                aborted = true;
+                break;
+            }
+
+            // Success path: log and mark as Finished
             QString outputsStr;
             for (auto it = result.cbegin(); it != result.cend(); ++it) {
                 if (!outputsStr.isEmpty()) outputsStr += ", ";
@@ -311,17 +332,6 @@ void ExecutionEngine::run()
                 if (cid.inNodeId == nodeId) {
                     emit connectionStatusChanged(connectionUuid(cid), static_cast<int>(ExecutionState::Finished));
                 }
-            }
-
-            // Error handling
-            const QString errorMsg = result.value(QStringLiteral("__error")).toString();
-            if (!errorMsg.trimmed().isEmpty()) {
-                emit nodeLog(QString::fromLatin1("ExecutionEngine: Error reported by node %1 %2: %3")
-                                 .arg(QString::number(nodeId)).arg(nodeName).arg(errorMsg));
-                // Ensure error flag is visible in main packet as well
-                mainPacket.insert(QStringLiteral("__error"), errorMsg);
-                aborted = true;
-                break;
             }
 
             // Execution delay if configured

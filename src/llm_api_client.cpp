@@ -75,7 +75,7 @@ QString LlmApiClient::sendPrompt(ApiProvider provider,
             QJsonObject root;
             root.insert(QStringLiteral("model"), model);
             root.insert(QStringLiteral("temperature"), temperature);
-            root.insert(QStringLiteral("max_tokens"), maxTokens);
+            root.insert(QStringLiteral("max_completion_tokens"), maxTokens);
             root.insert(QStringLiteral("messages"), messages);
 
             const QByteArray jsonBytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
@@ -101,20 +101,35 @@ QString LlmApiClient::sendPrompt(ApiProvider provider,
             return QString::fromStdString(response.text);
         }
         case ApiProvider::Google: {
-            // Google Generative Language API (Gemini) endpoint uses API key in URL query, not Authorization header.
-            const std::string url = std::string("https://generativelanguage.googleapis.com/v1beta/models/")
+            // Google Generative Language (Gemini) stable v1 endpoint.
+            // API key is passed as a query parameter, not via Authorization header.
+            const std::string url = std::string("https://generativelanguage.googleapis.com/v1/models/")
                                     + model.toStdString()
                                     + ":generateContent?key="
                                     + apiKey.toStdString();
 
-            // Build Google-specific JSON payload
-            // contents: [ { parts: [ {text: systemPrompt}, {text: userPrompt} ] } ]
-            QJsonObject systemPart; systemPart.insert(QStringLiteral("text"), systemPrompt);
-            QJsonObject userPart;   userPart.insert(QStringLiteral("text"), userPrompt);
+            // v1 request schema: contents is an array of content objects, each
+            // with its own parts array. We send system and user as separate
+            // content entries to keep semantics clear and future‑proof:
+            //   contents: [
+            //     {"parts":[{"text":"<system>"}]},
+            //     {"parts":[{"text":"<user>"}]}
+            //   ]
+            QJsonArray contents;
 
-            QJsonArray parts; parts.append(systemPart); parts.append(userPart);
-            QJsonObject content; content.insert(QStringLiteral("parts"), parts);
-            QJsonArray contents; contents.append(content);
+            if (!systemPrompt.trimmed().isEmpty()) {
+                QJsonObject sysPart;
+                sysPart.insert(QStringLiteral("text"), systemPrompt);
+                QJsonObject sysContent;
+                sysContent.insert(QStringLiteral("parts"), QJsonArray{sysPart});
+                contents.append(sysContent);
+            }
+
+            QJsonObject userPart;
+            userPart.insert(QStringLiteral("text"), userPrompt);
+            QJsonObject userContent;
+            userContent.insert(QStringLiteral("parts"), QJsonArray{userPart});
+            contents.append(userContent);
 
             QJsonObject generationConfig;
             generationConfig.insert(QStringLiteral("temperature"), temperature);
@@ -137,10 +152,12 @@ QString LlmApiClient::sendPrompt(ApiProvider provider,
             }
             if (response.status_code != 200) {
                 if (!response.text.empty()) {
+                    // Return the raw error JSON so the caller can parse {"error":{...}}
                     return QString::fromStdString(response.text);
                 }
                 return QStringLiteral("HTTP %1").arg(response.status_code);
             }
+            // Success: return the raw JSON body for GoogleLLMConnector to parse.
             return QString::fromStdString(response.text);
         }
     }
