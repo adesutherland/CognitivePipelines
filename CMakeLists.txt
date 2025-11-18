@@ -315,6 +315,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/mainwindow.h
             ${SRC_DIR}/about_dialog.cpp
             ${SRC_DIR}/about_dialog.h
+            ${SRC_DIR}/UserInputDialog.cpp
+            ${SRC_DIR}/UserInputDialog.h
             ${SRC_DIR}/PythonScriptConnector.cpp
             ${SRC_DIR}/PythonScriptConnector.h
             ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.cpp

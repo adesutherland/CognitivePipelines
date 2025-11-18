@@ -52,55 +52,55 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         // Create connector and wrap into ToolNodeDelegate
         auto connector = std::make_shared<LLMConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("Generative AI"));
+    }, QStringLiteral("AI Services"));
 
     // Register PromptBuilderNode via the generic ToolNodeDelegate adapter
     registry->registerModel([this]() {
         auto tool = std::make_shared<PromptBuilderNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
-    }, QStringLiteral("Text"));
+    }, QStringLiteral("Text Utilities"));
 
     // Register TextInputNode via the generic ToolNodeDelegate adapter
     registry->registerModel([this]() {
         auto tool = std::make_shared<TextInputNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
-    }, QStringLiteral("Inputs"));
+    }, QStringLiteral("Input / Output"));
 
-    // Register TextOutputNode under the "Output" category via ToolNodeDelegate
+    // Register TextOutputNode under the "Input / Output" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto tool = std::make_shared<TextOutputNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
-    }, QStringLiteral("Output"));
+    }, QStringLiteral("Input / Output"));
 
-    // Register ProcessConnector under the "Connectors" category via ToolNodeDelegate
+    // Register ProcessConnector under the "External Tools" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto connector = std::make_shared<ProcessConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("Connectors"));
+    }, QStringLiteral("External Tools"));
 
-    // Register GoogleLLMConnector under the "Connectors" category via ToolNodeDelegate
+    // Register GoogleLLMConnector under the "AI Services" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto connector = std::make_shared<GoogleLLMConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("Connectors"));
+    }, QStringLiteral("AI Services"));
 
-    // Register PythonScriptConnector under the "Scripting" category via ToolNodeDelegate
+    // Register PythonScriptConnector under the "External Tools" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto connector = std::make_shared<PythonScriptConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("Scripting"));
+    }, QStringLiteral("External Tools"));
 
-    // Register DatabaseConnector under the "Data" category via ToolNodeDelegate
+    // Register DatabaseConnector under the "Persistence" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto connector = std::make_shared<DatabaseConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("Data"));
+    }, QStringLiteral("Persistence"));
 
-    // Register HumanInputNode under the "I/O" category via ToolNodeDelegate
+    // Register HumanInputNode under the "Input / Output" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto tool = std::make_shared<HumanInputNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
-    }, QStringLiteral("I/O"));
+    }, QStringLiteral("Input / Output"));
 }
 
 void NodeGraphModel::clear()
