@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file>packaging/macos/CognitivePipelines.icns</file>
+        <file>packaging/windows/CognitivePipelines.ico</file>
+        <file>packaging/linux/CognitivePipelines.png</file>
+    </qresource>
+</RCC>

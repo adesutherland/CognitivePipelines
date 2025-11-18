@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.2.0 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.3.0 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -50,6 +50,8 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/paceholder/nodeeditor.git
     GIT_TAG        3.0.12
 )
+# Force QtNodes to build as a static library to avoid Windows DLL export issues
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(QtNodes)
 
 # C++ standard
@@ -133,6 +135,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ExecutionEngine.h
     ${SRC_DIR}/CredentialsEditorDialog.cpp
     ${SRC_DIR}/CredentialsEditorDialog.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
+    ${qtnodes_SOURCE_DIR}/resources/resources.qrc
     $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
 )
 

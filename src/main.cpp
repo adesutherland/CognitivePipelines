@@ -23,10 +23,22 @@
 //
 
 #include <QApplication>
+#include <QIcon>
 #include "mainwindow.h"
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
+
+    // Set application icon (cross-platform)
+    // Note: Using PNG for macOS to avoid "skipping unknown tag type" warnings
+    // from Qt's ICNS plugin when parsing complex .icns files with JPEG2000 compression.
+    // The .icns file is still used by macOS for the app bundle icon via Info.plist.
+#ifdef Q_OS_WIN
+    app.setWindowIcon(QIcon(":/packaging/windows/CognitivePipelines.ico"));
+#else
+    // macOS, Linux, and other platforms - use PNG
+    app.setWindowIcon(QIcon(":/packaging/linux/CognitivePipelines.png"));
+#endif
 
     MainWindow w;
     w.show();
