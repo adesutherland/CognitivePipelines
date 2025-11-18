@@ -46,6 +46,7 @@
 #include <QtNodes/DataFlowGraphicsScene>
 #include <QtNodes/Definitions>
 #include <QtNodes/internal/BasicGraphicsScene.hpp>
+#include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QVBoxLayout>
 #include <QDockWidget>
 #include <QLabel>
@@ -185,6 +186,12 @@ void MainWindow::createActions() {
     editCredentialsAction_->setStatusTip(tr("Open or create accounts.json in the standard app data location"));
     connect(editCredentialsAction_, &QAction::triggered, this, &MainWindow::onEditCredentials);
 
+    // Delete action
+    deleteAction = new QAction(tr("Delete"), this);
+    deleteAction->setShortcuts({QKeySequence::Delete, Qt::Key_Backspace});
+    deleteAction->setStatusTip(tr("Delete selected nodes and connections"));
+    connect(deleteAction, &QAction::triggered, this, &MainWindow::onDeleteSelected);
+
     // Run action (moved from toolbar to the Pipeline menu)
     runAction_ = new QAction(tr("&Run"), this);
     runAction_->setStatusTip(tr("Execute the current pipeline"));
@@ -218,26 +225,32 @@ void MainWindow::createActions() {
 }
 
 void MainWindow::createMenus() {
+    // File menu
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(openAction_);
     fileMenu->addAction(saveAsAction_);
-    fileMenu->addAction(clearCanvasAction_);
-    fileMenu->addSeparator();
-    fileMenu->addAction(editCredentialsAction_);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAction);
 
-    // New View menu containing toggle for Debug Log
+    // Edit menu
+    QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
+    editMenu->addAction(editCredentialsAction_);
+    editMenu->addSeparator();
+    editMenu->addAction(deleteAction);
+    editMenu->addAction(clearCanvasAction_);
+
+    // View menu
     QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
     viewMenu->addAction(showDebugLogAction_);
 
-    // Pipeline menu containing the Run action and Enable Debug Logging toggle
+    // Pipeline menu
     QMenu* pipelineMenu = menuBar()->addMenu(tr("&Pipeline"));
     pipelineMenu->addAction(runAction_);
     pipelineMenu->addSeparator();
     pipelineMenu->addAction(saveOutputAction_);
     pipelineMenu->addAction(enableDebugLoggingAction_);
 
+    // Help menu
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(aboutAction);
 }
@@ -451,6 +464,34 @@ void MainWindow::onClearCanvas()
 
     // Reset the properties panel so it doesn't hold stale pointers
     setPropertiesWidget(nullptr);
+}
+
+void MainWindow::onDeleteSelected()
+{
+    // Get the scene
+    auto* scene = qobject_cast<QtNodes::DataFlowGraphicsScene*>(_graphView ? _graphView->scene() : nullptr);
+    if (!scene || !_graphModel) {
+        return;
+    }
+
+    // Get selected connections and delete them first (to avoid dangling references)
+    const auto selectedItems = scene->selectedItems();
+    for (auto* item : selectedItems) {
+        if (auto* connectionGraphics = dynamic_cast<QtNodes::ConnectionGraphicsObject*>(item)) {
+            _graphModel->deleteConnection(connectionGraphics->connectionId());
+        }
+    }
+
+    // Get selected nodes and delete them
+    const auto selectedNodes = scene->selectedNodes();
+    for (const auto& nodeId : selectedNodes) {
+        _graphModel->deleteNode(nodeId);
+    }
+
+    // Clear the properties panel if any deleted node was being displayed
+    if (!selectedNodes.empty()) {
+        setPropertiesWidget(nullptr);
+    }
 }
 
 void MainWindow::onAbout() {

@@ -76,6 +76,7 @@ private slots:
     void onEditCredentials();
     void onClearCanvas();
     void onSaveOutput();
+    void onDeleteSelected();
 
     // Selection handling
     void onNodeSelected(QtNodes::NodeId nodeId);
@@ -102,6 +103,7 @@ private:
     QAction* enableDebugLoggingAction_ {nullptr};
     QAction* editCredentialsAction_ {nullptr};
     QAction* clearCanvasAction_ {nullptr};
+    QAction* deleteAction {nullptr};
     ExecutionEngine* execEngine_ {nullptr};
 
     NodeGraphModel* _graphModel {nullptr};
