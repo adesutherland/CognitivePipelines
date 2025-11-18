@@ -116,14 +116,14 @@ MainWindow::MainWindow(QWidget* parent)
     propertiesDock_->setWidget(propertiesHost_);
     addDockWidget(Qt::RightDockWidgetArea, propertiesDock_);
 
-    // Create Pipeline Output dock (read-only)
-    pipelineOutputDock_ = new QDockWidget(tr("Pipeline Output"), this);
-    pipelineOutputDock_->setObjectName("PipelineOutputDock");
-    pipelineOutputDock_->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
-    pipelineOutputText_ = new QTextEdit(pipelineOutputDock_);
-    pipelineOutputText_->setReadOnly(true);
-    pipelineOutputDock_->setWidget(pipelineOutputText_);
-    addDockWidget(Qt::BottomDockWidgetArea, pipelineOutputDock_);
+    // Create Stage Output dock (read-only)
+    stageOutputDock_ = new QDockWidget(tr("Stage Output"), this);
+    stageOutputDock_->setObjectName("StageOutputDock");
+    stageOutputDock_->setAllowedAreas(Qt::BottomDockWidgetArea | Qt::TopDockWidgetArea);
+    stageOutputText_ = new QTextEdit(stageOutputDock_);
+    stageOutputText_->setReadOnly(true);
+    stageOutputDock_->setWidget(stageOutputText_);
+    addDockWidget(Qt::BottomDockWidgetArea, stageOutputDock_);
 
     // Create Debug Log dock (read-only, hidden by default)
     debugLogDock_ = new QDockWidget(tr("Debug Log"), this);
@@ -200,7 +200,7 @@ void MainWindow::createActions() {
 
     // Save last output action (Pipeline menu)
     saveOutputAction_ = new QAction(tr("Save Last Output..."), this);
-    saveOutputAction_->setStatusTip(tr("Save the text content from the Pipeline Output dock to a file"));
+    saveOutputAction_->setStatusTip(tr("Save the text content from the Stage Output dock to a file"));
     connect(saveOutputAction_, &QAction::triggered, this, &MainWindow::onSaveOutput);
 
     // View menu action to toggle debug log dock
@@ -312,11 +312,13 @@ void MainWindow::onSelectionChanged()
     const auto sel = scene->selectedNodes();
     if (sel.empty()) {
         setPropertiesWidget(nullptr);
+        refreshStageOutput();
         return;
     }
 
     // For now, take the first selected node
     onNodeSelected(*sel.begin());
+    refreshStageOutput();
 }
 
 void MainWindow::onSaveAs()
@@ -491,6 +493,7 @@ void MainWindow::onDeleteSelected()
     // Clear the properties panel if any deleted node was being displayed
     if (!selectedNodes.empty()) {
         setPropertiesWidget(nullptr);
+        refreshStageOutput();
     }
 }
 
@@ -513,12 +516,13 @@ void MainWindow::onPipelineFinished(const DataPacket& finalOutput)
     } else {
         text = tr("<no output>");
     }
-    if (pipelineOutputText_) {
-        pipelineOutputText_->setMarkdown(text);
+    if (stageOutputText_) {
+        stageOutputText_->setMarkdown(text);
     }
-    if (pipelineOutputDock_ && !pipelineOutputDock_->isVisible()) {
-        pipelineOutputDock_->show();
+    if (stageOutputDock_ && !stageOutputDock_->isVisible()) {
+        stageOutputDock_->show();
     }
+    refreshStageOutput();
 }
 
 void MainWindow::onNodeLog(const QString& message)
@@ -595,6 +599,51 @@ void MainWindow::onNodeRepaint(const QUuid& nodeUuid)
     scene->update();
 }
 
+void MainWindow::refreshStageOutput()
+{
+    if (!stageOutputText_ || !_graphView || !execEngine_) {
+        return;
+    }
+
+    auto* scene = qobject_cast<QtNodes::DataFlowGraphicsScene*>(_graphView->scene());
+    if (!scene) {
+        stageOutputText_->setPlainText(tr("No scene available."));
+        return;
+    }
+
+    const auto selectedNodes = scene->selectedNodes();
+    
+    if (selectedNodes.empty()) {
+        stageOutputText_->setPlainText(tr("Select a single node to view output."));
+        return;
+    }
+    
+    if (selectedNodes.size() > 1) {
+        stageOutputText_->setPlainText(tr("Multiple nodes selected. Select a single node to view output."));
+        return;
+    }
+
+    // Exactly one node selected
+    const QtNodes::NodeId nodeId = *selectedNodes.begin();
+    const DataPacket packet = execEngine_->nodeOutput(nodeId);
+
+    if (packet.isEmpty()) {
+        stageOutputText_->setPlainText(tr("No output data available for this node.\n(Node may not have been executed yet.)"));
+        return;
+    }
+
+    // Format the packet as Markdown
+    QStringList lines;
+    for (auto it = packet.cbegin(); it != packet.cend(); ++it) {
+        const QString key = it.key();
+        const QString value = it.value().toString();
+        lines << QStringLiteral("**%1**: %2").arg(key, value);
+    }
+    
+    const QString markdown = lines.join(QStringLiteral("\n\n"));
+    stageOutputText_->setMarkdown(markdown);
+}
+
 void MainWindow::onSaveOutput()
 {
     // Prompt user for destination file
@@ -607,11 +656,11 @@ void MainWindow::onSaveOutput()
         return;
     }
 
-    if (!pipelineOutputText_) {
+    if (!stageOutputText_) {
         return;
     }
 
-    const QString text = pipelineOutputText_->toPlainText();
+    const QString text = stageOutputText_->toPlainText();
 
     QFile file(fileName);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {

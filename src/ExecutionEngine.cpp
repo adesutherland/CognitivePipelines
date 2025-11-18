@@ -276,7 +276,10 @@ void ExecutionEngine::run()
                 break;
             }
 
-            _nodeOutputs[nodeId] = result;
+            {
+                QMutexLocker locker(&_outputMutex);
+                _nodeOutputs[nodeId] = result;
+            }
 
             // Merge output into the main (cumulative) packet using namespaced CURRENT/OLD keys per pin
             const QUuid thisNodeUuid = nodeUuid(nodeId);
@@ -350,4 +353,10 @@ void ExecutionEngine::run()
 void ExecutionEngine::setExecutionDelay(int ms)
 {
     m_executionDelay = ms;
+}
+
+DataPacket ExecutionEngine::nodeOutput(QtNodes::NodeId nodeId) const
+{
+    QMutexLocker locker(&_outputMutex);
+    return _nodeOutputs.value(nodeId);
 }

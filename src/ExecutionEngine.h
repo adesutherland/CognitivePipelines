@@ -28,6 +28,7 @@
 #include <QPointer>
 #include <QMap>
 #include <QSet>
+#include <QMutex>
 
 #include "CommonDataTypes.h"
 #include "ExecutionState.h"
@@ -56,12 +57,19 @@ public slots:
     void run();
     void setExecutionDelay(int ms);
 
+public:
+    // Thread-safe accessor to retrieve output data for a specific node
+    DataPacket nodeOutput(QtNodes::NodeId nodeId) const;
+
 private:
     // Adjacency list: from nodeId -> set of downstream nodeIds
     QMap<QtNodes::NodeId, QSet<QtNodes::NodeId>> _dag;
 
     // Stores the output packet produced by each node after it executes
     QMap<QtNodes::NodeId, DataPacket> _nodeOutputs;
+
+    // Protects access to _nodeOutputs (mutable allows locking in const methods)
+    mutable QMutex _outputMutex;
 
     NodeGraphModel* _graphModel {nullptr};
 

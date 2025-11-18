@@ -91,6 +91,7 @@ private:
     void createStatusBar();
 
     void setPropertiesWidget(QWidget* w);
+    void refreshStageOutput();
 
     QAction* exitAction {nullptr};
     QAction* openAction_ {nullptr};
@@ -117,8 +118,8 @@ private:
     QPointer<QWidget> currentConfigWidget_ {nullptr};
 
     // Output docks
-    QDockWidget* pipelineOutputDock_ {nullptr};
-    QTextEdit* pipelineOutputText_ {nullptr};
+    QDockWidget* stageOutputDock_ {nullptr};
+    QTextEdit* stageOutputText_ {nullptr};
 
     QDockWidget* debugLogDock_ {nullptr};
     QTextEdit* debugLogText_ {nullptr};
