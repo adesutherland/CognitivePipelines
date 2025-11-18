@@ -65,26 +65,23 @@ void ExecutionAwareNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo
         default:                       borderColor = idleColor; break;
     }
 
-    // 1) Draw node rect (gradient fill as default, but border pen uses our state color and default widths)
+    // Step 1: Draw node body fill (gradient) without border
+    QRectF boundary(0, 0, size.width(), size.height());
+    double const radius = 3.0;
     {
-        // Pen width mirrors default behavior: HoveredPenWidth when hovered, otherwise PenWidth
-        const bool hovered = ngo.nodeState().hovered();
-        QPen pen(borderColor, hovered ? nodeStyle.HoveredPenWidth : nodeStyle.PenWidth);
-        painter->setPen(pen);
-
+        painter->setPen(Qt::NoPen);
+        
         QLinearGradient gradient(QPointF(0.0, 0.0), QPointF(2.0, size.height()));
         gradient.setColorAt(0.0, nodeStyle.GradientColor0);
         gradient.setColorAt(0.10, nodeStyle.GradientColor1);
         gradient.setColorAt(0.90, nodeStyle.GradientColor2);
         gradient.setColorAt(1.0, nodeStyle.GradientColor3);
         painter->setBrush(gradient);
-
-        QRectF boundary(0, 0, size.width(), size.height());
-        double const radius = 3.0;
+        
         painter->drawRoundedRect(boundary, radius, radius);
     }
 
-    // 2) Draw the execution-color title bar background (under text), matching caption height + padding
+    // Step 2: Draw the execution-color title bar background (fill only, no border)
     {
         const QRectF capRect = geometry.captionRect(nodeId);
         const qreal titleH = capRect.height() + 8.0; // small padding similar to default visuals
@@ -94,6 +91,27 @@ void ExecutionAwareNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo
         painter->setBrush(borderColor);
         painter->drawRect(titleBar);
         painter->restore();
+    }
+
+    // Step 3: Draw border outline on top of all fills
+    {
+        const bool hovered = ngo.nodeState().hovered();
+        const bool selected = ngo.isSelected();
+        
+        // Override border styling for selected nodes to ensure high-contrast visual feedback
+        QColor finalBorderColor = borderColor;
+        qreal finalPenWidth = hovered ? nodeStyle.HoveredPenWidth : nodeStyle.PenWidth;
+        
+        if (selected) {
+            finalBorderColor = QColor("#FFD700"); // Gold for high-contrast selection
+            finalPenWidth = 4.0; // Thicker border for visibility
+        }
+        
+        QPen pen(finalBorderColor, finalPenWidth);
+        painter->setPen(pen);
+        painter->setBrush(Qt::NoBrush);
+        
+        painter->drawRoundedRect(boundary, radius, radius);
     }
 
     // 3) Draw connection points and filled points (these should appear on top of the title bar fill)
@@ -181,8 +199,18 @@ void ExecutionAwareConnectionPainter::paint(QPainter *painter, ConnectionGraphic
     const auto &connectionStyle = QtNodes::StyleCollection::connectionStyle();
     const qreal lineWidth = static_cast<qreal>(connectionStyle.lineWidth());
 
-    QPen pen(penColor);
-    pen.setWidthF(lineWidth > 0.0 ? lineWidth : 2.0);
+    // Override pen styling for selected connections to ensure high-contrast visual feedback
+    const bool selected = cgo.isSelected();
+    QColor finalPenColor = penColor;
+    qreal finalPenWidth = lineWidth > 0.0 ? lineWidth : 2.0;
+    
+    if (selected) {
+        finalPenColor = QColor("#FFD700"); // Gold for high-contrast selection
+        finalPenWidth = 4.0; // Thicker line for visibility
+    }
+
+    QPen pen(finalPenColor);
+    pen.setWidthF(finalPenWidth);
     pen.setCapStyle(Qt::RoundCap);
     pen.setJoinStyle(Qt::RoundJoin);
     painter->setPen(pen);
