@@ -15,8 +15,6 @@
 
 #include <QtNodes/internal/AbstractNodePainter.hpp>
 #include <QtNodes/internal/AbstractConnectionPainter.hpp>
-#include <QtNodes/internal/DefaultNodePainter.hpp>
-#include <QtNodes/internal/DefaultConnectionPainter.hpp>
 #include <QtNodes/internal/NodeGraphicsObject.hpp>
 #include <QtNodes/internal/ConnectionGraphicsObject.hpp>
 #include <QtNodes/internal/AbstractNodeGeometry.hpp>
@@ -39,7 +37,6 @@ private:
     static QPen highlightPenFor(ExecutionState state);
 
 private:
-    QtNodes::DefaultNodePainter fallback_{};
     std::shared_ptr<ExecutionStateModel> model_;
     QtNodes::AbstractGraphModel* graphModel_;
     QtNodes::BasicGraphicsScene* scene_;
@@ -58,6 +55,5 @@ private:
     static QPen highlightPenFor(ExecutionState state);
 
 private:
-    QtNodes::DefaultConnectionPainter fallback_{};
     std::shared_ptr<ExecutionStateModel> model_;
 };

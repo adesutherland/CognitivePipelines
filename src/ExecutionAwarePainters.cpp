@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QtNodes/internal/NodeStyle.hpp>
 #include <QtNodes/internal/StyleCollection.hpp>
+#include <QtNodes/internal/DefaultNodePainter.hpp>
 
 using namespace QtNodes;
 
@@ -115,8 +116,11 @@ void ExecutionAwareNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo
     }
 
     // 3) Draw connection points and filled points (these should appear on top of the title bar fill)
-    fallback_.drawConnectionPoints(painter, ngo);
-    fallback_.drawFilledConnectionPoints(painter, ngo);
+    // Create a temporary DefaultNodePainter to delegate to its helper methods
+    // This avoids storing it as a member, which causes Windows DLL export issues
+    QtNodes::DefaultNodePainter defaultPainter;
+    defaultPainter.drawConnectionPoints(painter, ngo);
+    defaultPainter.drawFilledConnectionPoints(painter, ngo);
 
     // 4) Draw caption text with state-aware contrast and adjusted vertical alignment,
     //    then draw entry labels (both on top of the title bar)
@@ -150,10 +154,10 @@ void ExecutionAwareNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo
             painter->setFont(f);
         }
     }
-    fallback_.drawEntryLabels(painter, ngo);
+    defaultPainter.drawEntryLabels(painter, ngo);
 
     // 5) Draw resize handle if any
-    fallback_.drawResizeRect(painter, ngo);
+    defaultPainter.drawResizeRect(painter, ngo);
 }
 
 QPen ExecutionAwareConnectionPainter::highlightPenFor(ExecutionState state)
@@ -229,5 +233,13 @@ void ExecutionAwareConnectionPainter::paint(QPainter *painter, ConnectionGraphic
 
 QPainterPath ExecutionAwareConnectionPainter::getPainterStroke(ConnectionGraphicsObject const &cgo) const
 {
-    return fallback_.getPainterStroke(cgo);
+    // Build the cubic path directly (same logic as in paint method)
+    const QPointF &inPt = cgo.endPoint(PortType::In);
+    const QPointF &outPt = cgo.endPoint(PortType::Out);
+    const auto c1c2 = cgo.pointsC1C2();
+
+    QPainterPath path(outPt);
+    path.cubicTo(c1c2.first, c1c2.second, inPt);
+    
+    return path;
 }
