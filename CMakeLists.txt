@@ -51,7 +51,7 @@ FetchContent_Declare(
     GIT_TAG        3.0.12
 )
 # Explicitly build QtNodes as a shared library (required for proper resource loading)
-set(BUILD_SHARED_LIBS ON)
+set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QtNodes as shared library" FORCE)
 FetchContent_MakeAvailable(QtNodes)
 
 # C++ standard
