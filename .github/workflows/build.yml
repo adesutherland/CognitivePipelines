@@ -265,6 +265,13 @@ jobs:
           # Copy Tests
           cp build/bin/unit_tests "${APPDIR}/usr/bin/"
           cp build/bin/integration_tests "${APPDIR}/usr/bin/"
+          # Copy QtNodes shared library (required since BUILD_SHARED_LIBS=ON)
+          echo "Copying QtNodes shared library..."
+          cp build/bin/libQtNodes.so* "${APPDIR}/usr/lib/" || {
+            echo "ERROR: libQtNodes.so not found in build/bin/"; 
+            ls -la build/bin/; 
+            exit 1;
+          }
           # ---Copy desktop files and icon ---
           cp packaging/linux/CognitivePipelines.desktop "${APPDIR}/usr/share/applications/"
           cp packaging/linux/unit_tests.desktop "${APPDIR}/usr/share/applications/"
