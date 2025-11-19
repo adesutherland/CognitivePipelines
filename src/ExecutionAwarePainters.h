@@ -28,8 +28,10 @@
 class ExecutionAwareNodePainter : public QtNodes::AbstractNodePainter
 {
 public:
-    explicit ExecutionAwareNodePainter(std::shared_ptr<ExecutionStateModel> model)
-        : model_(std::move(model)) {}
+    explicit ExecutionAwareNodePainter(std::shared_ptr<ExecutionStateModel> model,
+                                        QtNodes::AbstractGraphModel* graphModel,
+                                        QtNodes::BasicGraphicsScene* scene)
+        : model_(std::move(model)), graphModel_(graphModel), scene_(scene) {}
 
     void paint(QPainter *painter, QtNodes::NodeGraphicsObject &ngo) const override;
 
@@ -39,6 +41,8 @@ private:
 private:
     QtNodes::DefaultNodePainter fallback_{};
     std::shared_ptr<ExecutionStateModel> model_;
+    QtNodes::AbstractGraphModel* graphModel_;
+    QtNodes::BasicGraphicsScene* scene_;
 };
 
 class ExecutionAwareConnectionPainter : public QtNodes::AbstractConnectionPainter

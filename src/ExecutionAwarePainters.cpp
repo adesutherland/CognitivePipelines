@@ -35,9 +35,9 @@ void ExecutionAwareNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo
 {
     // Replicate DefaultNodePainter drawing, but override border and title bar colors based on execution state.
 
-    AbstractGraphModel &model = ngo.graphModel();
+    AbstractGraphModel &model = *graphModel_;
     NodeId const nodeId = ngo.nodeId();
-    AbstractNodeGeometry &geometry = ngo.nodeScene()->nodeGeometry();
+    AbstractNodeGeometry &geometry = scene_->nodeGeometry();
 
     // Fetch style and size
     QJsonDocument json = QJsonDocument::fromVariant(model.nodeData(nodeId, NodeRole::Style));
@@ -121,7 +121,7 @@ void ExecutionAwareNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo
     // 4) Draw caption text with state-aware contrast and adjusted vertical alignment,
     //    then draw entry labels (both on top of the title bar)
     {
-        AbstractGraphModel &model2 = ngo.graphModel();
+        AbstractGraphModel &model2 = *graphModel_;
         NodeId const nodeId2 = ngo.nodeId();
 
         if (model2.nodeData(nodeId2, NodeRole::CaptionVisible).toBool()) {

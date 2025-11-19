@@ -85,7 +85,7 @@ MainWindow::MainWindow(QWidget* parent)
     // Live execution-state highlighting: install custom painters and wire signals
     execStateModel_ = std::make_shared<ExecutionStateModel>(this);
     scene->setNodePainter(std::unique_ptr<QtNodes::AbstractNodePainter>(
-        new ExecutionAwareNodePainter(execStateModel_)));
+        new ExecutionAwareNodePainter(execStateModel_, _graphModel, scene)));
     scene->setConnectionPainter(std::unique_ptr<QtNodes::AbstractConnectionPainter>(
         new ExecutionAwareConnectionPainter(execStateModel_)));
 

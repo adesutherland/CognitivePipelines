@@ -50,8 +50,8 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/paceholder/nodeeditor.git
     GIT_TAG        3.0.12
 )
-# Force QtNodes to build as a static library to avoid Windows DLL export issues
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# Explicitly build QtNodes as a shared library (required for proper resource loading)
+set(BUILD_SHARED_LIBS ON)
 FetchContent_MakeAvailable(QtNodes)
 
 # C++ standard
@@ -136,7 +136,6 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/CredentialsEditorDialog.cpp
     ${SRC_DIR}/CredentialsEditorDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
-    ${qtnodes_SOURCE_DIR}/resources/resources.qrc
     $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
 )
 
@@ -470,22 +469,28 @@ if(APPLE)
             foreach(tgt IN ITEMS CognitivePipelines unit_tests integration_tests)
                 if(TARGET ${tgt})
                     # Deploy Qt frameworks into the app bundle so it runs outside the build machine
-                    find_program(MACDEPLOYQT_EXECUTABLE NAMES macdeployqt
-                                    HINTS
-                                        $ENV{HOMEBREW_PREFIX}/opt/qt/bin
-                                        /usr/local/opt/qt/bin
-                                        /opt/homebrew/opt/qt/bin
-                                        /usr/local/opt/qt6/bin
-                                        /opt/homebrew/opt/qt6/bin
-                                        /usr/local/opt/qt@6/bin
-                                        /opt/homebrew/opt/qt@6/bin)
-                    if(MACDEPLOYQT_EXECUTABLE)
-                        add_custom_command(TARGET ${tgt} POST_BUILD
-                                COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" -always-overwrite -codesign=-
-                                COMMENT "Running macdeployqt on $<TARGET_BUNDLE_DIR:${tgt}>"
-                                VERBATIM)
+                    # Only run macdeployqt for Release/RelWithDebInfo builds to avoid duplicate framework warnings
+                    # in Debug builds when using Homebrew Qt (system frameworks are used via rpath)
+                    if(CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
+                        find_program(MACDEPLOYQT_EXECUTABLE NAMES macdeployqt
+                                        HINTS
+                                            $ENV{HOMEBREW_PREFIX}/opt/qt/bin
+                                            /usr/local/opt/qt/bin
+                                            /opt/homebrew/opt/qt/bin
+                                            /usr/local/opt/qt6/bin
+                                            /opt/homebrew/opt/qt6/bin
+                                            /usr/local/opt/qt@6/bin
+                                            /opt/homebrew/opt/qt@6/bin)
+                        if(MACDEPLOYQT_EXECUTABLE)
+                            add_custom_command(TARGET ${tgt} POST_BUILD
+                                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" -always-overwrite -codesign=-
+                                    COMMENT "Running macdeployqt on $<TARGET_BUNDLE_DIR:${tgt}>"
+                                    VERBATIM)
+                        else()
+                            message(WARNING "macdeployqt not found; Qt frameworks may be missing from ${tgt}.app")
+                        endif()
                     else()
-                        message(WARNING "macdeployqt not found; Qt frameworks may be missing from ${tgt}.app")
+                        message(STATUS "Skipping macdeployqt for ${tgt} in ${CMAKE_BUILD_TYPE} build (using system Qt frameworks)")
                     endif()
 
                     # Ad-hoc sign the resulting bundle so embedded frameworks have a valid cdhash

@@ -4,3 +4,11 @@ accounts.json.template
 
 # Ignore JetBrains IDE project files (local workspace state)
 .idea/
+
+# Ignore CMake build directories (contains compiled artifacts, dependencies, and cache)
+cmake-build-*/
+build/
+out/
+
+# Ignore macOS system files
+.DS_Store
