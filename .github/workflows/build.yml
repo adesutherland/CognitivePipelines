@@ -316,8 +316,11 @@ jobs:
           rm "AppDir_Main/usr/share/applications/unit_tests.desktop"
           rm "AppDir_Main/usr/share/applications/integration_tests.desktop"
           # Run linuxdeployqt on its own clean directory
+          # Use -executable flag to explicitly process libQtNodes.so so it's properly bundled with rpaths
           ./linuxdeployqt-continuous-x86_64.AppImage \
-            "AppDir_Main/usr/share/applications/CognitivePipelines.desktop" -appimage
+            "AppDir_Main/usr/share/applications/CognitivePipelines.desktop" \
+            -executable="AppDir_Main/usr/lib/libQtNodes.so" \
+            -appimage
           # This will create 'CognitivePipelines-....AppImage'
           # Build Unit Tests ---
           echo "Building unit_tests AppImage..."
@@ -325,8 +328,11 @@ jobs:
           rm "AppDir_Unit/usr/share/applications/CognitivePipelines.desktop"
           rm "AppDir_Unit/usr/share/applications/integration_tests.desktop"
           # Run linuxdeployqt on its own clean directory
+          # Use -executable flag to explicitly process libQtNodes.so so it's properly bundled with rpaths
           ./linuxdeployqt-continuous-x86_64.AppImage \
-            "AppDir_Unit/usr/share/applications/unit_tests.desktop" -appimage
+            "AppDir_Unit/usr/share/applications/unit_tests.desktop" \
+            -executable="AppDir_Unit/usr/lib/libQtNodes.so" \
+            -appimage
           # This will create 'CognitivePipelines_unit_tests-....AppImage'
           # Build Integration Tests ---
           echo "Building integration_tests AppImage..."
@@ -334,8 +340,11 @@ jobs:
           rm "AppDir_Integration/usr/share/applications/CognitivePipelines.desktop"
           rm "AppDir_Integration/usr/share/applications/unit_tests.desktop"
           # Run linuxdeployqt on its own clean directory
+          # Use -executable flag to explicitly process libQtNodes.so so it's properly bundled with rpaths
           ./linuxdeployqt-continuous-x86_64.AppImage \
-            "AppDir_Integration/usr/share/applications/integration_tests.desktop" -appimage
+            "AppDir_Integration/usr/share/applications/integration_tests.desktop" \
+            -executable="AppDir_Integration/usr/lib/libQtNodes.so" \
+            -appimage
           # This will create 'CognitivePipelines_integration_tests-....AppImage'
           # Clean up temporary directories ---
           echo "Cleaning up temporary AppDirs..."
