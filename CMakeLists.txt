@@ -136,6 +136,7 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/CredentialsEditorDialog.cpp
     ${SRC_DIR}/CredentialsEditorDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
+    ${qtnodes_SOURCE_DIR}/resources/resources.qrc
     $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
 )
 
