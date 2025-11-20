@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.3.0 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.4.4 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -101,6 +101,17 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
     ${SRC_DIR}/GoogleLLMConnector.cpp
     ${SRC_DIR}/GoogleLLMConnector.h
+    ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
+    ${SRC_DIR}/UniversalLLMPropertiesWidget.h
+    ${SRC_DIR}/UniversalLLMNode.cpp
+    ${SRC_DIR}/UniversalLLMNode.h
+    ${SRC_DIR}/backends/ILLMBackend.h
+    ${SRC_DIR}/backends/OpenAIBackend.cpp
+    ${SRC_DIR}/backends/OpenAIBackend.h
+    ${SRC_DIR}/backends/GoogleBackend.cpp
+    ${SRC_DIR}/backends/GoogleBackend.h
+    ${SRC_DIR}/core/LLMProviderRegistry.cpp
+    ${SRC_DIR}/core/LLMProviderRegistry.h
     ${SRC_DIR}/PromptBuilderNode.cpp
     ${SRC_DIR}/PromptBuilderNode.h
     ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
@@ -146,6 +157,8 @@ add_executable(CognitivePipelines
 target_include_directories(CognitivePipelines PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${SRC_DIR}
+    ${SRC_DIR}/backends
+    ${SRC_DIR}/core
     ${Boost_INCLUDE_DIRS}
 )
 
@@ -290,6 +303,17 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
+            ${SRC_DIR}/UniversalLLMNode.cpp
+            ${SRC_DIR}/UniversalLLMNode.h
+            ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
+            ${SRC_DIR}/UniversalLLMPropertiesWidget.h
+            ${SRC_DIR}/core/LLMProviderRegistry.cpp
+            ${SRC_DIR}/core/LLMProviderRegistry.h
+            ${SRC_DIR}/backends/ILLMBackend.h
+            ${SRC_DIR}/backends/OpenAIBackend.cpp
+            ${SRC_DIR}/backends/OpenAIBackend.h
+            ${SRC_DIR}/backends/GoogleBackend.cpp
+            ${SRC_DIR}/backends/GoogleBackend.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
     target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)

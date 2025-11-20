@@ -30,6 +30,7 @@
 #include "TextInputNode.h"
 #include "ProcessConnector.h"
 #include "GoogleLLMConnector.h"
+#include "UniversalLLMNode.h"
 #include "PythonScriptConnector.h"
 #include "DatabaseConnector.h"
 #include "TextOutputNode.h"
@@ -81,6 +82,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // Register GoogleLLMConnector under the "AI Services" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto connector = std::make_shared<GoogleLLMConnector>();
+        return std::make_unique<ToolNodeDelegate>(connector);
+    }, QStringLiteral("AI Services"));
+
+    // Register UniversalLLMNode under the "AI Services" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto connector = std::make_shared<UniversalLLMNode>();
         return std::make_unique<ToolNodeDelegate>(connector);
     }, QStringLiteral("AI Services"));
 
