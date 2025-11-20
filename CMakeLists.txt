@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.4.4 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.4.5 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -91,16 +91,6 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/UserInputDialog.h
     ${SRC_DIR}/PythonScriptConnector.cpp
     ${SRC_DIR}/PythonScriptConnector.h
-    ${SRC_DIR}/llm_api_client.cpp
-    ${SRC_DIR}/llm_api_client.h
-    ${SRC_DIR}/LLMConnector.cpp
-    ${SRC_DIR}/LLMConnector.h
-    ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
-    ${SRC_DIR}/LLMConnectorPropertiesWidget.h
-    ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.cpp
-    ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
-    ${SRC_DIR}/GoogleLLMConnector.cpp
-    ${SRC_DIR}/GoogleLLMConnector.h
     ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
     ${SRC_DIR}/UniversalLLMPropertiesWidget.h
     ${SRC_DIR}/UniversalLLMNode.cpp
@@ -240,17 +230,14 @@ if(ENABLE_TESTING)
 
     # Unit Tests (GTest)
     add_executable(unit_tests
-            tests/test_llm_api_client.cpp
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
             tests/test_text_output_fanout.cpp
             tests/test_invalid_model_pipeline.cpp
             tests/test_process_connector.cpp
-            tests/test_google_llm_connector.cpp
+            tests/test_universal_llm.cpp
             tests/test_logging.cpp
             # Sources required by the unit tests
-            ${SRC_DIR}/llm_api_client.cpp
-            ${SRC_DIR}/llm_api_client.h
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
             ${SRC_DIR}/NodeGraphModel.cpp
@@ -281,14 +268,6 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/about_dialog.h
             ${SRC_DIR}/CredentialsEditorDialog.cpp
             ${SRC_DIR}/CredentialsEditorDialog.h
-            ${SRC_DIR}/LLMConnector.cpp
-            ${SRC_DIR}/LLMConnector.h
-            ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/LLMConnectorPropertiesWidget.h
-            ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
-            ${SRC_DIR}/GoogleLLMConnector.cpp
-            ${SRC_DIR}/GoogleLLMConnector.h
             ${SRC_DIR}/ProcessConnector.cpp
             ${SRC_DIR}/ProcessConnector.h
             ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
@@ -349,16 +328,17 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/PythonScriptConnector.h
             ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.cpp
             ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.h
-            ${SRC_DIR}/llm_api_client.cpp
-            ${SRC_DIR}/llm_api_client.h
-            ${SRC_DIR}/LLMConnector.cpp
-            ${SRC_DIR}/LLMConnector.h
-            ${SRC_DIR}/LLMConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/LLMConnectorPropertiesWidget.h
-            ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/GoogleLLMConnectorPropertiesWidget.h
-            ${SRC_DIR}/GoogleLLMConnector.cpp
-            ${SRC_DIR}/GoogleLLMConnector.h
+            ${SRC_DIR}/UniversalLLMNode.cpp
+            ${SRC_DIR}/UniversalLLMNode.h
+            ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
+            ${SRC_DIR}/UniversalLLMPropertiesWidget.h
+            ${SRC_DIR}/core/LLMProviderRegistry.cpp
+            ${SRC_DIR}/core/LLMProviderRegistry.h
+            ${SRC_DIR}/backends/ILLMBackend.h
+            ${SRC_DIR}/backends/OpenAIBackend.cpp
+            ${SRC_DIR}/backends/OpenAIBackend.h
+            ${SRC_DIR}/backends/GoogleBackend.cpp
+            ${SRC_DIR}/backends/GoogleBackend.h
             ${SRC_DIR}/PromptBuilderNode.cpp
             ${SRC_DIR}/PromptBuilderNode.h
             ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp

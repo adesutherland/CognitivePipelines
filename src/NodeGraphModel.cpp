@@ -24,12 +24,10 @@
 #include "NodeGraphModel.h"
 #include <QtNodes/NodeDelegateModelRegistry>
 
-#include "LLMConnector.h"
 #include "PromptBuilderNode.h"
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
 #include "ProcessConnector.h"
-#include "GoogleLLMConnector.h"
 #include "UniversalLLMNode.h"
 #include "PythonScriptConnector.h"
 #include "DatabaseConnector.h"
@@ -46,14 +44,7 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // By overriding setPortData below to return false without forwarding to NodeDelegateModel,
     // we prevent QtNodes from calling ToolNodeDelegate::setInData during connection changes/load.
 
-    // Register LLMConnector via the generic ToolNodeDelegate adapter
     auto registry = dataModelRegistry();
-
-    registry->registerModel([this]() {
-        // Create connector and wrap into ToolNodeDelegate
-        auto connector = std::make_shared<LLMConnector>();
-        return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("AI Services"));
 
     // Register PromptBuilderNode via the generic ToolNodeDelegate adapter
     registry->registerModel([this]() {
@@ -78,12 +69,6 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto connector = std::make_shared<ProcessConnector>();
         return std::make_unique<ToolNodeDelegate>(connector);
     }, QStringLiteral("External Tools"));
-
-    // Register GoogleLLMConnector under the "AI Services" category via ToolNodeDelegate
-    registry->registerModel([this]() {
-        auto connector = std::make_shared<GoogleLLMConnector>();
-        return std::make_unique<ToolNodeDelegate>(connector);
-    }, QStringLiteral("AI Services"));
 
     // Register UniversalLLMNode under the "AI Services" category via ToolNodeDelegate
     registry->registerModel([this]() {

@@ -63,7 +63,6 @@ void LLMProviderRegistry::registerBackend(std::shared_ptr<ILLMBackend> backend) 
         qWarning() << "LLMProviderRegistry::registerBackend: Backend with id" << id << "already registered. Replacing.";
     }
     m_backends[id] = backend;
-    qDebug() << "LLMProviderRegistry: Registered backend" << backend->name() << "with id" << id;
 }
 
 ILLMBackend* LLMProviderRegistry::getBackend(const QString& id) {
@@ -104,7 +103,6 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
 
     QFile f(path);
     if (!f.exists()) {
-        qDebug() << "LLMProviderRegistry::getCredential: accounts.json not found at" << path;
         return {};
     }
 
@@ -135,12 +133,10 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
         if (name.compare(providerId, Qt::CaseInsensitive) == 0) {
             const QString key = acc.value(QStringLiteral("api_key")).toString();
             if (!key.isEmpty()) {
-                qDebug() << "LLMProviderRegistry::getCredential: Found credential for provider" << providerId;
                 return key;
             }
         }
     }
 
-    qDebug() << "LLMProviderRegistry::getCredential: No credential found for provider" << providerId;
     return {};
 }

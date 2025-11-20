@@ -121,21 +121,34 @@ void UniversalLLMPropertiesWidget::onProviderChanged(int index)
 
     const QString providerId = m_providerCombo->itemData(index).toString();
     
-    // Clear existing models
-    const QSignalBlocker blocker(m_modelCombo);
-    m_modelCombo->clear();
+    // Clear existing models and repopulate
+    {
+        const QSignalBlocker blocker(m_modelCombo);
+        m_modelCombo->clear();
 
-    // Get backend and populate models
-    ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId);
-    if (backend) {
-        const QStringList models = backend->availableModels();
-        for (const QString& model : models) {
-            m_modelCombo->addItem(model, model);
+        // Get backend and populate models
+        ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId);
+        if (backend) {
+            const QStringList models = backend->availableModels();
+            for (const QString& model : models) {
+                m_modelCombo->addItem(model, model);
+            }
         }
-    }
+        
+        // Set default model to first item if available
+        if (m_modelCombo->count() > 0) {
+            m_modelCombo->setCurrentIndex(0);
+        }
+    } // QSignalBlocker goes out of scope here
 
     // Emit provider changed signal
     emit providerChanged(providerId);
+    
+    // Explicitly emit modelChanged signal with the new default model
+    // This is crucial because QSignalBlocker prevented the automatic signal
+    if (m_modelCombo->count() > 0 && m_modelCombo->currentIndex() >= 0) {
+        emit modelChanged(m_modelCombo->currentData().toString());
+    }
 }
 
 void UniversalLLMPropertiesWidget::setProvider(const QString& providerId)

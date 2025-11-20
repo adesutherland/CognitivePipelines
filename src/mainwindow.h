@@ -25,7 +25,6 @@
 #pragma once
 
 #include <QMainWindow>
-#include "llm_api_client.h"
 #include "ExecutionEngine.h"
 #include "ExecutionStateModel.h"
 #include "UserInputDialog.h"

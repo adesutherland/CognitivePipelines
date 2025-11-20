@@ -162,10 +162,28 @@ QFuture<DataPacket> UniversalLLMNode::Execute(const DataPacket& inputs)
             return output;
         }
 
+        // Validate model exists for the backend, fallback if mismatch detected
+        QString validatedModelId = modelId;
+        const QStringList availableModels = backend->availableModels();
+        if (!availableModels.contains(modelId)) {
+            if (!availableModels.isEmpty()) {
+                validatedModelId = availableModels.first();
+                qWarning() << "UniversalLLMNode: Warning: Model mismatch detected. Model '" 
+                          << modelId << "' not available for provider '" << providerId 
+                          << "'. Auto-recovering to '" << validatedModelId << "'.";
+            } else {
+                const QString err = QStringLiteral("ERROR: No models available for provider '%1'.").arg(providerId);
+                qWarning() << "UniversalLLMNode:" << err;
+                output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+                output.insert(QStringLiteral("__error"), err);
+                return output;
+            }
+        }
+
         // Delegate to backend strategy
         LLMResult result;
         try {
-            result = backend->sendPrompt(apiKey, modelId, temperature, maxTokens, 
+            result = backend->sendPrompt(apiKey, validatedModelId, temperature, maxTokens, 
                                         systemPrompt, userPrompt);
         } catch (const std::exception& e) {
             const QString err = QStringLiteral("ERROR: Exception during backend call: %1").arg(QString::fromUtf8(e.what()));
@@ -183,7 +201,7 @@ QFuture<DataPacket> UniversalLLMNode::Execute(const DataPacket& inputs)
 
         // Handle error case
         if (result.hasError) {
-            output.insert(QString::fromLatin1(kOutputResponseId), result.errorMsg);
+            output.insert(QString::fromLatin1(kOutputResponseId), result.content);
             output.insert(QStringLiteral("__error"), result.errorMsg);
             // Still include raw response for debugging
             output.insert(QStringLiteral("_raw_response"), result.rawResponse);
@@ -230,13 +248,11 @@ void UniversalLLMNode::loadState(const QJsonObject& data)
 void UniversalLLMNode::onProviderChanged(const QString& providerId)
 {
     m_providerId = providerId;
-    qDebug() << "UniversalLLMNode: Provider changed to" << providerId;
 }
 
 void UniversalLLMNode::onModelChanged(const QString& modelId)
 {
     m_modelId = modelId;
-    qDebug() << "UniversalLLMNode: Model changed to" << modelId;
 }
 
 void UniversalLLMNode::onSystemPromptChanged(const QString& text)

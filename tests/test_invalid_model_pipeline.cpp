@@ -8,8 +8,9 @@
 #include "ExecutionEngine.h"
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
-#include "LLMConnector.h"
+#include "UniversalLLMNode.h"
 #include "PromptBuilderNode.h"
+#include "core/LLMProviderRegistry.h"
 
 using namespace QtNodes;
 
@@ -45,20 +46,24 @@ static bool runEngineAndWait(ExecutionEngine& engine, DataPacket& finalOut, int 
     return finished;
 }
 
-TEST(LLMConnectorInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
+TEST(UniversalLLMInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
 {
     ensureApp();
 
     // Skip if no credentials: use the same resolver as the app
-    if (LLMConnector::getApiKey().isEmpty()) {
+    QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
+    if (apiKey.isEmpty()) {
+        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
+    }
+    if (apiKey.isEmpty()) {
         GTEST_SKIP() << "OPENAI_API_KEY not set and no accounts.json (standard app config dir) found; skipping invalid-model test.";
     }
 
     NodeGraphModel model;
 
-    // Build pipeline: TextInput -> LLMConnector
+    // Build pipeline: TextInput -> UniversalLLM
     const NodeId textNodeId = model.addNode(QStringLiteral("text-input"));
-    const NodeId llmNodeId = model.addNode(QStringLiteral("llm-connector"));
+    const NodeId llmNodeId = model.addNode(QStringLiteral("universal-llm"));
     ASSERT_NE(textNodeId, InvalidNodeId);
     ASSERT_NE(llmNodeId, InvalidNodeId);
 
@@ -75,36 +80,50 @@ TEST(LLMConnectorInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
         tool->setText(QStringLiteral("Say hello."));
     }
 
-    // Access LLMConnector
-    LLMConnector* llm = nullptr;
+    // Access UniversalLLMNode
+    UniversalLLMNode* llm = nullptr;
     {
         auto* del = model.delegateModel<ToolNodeDelegate>(llmNodeId);
         ASSERT_NE(del, nullptr);
         auto c = del->connector();
         ASSERT_TRUE(c);
-        llm = dynamic_cast<LLMConnector*>(c.get());
+        llm = dynamic_cast<UniversalLLMNode*>(c.get());
         ASSERT_NE(llm, nullptr);
     }
 
     ExecutionEngine engine(&model);
 
     // First run with a valid model to establish a baseline (may still be error due to network)
-    llm->onModelNameChanged(QStringLiteral("gpt-4o-mini"));
+    {
+        QJsonObject state;
+        state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
+        state.insert(QStringLiteral("model"), QStringLiteral("gpt-5-mini"));
+        state.insert(QStringLiteral("temperature"), 1.0);
+        state.insert(QStringLiteral("maxTokens"), 100);
+        llm->loadState(state);
+    }
 
     DataPacket out1;
     ASSERT_TRUE(runEngineAndWait(engine, out1, 60000)) << "Engine did not finish for valid model run";
-    const QString resp1 = out1.value(QString::fromLatin1(LLMConnector::kOutputResponseId)).toString();
+    const QString resp1 = out1.value(QString::fromLatin1(UniversalLLMNode::kOutputResponseId)).toString();
 
-    // Second run with an invalid model; should not repeat resp1 and should surface an error message
-    llm->onModelNameChanged(QStringLiteral("gpt-3.5-turboxxx"));
+    // Second run with invalid maxTokens (0); should not repeat resp1 and should surface an error message
+    {
+        QJsonObject state;
+        state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
+        state.insert(QStringLiteral("model"), QStringLiteral("gpt-5-mini"));
+        state.insert(QStringLiteral("temperature"), 1.0);
+        state.insert(QStringLiteral("maxTokens"), 0); // Invalid: 0 tokens should trigger API error
+        llm->loadState(state);
+    }
 
     DataPacket out2;
     ASSERT_TRUE(runEngineAndWait(engine, out2, 60000)) << "Engine did not finish for invalid model run";
-    ASSERT_TRUE(out2.contains(QString::fromLatin1(LLMConnector::kOutputResponseId)));
-    const QString resp2 = out2.value(QString::fromLatin1(LLMConnector::kOutputResponseId)).toString();
+    ASSERT_TRUE(out2.contains(QString::fromLatin1(UniversalLLMNode::kOutputResponseId)));
+    const QString resp2 = out2.value(QString::fromLatin1(UniversalLLMNode::kOutputResponseId)).toString();
 
     // Ensure not stale: response must differ across runs
-    EXPECT_NE(resp1, resp2) << "LLMConnector emitted stale output when model was invalid";
+    EXPECT_NE(resp1, resp2) << "UniversalLLMNode emitted stale output when model was invalid";
 
     // Check for expected error indicators
     const QString lc = resp2.toLower();
@@ -112,19 +131,23 @@ TEST(LLMConnectorInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
     EXPECT_TRUE(looksLikeApiError) << "Unexpected response for invalid model: " << resp2.toStdString();
 }
 
-TEST(LLMConnectorInvalidModelTest, StopsPipelineOnError)
+TEST(UniversalLLMInvalidModelTest, StopsPipelineOnError)
 {
     ensureApp();
 
-    if (LLMConnector::getApiKey().isEmpty()) {
+    QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
+    if (apiKey.isEmpty()) {
+        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
+    }
+    if (apiKey.isEmpty()) {
         GTEST_SKIP() << "OPENAI_API_KEY not set and no accounts.json (standard app config dir) found; skipping stop-on-error test.";
     }
 
     NodeGraphModel model;
 
-    // Build pipeline: TextInput -> LLMConnector -> PromptBuilder
+    // Build pipeline: TextInput -> UniversalLLM -> PromptBuilder
     const NodeId textNodeId = model.addNode(QStringLiteral("text-input"));
-    const NodeId llmNodeId = model.addNode(QStringLiteral("llm-connector"));
+    const NodeId llmNodeId = model.addNode(QStringLiteral("universal-llm"));
     const NodeId promptNodeId = model.addNode(QStringLiteral("prompt-builder"));
     ASSERT_NE(textNodeId, InvalidNodeId);
     ASSERT_NE(llmNodeId, InvalidNodeId);
@@ -143,15 +166,21 @@ TEST(LLMConnectorInvalidModelTest, StopsPipelineOnError)
         ASSERT_NE(tool, nullptr);
         tool->setText(QStringLiteral("Hello"));
     }
-    LLMConnector* llm = nullptr;
+    UniversalLLMNode* llm = nullptr;
     {
         auto* del = model.delegateModel<ToolNodeDelegate>(llmNodeId);
         ASSERT_NE(del, nullptr);
         auto c = del->connector();
         ASSERT_TRUE(c);
-        llm = dynamic_cast<LLMConnector*>(c.get());
+        llm = dynamic_cast<UniversalLLMNode*>(c.get());
         ASSERT_NE(llm, nullptr);
-        llm->onModelNameChanged(QStringLiteral("gpt-3.5-turboxxx")); // invalid
+        // Configure with valid model but invalid maxTokens (0) to trigger API error
+        QJsonObject state;
+        state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
+        state.insert(QStringLiteral("model"), QStringLiteral("gpt-5-mini"));
+        state.insert(QStringLiteral("temperature"), 1.0);
+        state.insert(QStringLiteral("maxTokens"), 0); // Invalid: 0 tokens should trigger API error
+        llm->loadState(state);
     }
     {
         auto* del = model.delegateModel<ToolNodeDelegate>(promptNodeId);
@@ -174,11 +203,11 @@ TEST(LLMConnectorInvalidModelTest, StopsPipelineOnError)
     DataPacket out;
     ASSERT_TRUE(runEngineAndWait(engine, out, 60000));
 
-    // We expect only Text Input and LLM Connector to execute; Prompt Builder should not run
+    // We expect only Text Input and Universal AI to execute; Prompt Builder should not run
     ASSERT_GE(execMsgs.size(), 2);
     const QString all = execMsgs.join("\n");
     EXPECT_NE(all.indexOf("Text Input"), -1);
-    EXPECT_NE(all.indexOf("LLM Connector"), -1);
+    EXPECT_NE(all.indexOf("Universal AI"), -1);
     EXPECT_EQ(all.indexOf("Prompt Builder"), -1) << all.toStdString();
 
     // Final output should carry the error flag

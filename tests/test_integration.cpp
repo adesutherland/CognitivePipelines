@@ -22,7 +22,8 @@
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
 #include "PromptBuilderNode.h"
-#include "LLMConnector.h"
+#include "UniversalLLMNode.h"
+#include "core/LLMProviderRegistry.h"
 
 using namespace QtNodes;
 
@@ -110,7 +111,7 @@ void IntegrationTests::test_FullPipelineExecution()
 {
     QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
     if (apiKey.isEmpty()) {
-        apiKey = LLMConnector::getApiKey();
+        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
     }
     if (apiKey.isEmpty()) {
         QSKIP("Neither OPENAI_API_KEY is set nor accounts.json (standard app config dir) found; skipping live integration test.");
@@ -122,10 +123,10 @@ void IntegrationTests::test_FullPipelineExecution()
     // Ensure a clean model
     model_->clear();
 
-    // Build pipeline: TextInput -> PromptBuilder -> LLMConnector
+    // Build pipeline: TextInput -> PromptBuilder -> UniversalLLM
     const NodeId textNodeId = model_->addNode(QStringLiteral("text-input"));
     const NodeId promptNodeId = model_->addNode(QStringLiteral("prompt-builder"));
-    const NodeId llmNodeId = model_->addNode(QStringLiteral("llm-connector"));
+    const NodeId llmNodeId = model_->addNode(QStringLiteral("universal-llm"));
 
     QVERIFY(textNodeId != InvalidNodeId);
     QVERIFY(promptNodeId != InvalidNodeId);
@@ -156,10 +157,13 @@ void IntegrationTests::test_FullPipelineExecution()
         auto* del = model_->delegateModel<ToolNodeDelegate>(llmNodeId);
         QVERIFY(del != nullptr);
         auto c = del->connector();
-        auto* tool = dynamic_cast<LLMConnector*>(c.get());
+        auto* tool = dynamic_cast<UniversalLLMNode*>(c.get());
         QVERIFY(tool != nullptr);
-        // Leave tool prompt empty; it will use upstream prompt
-        tool->setPrompt(QString{});
+        // Configure via loadState: set provider to "openai" and model to "gpt-5-mini"
+        QJsonObject state;
+        state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
+        state.insert(QStringLiteral("model"), QStringLiteral("gpt-5-mini"));
+        tool->loadState(state);
     }
 
     // Run and wait for completion
@@ -182,8 +186,8 @@ void IntegrationTests::test_FullPipelineExecution()
     loop.exec();
 
     QVERIFY(finished);
-    QVERIFY(finalOut.contains(QString::fromLatin1(LLMConnector::kOutputResponseId)));
-    const QString response = finalOut.value(QString::fromLatin1(LLMConnector::kOutputResponseId)).toString();
+    QVERIFY(finalOut.contains(QString::fromLatin1(UniversalLLMNode::kOutputResponseId)));
+    const QString response = finalOut.value(QString::fromLatin1(UniversalLLMNode::kOutputResponseId)).toString();
     QVERIFY(!response.trimmed().isEmpty());
 }
 

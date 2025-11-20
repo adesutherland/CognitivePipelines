@@ -38,12 +38,16 @@ QString OpenAIBackend::name() const {
 
 QStringList OpenAIBackend::availableModels() const {
     return {
-        QStringLiteral("gpt-4o"),
-        QStringLiteral("gpt-4o-mini"),
-        QStringLiteral("o1-preview"),
-        QStringLiteral("o1-mini"),
-        QStringLiteral("gpt-4-turbo"),
-        QStringLiteral("gpt-3.5-turbo")
+        QStringLiteral("gpt-5.1"),
+        QStringLiteral("gpt-5-pro"),
+        QStringLiteral("gpt-5"),
+        QStringLiteral("gpt-5-mini"),
+        QStringLiteral("gpt-5-nano"),
+        QStringLiteral("gpt-4.1"),
+        QStringLiteral("o3-deep-research"),
+        QStringLiteral("o4-mini-deep-research"),
+        QStringLiteral("gpt-image-1"),
+        QStringLiteral("gpt-image-1-mini")
     };
 }
 
@@ -91,6 +95,7 @@ LLMResult OpenAIBackend::sendPrompt(
     if (response.error) {
         result.hasError = true;
         result.errorMsg = QStringLiteral("Network error: %1").arg(QString::fromStdString(response.error.message));
+        result.content = result.errorMsg;
         return result;
     }
     
@@ -114,6 +119,7 @@ LLMResult OpenAIBackend::sendPrompt(
         } else {
             result.errorMsg = QStringLiteral("HTTP %1").arg(response.status_code);
         }
+        result.content = result.errorMsg;
         return result;
     }
     
@@ -124,12 +130,14 @@ LLMResult OpenAIBackend::sendPrompt(
     if (parseError.error != QJsonParseError::NoError) {
         result.hasError = true;
         result.errorMsg = QStringLiteral("JSON parse error: %1").arg(parseError.errorString());
+        result.content = result.errorMsg;
         return result;
     }
     
     if (!doc.isObject()) {
         result.hasError = true;
         result.errorMsg = QStringLiteral("Invalid JSON: root is not an object");
+        result.content = result.errorMsg;
         return result;
     }
     
@@ -144,6 +152,7 @@ LLMResult OpenAIBackend::sendPrompt(
         } else {
             result.errorMsg = QStringLiteral("Unknown error");
         }
+        result.content = result.errorMsg;
         return result;
     }
     

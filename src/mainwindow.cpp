@@ -64,7 +64,6 @@
 #include <QSaveFile>
 #include "ExecutionIdUtils.h"
 
-#include "LLMConnector.h"
 #include "CredentialsEditorDialog.h"
 #include "UserInputDialog.h"
 
@@ -352,11 +351,16 @@ void MainWindow::onSaveAs()
 
 void MainWindow::onEditCredentials()
 {
-    const QString filePath = LLMConnector::defaultAccountsFilePath();
-    if (filePath.isEmpty()) {
-        QMessageBox::critical(this, tr("Error"), tr("Could not find or create accounts.json file."));
+#if defined(Q_OS_MAC)
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+#else
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+#endif
+    if (baseDir.isEmpty()) {
+        QMessageBox::critical(this, tr("Error"), tr("Could not determine configuration directory."));
         return;
     }
+    const QString filePath = QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/accounts.json"));
 
     CredentialsEditorDialog dialog(filePath, this);
     dialog.exec();
@@ -416,15 +420,18 @@ void MainWindow::onOpen()
             } else if (internal.contains(QStringLiteral("template"))) {
                 mapped = QStringLiteral("prompt-builder");
             } else if (internal.contains(QStringLiteral("apiKey")) || internal.contains(QStringLiteral("prompt"))) {
-                mapped = QStringLiteral("llm-connector");
+                // Legacy LLM connector saves should map to universal-llm
+                mapped = QStringLiteral("universal-llm");
             } else {
                 // Fallback to a safe default to allow loading
                 mapped = QStringLiteral("text-input");
             }
         } else {
             // Remap legacy human-readable names to stable IDs
-            if (modelName == QStringLiteral("LLM Connector") || modelName == QStringLiteral("LLMConnector")) {
-                mapped = QStringLiteral("llm-connector");
+            if (modelName == QStringLiteral("LLM Connector") || modelName == QStringLiteral("LLMConnector") ||
+                modelName == QStringLiteral("Google LLM Connector") || modelName == QStringLiteral("GoogleLLMConnector") ||
+                modelName == QStringLiteral("llm-connector") || modelName == QStringLiteral("google-llm-connector")) {
+                mapped = QStringLiteral("universal-llm");
             } else if (modelName == QStringLiteral("Prompt Builder") || modelName == QStringLiteral("PromptBuilderNode")) {
                 mapped = QStringLiteral("prompt-builder");
             } else if (modelName == QStringLiteral("Text Input") || modelName == QStringLiteral("TextInputNode")) {

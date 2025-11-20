@@ -38,11 +38,12 @@ QString GoogleBackend::name() const {
 
 QStringList GoogleBackend::availableModels() const {
     return {
-        QStringLiteral("gemini-2.5-flash"),
+        QStringLiteral("gemini-3-pro-preview"),
+        QStringLiteral("gemini-3-pro-image-preview"),
         QStringLiteral("gemini-2.5-pro"),
+        QStringLiteral("gemini-2.5-flash"),
         QStringLiteral("gemini-2.5-flash-lite"),
-        QStringLiteral("gemini-1.5-pro"),
-        QStringLiteral("gemini-1.5-flash")
+        QStringLiteral("imagen-3")
     };
 }
 
@@ -56,9 +57,14 @@ LLMResult GoogleBackend::sendPrompt(
 ) {
     LLMResult result;
     
-    // Google Generative Language (Gemini) stable v1 endpoint.
+    // Google Generative Language (Gemini) endpoint selection:
+    // Preview models use v1beta, stable models use v1.
     // API key is passed as a query parameter, not via Authorization header.
-    const std::string url = std::string("https://generativelanguage.googleapis.com/v1/models/")
+    const bool isPreviewModel = modelName.contains(QStringLiteral("preview"), Qt::CaseInsensitive);
+    const std::string apiVersion = isPreviewModel ? "v1beta" : "v1";
+    const std::string url = std::string("https://generativelanguage.googleapis.com/")
+                            + apiVersion
+                            + "/models/"
                             + modelName.toStdString()
                             + ":generateContent?key="
                             + apiKey.toStdString();
@@ -106,6 +112,7 @@ LLMResult GoogleBackend::sendPrompt(
     if (response.error) {
         result.hasError = true;
         result.errorMsg = QStringLiteral("Network error: %1").arg(QString::fromStdString(response.error.message));
+        result.content = result.errorMsg;
         return result;
     }
     
@@ -129,6 +136,7 @@ LLMResult GoogleBackend::sendPrompt(
         } else {
             result.errorMsg = QStringLiteral("HTTP %1").arg(response.status_code);
         }
+        result.content = result.errorMsg;
         return result;
     }
     
@@ -139,12 +147,14 @@ LLMResult GoogleBackend::sendPrompt(
     if (parseError.error != QJsonParseError::NoError) {
         result.hasError = true;
         result.errorMsg = QStringLiteral("JSON parse error: %1").arg(parseError.errorString());
+        result.content = result.errorMsg;
         return result;
     }
     
     if (!doc.isObject()) {
         result.hasError = true;
         result.errorMsg = QStringLiteral("Invalid JSON: root is not an object");
+        result.content = result.errorMsg;
         return result;
     }
     
@@ -159,6 +169,7 @@ LLMResult GoogleBackend::sendPrompt(
         } else {
             result.errorMsg = QStringLiteral("Unknown error");
         }
+        result.content = result.errorMsg;
         return result;
     }
     
@@ -167,15 +178,74 @@ LLMResult GoogleBackend::sendPrompt(
         QJsonArray candidates = rootObj[QStringLiteral("candidates")].toArray();
         if (!candidates.isEmpty() && candidates[0].isObject()) {
             QJsonObject candidate = candidates[0].toObject();
+            
+            // Check finishReason before extracting content
+            QString finishReason;
+            if (candidate.contains(QStringLiteral("finishReason"))) {
+                finishReason = candidate[QStringLiteral("finishReason")].toString();
+            }
+            
+            // Map finishReason codes to error states
+            if (finishReason == QStringLiteral("STOP")) {
+                // Success case - proceed to extract content
+            } else if (finishReason == QStringLiteral("MAX_TOKENS")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation stopped: Max tokens limit reached.");
+            } else if (finishReason == QStringLiteral("SAFETY")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation blocked: Safety violation detected.");
+            } else if (finishReason == QStringLiteral("RECITATION")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation blocked: Recitation/Copyright violation.");
+            } else if (finishReason == QStringLiteral("BLOCKLIST")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation blocked: Content contains forbidden terms.");
+            } else if (finishReason == QStringLiteral("PROHIBITED_CONTENT")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation blocked: Prohibited content.");
+            } else if (finishReason == QStringLiteral("SPII")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation blocked: Sensitive Personally Identifiable Information detected.");
+            } else if (finishReason == QStringLiteral("MALFORMED_FUNCTION_CALL")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation stopped: Model generated an invalid function call.");
+            } else if (finishReason == QStringLiteral("MODEL_ARMOR")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation blocked: Model Armor intervention.");
+            } else if (finishReason == QStringLiteral("FINISH_REASON_UNSPECIFIED") || finishReason == QStringLiteral("OTHER")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation stopped: Unspecified or unknown reason.");
+            } else if (!finishReason.isEmpty()) {
+                // Default case for any other unexpected finishReason
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("Generation stopped: Unknown reason (%1).").arg(finishReason);
+            }
+            
+            // Extract content (may be partial for MAX_TOKENS or empty for other errors)
             if (candidate.contains(QStringLiteral("content")) && candidate[QStringLiteral("content")].isObject()) {
                 QJsonObject content = candidate[QStringLiteral("content")].toObject();
                 if (content.contains(QStringLiteral("parts")) && content[QStringLiteral("parts")].isArray()) {
                     QJsonArray parts = content[QStringLiteral("parts")].toArray();
                     if (!parts.isEmpty() && parts[0].isObject()) {
                         QJsonObject part = parts[0].toObject();
-                        result.content = part[QStringLiteral("text")].toString();
+                        QString extractedText = part[QStringLiteral("text")].toString();
+                        
+                        if (result.hasError) {
+                            // For error cases, append error message to any partial content
+                            if (!extractedText.isEmpty()) {
+                                result.content = extractedText + QStringLiteral("\n\n[ERROR] ") + result.errorMsg;
+                            } else {
+                                result.content = result.errorMsg;
+                            }
+                        } else {
+                            // Success case (STOP)
+                            result.content = extractedText;
+                        }
                     }
                 }
+            } else if (result.hasError) {
+                // No content available for error case
+                result.content = result.errorMsg;
             }
         }
     }
