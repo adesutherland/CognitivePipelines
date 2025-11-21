@@ -85,6 +85,20 @@ QList<ILLMBackend*> LLMProviderRegistry::allBackends() {
 }
 
 QString LLMProviderRegistry::getCredential(const QString& providerId) {
+    // First, check for environment variables (preferred for CI/CD and testing)
+    if (providerId.compare(QStringLiteral("openai"), Qt::CaseInsensitive) == 0) {
+        const QByteArray envKey = qgetenv("OPENAI_API_KEY");
+        if (!envKey.isEmpty()) {
+            return QString::fromUtf8(envKey);
+        }
+    } else if (providerId.compare(QStringLiteral("google"), Qt::CaseInsensitive) == 0) {
+        const QByteArray envKey = qgetenv("GOOGLE_API_KEY");
+        if (!envKey.isEmpty()) {
+            return QString::fromUtf8(envKey);
+        }
+    }
+
+    // Fall back to accounts.json file
     // Reuse the same path logic as LLMConnector::defaultAccountsFilePath()
     // to ensure consistency across the application.
 
