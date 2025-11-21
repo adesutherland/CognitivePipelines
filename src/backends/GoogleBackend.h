@@ -46,6 +46,7 @@ public:
         double temperature,
         int maxTokens,
         const QString& systemPrompt,
-        const QString& userPrompt
+        const QString& userPrompt,
+        const QString& imagePath = QString()
     ) override;
 };

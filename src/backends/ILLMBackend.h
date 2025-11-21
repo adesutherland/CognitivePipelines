@@ -89,6 +89,7 @@ public:
      * @param maxTokens The maximum number of tokens to generate.
      * @param systemPrompt The system prompt (instructions/context for the AI).
      * @param userPrompt The user's prompt/query.
+     * @param imagePath Optional file path to an image for multimodal requests.
      * @return LLMResult containing the normalized response, usage statistics, and error information.
      */
     virtual LLMResult sendPrompt(
@@ -97,6 +98,7 @@ public:
         double temperature,
         int maxTokens,
         const QString& systemPrompt,
-        const QString& userPrompt
+        const QString& userPrompt,
+        const QString& imagePath = QString()
     ) = 0;
 };

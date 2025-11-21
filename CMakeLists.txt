@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.4.5 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.4.6 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -81,7 +81,12 @@ endif()
 
 # Sources
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_executable(CognitivePipelines
+    # Core headers
+    ${INCLUDE_DIR}/IToolConnector.h
+    ${INCLUDE_DIR}/CommonDataTypes.h
+    # Application sources
     ${SRC_DIR}/main.cpp
     ${SRC_DIR}/mainwindow.cpp
     ${SRC_DIR}/mainwindow.h
@@ -114,6 +119,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/TextOutputNode.h
     ${SRC_DIR}/TextOutputPropertiesWidget.cpp
     ${SRC_DIR}/TextOutputPropertiesWidget.h
+    ${SRC_DIR}/ImageNode.cpp
+    ${SRC_DIR}/ImageNode.h
+    ${SRC_DIR}/ImagePropertiesWidget.cpp
+    ${SRC_DIR}/ImagePropertiesWidget.h
     ${SRC_DIR}/HumanInputNode.cpp
     ${SRC_DIR}/HumanInputNode.h
     ${SRC_DIR}/HumanInputPropertiesWidget.cpp
@@ -230,6 +239,10 @@ if(ENABLE_TESTING)
 
     # Unit Tests (GTest)
     add_executable(unit_tests
+            # Core headers
+            ${INCLUDE_DIR}/IToolConnector.h
+            ${INCLUDE_DIR}/CommonDataTypes.h
+            # Test sources
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
             tests/test_text_output_fanout.cpp
@@ -237,6 +250,7 @@ if(ENABLE_TESTING)
             tests/test_process_connector.cpp
             tests/test_universal_llm.cpp
             tests/test_logging.cpp
+            tests/test_image_node.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
@@ -256,6 +270,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/TextOutputNode.h
             ${SRC_DIR}/TextOutputPropertiesWidget.cpp
             ${SRC_DIR}/TextOutputPropertiesWidget.h
+            ${SRC_DIR}/ImageNode.cpp
+            ${SRC_DIR}/ImageNode.h
+            ${SRC_DIR}/ImagePropertiesWidget.cpp
+            ${SRC_DIR}/ImagePropertiesWidget.h
             ${SRC_DIR}/HumanInputNode.cpp
             ${SRC_DIR}/HumanInputNode.h
             ${SRC_DIR}/HumanInputPropertiesWidget.cpp
@@ -317,6 +335,10 @@ if(ENABLE_TESTING)
 
     # Integration tests (Qt Test based, headless) - Definition looks okay
     add_executable(integration_tests
+            # Core headers
+            ${INCLUDE_DIR}/IToolConnector.h
+            ${INCLUDE_DIR}/CommonDataTypes.h
+            # Test sources and required implementations
             tests/test_integration.cpp
             ${SRC_DIR}/mainwindow.cpp
             ${SRC_DIR}/mainwindow.h
@@ -351,6 +373,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/TextOutputNode.h
             ${SRC_DIR}/TextOutputPropertiesWidget.cpp
             ${SRC_DIR}/TextOutputPropertiesWidget.h
+            ${SRC_DIR}/ImageNode.cpp
+            ${SRC_DIR}/ImageNode.h
+            ${SRC_DIR}/ImagePropertiesWidget.cpp
+            ${SRC_DIR}/ImagePropertiesWidget.h
             ${SRC_DIR}/HumanInputNode.cpp
             ${SRC_DIR}/HumanInputNode.h
             ${SRC_DIR}/HumanInputPropertiesWidget.cpp

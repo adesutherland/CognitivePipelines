@@ -27,6 +27,7 @@
 #include "PromptBuilderNode.h"
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
+#include "ImageNode.h"
 #include "ProcessConnector.h"
 #include "UniversalLLMNode.h"
 #include "PythonScriptConnector.h"
@@ -55,6 +56,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // Register TextInputNode via the generic ToolNodeDelegate adapter
     registry->registerModel([this]() {
         auto tool = std::make_shared<TextInputNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Input / Output"));
+
+    // Register ImageNode under the "Input / Output" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<ImageNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Input / Output"));
 

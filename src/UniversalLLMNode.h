@@ -56,6 +56,7 @@ public:
     // Constants for pin IDs
     static constexpr const char* kInputSystemId = "system";
     static constexpr const char* kInputPromptId = "prompt";
+    static constexpr const char* kInputImageId = "image";
     static constexpr const char* kOutputResponseId = "response";
 
 public slots:

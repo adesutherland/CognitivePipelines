@@ -23,30 +23,44 @@
 //
 #pragma once
 
-#include "ILLMBackend.h"
+#include <QObject>
+#include <QWidget>
+#include <QFuture>
+#include <QString>
+#include <QPointer>
 
-/**
- * @brief OpenAI backend implementation using the Chat Completions API.
- *
- * This backend communicates with OpenAI's API endpoints and supports
- * models including gpt-4o, o1-preview, and legacy models.
- */
-class OpenAIBackend : public ILLMBackend {
+#include "IToolConnector.h"
+#include "CommonDataTypes.h"
+
+class ImagePropertiesWidget;
+
+class ImageNode : public QObject, public IToolConnector {
+    Q_OBJECT
+    Q_INTERFACES(IToolConnector)
 public:
-    OpenAIBackend() = default;
-    ~OpenAIBackend() override = default;
+    explicit ImageNode(QObject* parent = nullptr);
+    ~ImageNode() override = default;
 
-    QString id() const override;
-    QString name() const override;
-    QStringList availableModels() const override;
+    // IToolConnector interface
+    NodeDescriptor GetDescriptor() const override;
+    QWidget* createConfigurationWidget(QWidget* parent) override;
+    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    QJsonObject saveState() const override;
+    void loadState(const QJsonObject& data) override;
 
-    LLMResult sendPrompt(
-        const QString& apiKey,
-        const QString& modelName,
-        double temperature,
-        int maxTokens,
-        const QString& systemPrompt,
-        const QString& userPrompt,
-        const QString& imagePath = QString()
-    ) override;
+    // Accessors
+    QString imagePath() const { return m_imagePath; }
+
+public slots:
+    void setImagePath(const QString& path);
+
+signals:
+    void imagePathChanged(const QString& path);
+
+public:
+    static constexpr const char* kImagePinId = "image";
+
+private:
+    QString m_imagePath;
+    QPointer<ImagePropertiesWidget> m_widget;
 };

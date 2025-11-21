@@ -24,6 +24,7 @@
 #include "GoogleBackend.h"
 
 #include <cpr/cpr.h>
+#include <QFile>
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -53,7 +54,8 @@ LLMResult GoogleBackend::sendPrompt(
     double temperature,
     int maxTokens,
     const QString& systemPrompt,
-    const QString& userPrompt
+    const QString& userPrompt,
+    const QString& imagePath
 ) {
     LLMResult result;
     
@@ -86,10 +88,62 @@ LLMResult GoogleBackend::sendPrompt(
         contents.append(sysContent);
     }
 
-    QJsonObject userPart;
-    userPart.insert(QStringLiteral("text"), userPrompt);
+    // Build the user message parts array (text + optional image)
+    QJsonArray userParts;
+    
+    // Always include the text part
+    QJsonObject textPart;
+    textPart.insert(QStringLiteral("text"), userPrompt);
+    userParts.append(textPart);
+    
+    // Add image part if imagePath is provided
+    if (!imagePath.trimmed().isEmpty()) {
+        QFile imageFile(imagePath);
+        if (!imageFile.open(QIODevice::ReadOnly)) {
+            result.hasError = true;
+            result.errorMsg = QStringLiteral("Failed to open image file: %1").arg(imagePath);
+            return result;
+        }
+        
+        const QByteArray imageData = imageFile.readAll();
+        imageFile.close();
+        
+        if (imageData.isEmpty()) {
+            result.hasError = true;
+            result.errorMsg = QStringLiteral("Image file is empty: %1").arg(imagePath);
+            return result;
+        }
+        
+        // Convert to Base64
+        const QString base64String = QString::fromLatin1(imageData.toBase64());
+        
+        // Detect MIME type from file extension
+        QString mimeType = QStringLiteral("image/jpeg"); // default
+        const QString lowerPath = imagePath.toLower();
+        if (lowerPath.endsWith(QStringLiteral(".png"))) {
+            mimeType = QStringLiteral("image/png");
+        } else if (lowerPath.endsWith(QStringLiteral(".jpg")) || lowerPath.endsWith(QStringLiteral(".jpeg"))) {
+            mimeType = QStringLiteral("image/jpeg");
+        } else if (lowerPath.endsWith(QStringLiteral(".gif"))) {
+            mimeType = QStringLiteral("image/gif");
+        } else if (lowerPath.endsWith(QStringLiteral(".webp"))) {
+            mimeType = QStringLiteral("image/webp");
+        } else if (lowerPath.endsWith(QStringLiteral(".bmp"))) {
+            mimeType = QStringLiteral("image/bmp");
+        }
+        
+        // Create inline_data part per Gemini API schema
+        QJsonObject inlineData;
+        inlineData.insert(QStringLiteral("mime_type"), mimeType);
+        inlineData.insert(QStringLiteral("data"), base64String);
+        
+        QJsonObject imagePart;
+        imagePart.insert(QStringLiteral("inline_data"), inlineData);
+        userParts.append(imagePart);
+    }
+    
     QJsonObject userContent;
-    userContent.insert(QStringLiteral("parts"), QJsonArray{userPart});
+    userContent.insert(QStringLiteral("parts"), userParts);
     contents.append(userContent);
 
     QJsonObject generationConfig;

@@ -9,6 +9,10 @@
 #include <QApplication>
 #include <QString>
 #include <QJsonObject>
+#include <QImage>
+#include <QTemporaryFile>
+#include <QDir>
+#include <QFile>
 
 #include "UniversalLLMNode.h"
 #include "core/LLMProviderRegistry.h"
@@ -24,6 +28,35 @@ static QApplication* ensureApp()
         app = new QApplication(argc, argv);
     }
     return app;
+}
+
+// Helper function to create a dummy 10x10 red PNG image for testing
+static QString createDummyImageFile()
+{
+    // Create a 10x10 red square
+    QImage img(10, 10, QImage::Format_RGB32);
+    img.fill(QColor(Qt::red));
+    
+    // Create a temporary file with .png extension
+    QTemporaryFile* tempFile = new QTemporaryFile(QDir::tempPath() + "/test_image_XXXXXX.png");
+    tempFile->setAutoRemove(false); // Keep file until manually deleted
+    
+    if (!tempFile->open()) {
+        delete tempFile;
+        return QString();
+    }
+    
+    const QString filePath = tempFile->fileName();
+    tempFile->close();
+    
+    // Save the image
+    if (!img.save(filePath, "PNG")) {
+        delete tempFile;
+        return QString();
+    }
+    
+    delete tempFile;
+    return filePath;
 }
 
 TEST(UniversalLLMNodeTest, OpenAIIntegration)
@@ -140,6 +173,192 @@ TEST(UniversalLLMNodeTest, GoogleIntegration)
     // Basic sanity check: response should mention Paris
     EXPECT_NE(response.indexOf(QStringLiteral("paris")), -1) 
         << "Response should mention 'Paris'. Response was: " << responseRaw.toStdString();
+
+    delete node;
+}
+
+TEST(UniversalLLMNodeTest, OpenAIVisionIntegration)
+{
+    ensureApp();
+
+    // Try to get API key from environment or accounts.json
+    QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
+    if (apiKey.isEmpty()) {
+        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
+    }
+    
+    if (apiKey.isEmpty()) {
+        GTEST_SKIP() << "No OpenAI API key provided. Set OPENAI_API_KEY environment variable or add to accounts.json.";
+    }
+
+    // Create a dummy image file
+    const QString imagePath = createDummyImageFile();
+    ASSERT_FALSE(imagePath.isEmpty()) << "Failed to create dummy image file";
+
+    auto* node = new UniversalLLMNode();
+
+    // Configure via loadState: provider "openai", vision-capable model "gpt-5.1"
+    QJsonObject state;
+    state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
+    state.insert(QStringLiteral("model"), QStringLiteral("gpt-5.1"));
+    state.insert(QStringLiteral("systemPrompt"), QStringLiteral("You are a helpful assistant that analyzes images."));
+    state.insert(QStringLiteral("temperature"), 0.7);
+    node->loadState(state);
+
+    // Prepare input with prompt and image
+    DataPacket inputs;
+    inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
+    inputs.insert(QStringLiteral("image"), imagePath);
+
+    // Execute
+    QFuture<DataPacket> future = node->Execute(inputs);
+    future.waitForFinished();
+    const DataPacket output = future.result();
+
+    // Clean up the temporary image file
+    QFile::remove(imagePath);
+
+    // Check for error
+    if (output.contains(QStringLiteral("__error"))) {
+        const QString error = output.value(QStringLiteral("__error")).toString();
+        FAIL() << "LLM request failed with error: " << error.toStdString();
+    }
+
+    // Verify response
+    const QString response = output.value(QStringLiteral("response")).toString();
+    ASSERT_FALSE(response.isEmpty()) << "Response should not be empty";
+
+    // Verify usage tokens (should be > 0 for successful request)
+    const int totalTokens = output.value(QStringLiteral("_usage.total_tokens")).toInt();
+    EXPECT_GT(totalTokens, 0) << "Total tokens should be greater than 0";
+
+    // Basic sanity check: response should mention red (the image is a red square)
+    const QString responseLower = response.toLower();
+    EXPECT_NE(responseLower.indexOf(QStringLiteral("red")), -1) 
+        << "Response should mention 'red'. Response was: " << response.toStdString();
+
+    delete node;
+}
+
+TEST(UniversalLLMNodeTest, GoogleVisionIntegration)
+{
+    ensureApp();
+
+    // Try to get API key from environment or accounts.json
+    QString apiKey = qEnvironmentVariable("GOOGLE_API_KEY");
+    if (apiKey.isEmpty()) {
+        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("google"));
+    }
+    
+    if (apiKey.isEmpty()) {
+        GTEST_SKIP() << "No Google API key provided. Set GOOGLE_API_KEY environment variable or add to accounts.json.";
+    }
+
+    // Create a dummy image file
+    const QString imagePath = createDummyImageFile();
+    ASSERT_FALSE(imagePath.isEmpty()) << "Failed to create dummy image file";
+
+    auto* node = new UniversalLLMNode();
+
+    // Configure via loadState: provider "google", vision-capable model "gemini-2.5-flash"
+    QJsonObject state;
+    state.insert(QStringLiteral("provider"), QStringLiteral("google"));
+    state.insert(QStringLiteral("model"), QStringLiteral("gemini-2.5-flash"));
+    state.insert(QStringLiteral("systemPrompt"), QStringLiteral("You are a helpful assistant that analyzes images."));
+    state.insert(QStringLiteral("temperature"), 0.7);
+    node->loadState(state);
+
+    // Prepare input with prompt and image
+    DataPacket inputs;
+    inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
+    inputs.insert(QStringLiteral("image"), imagePath);
+
+    // Execute
+    QFuture<DataPacket> future = node->Execute(inputs);
+    future.waitForFinished();
+    const DataPacket output = future.result();
+
+    // Clean up the temporary image file
+    QFile::remove(imagePath);
+
+    // Verify response
+    const QString responseRaw = output.value(QStringLiteral("response")).toString();
+    const QString response = responseRaw.toLower();
+    
+    // Check for model availability issues (environment-specific)
+    if (response.contains(QStringLiteral("is not found for api version")) ||
+        response.contains(QStringLiteral("is not supported"))) {
+        GTEST_SKIP() << "Google Gemini model is not available in this environment. "
+                     << "Full response: " << responseRaw.toStdString();
+    }
+    
+    // Check for error
+    if (output.contains(QStringLiteral("__error"))) {
+        const QString error = output.value(QStringLiteral("__error")).toString();
+        FAIL() << "LLM request failed with error: " << error.toStdString();
+    }
+
+    // Verify response is not empty
+    ASSERT_FALSE(response.isEmpty()) << "Response should not be empty";
+
+    // Verify usage tokens (should be > 0 for successful request)
+    const int totalTokens = output.value(QStringLiteral("_usage.total_tokens")).toInt();
+    EXPECT_GT(totalTokens, 0) << "Total tokens should be greater than 0";
+
+    // Basic sanity check: response should mention red (the image is a red square)
+    EXPECT_NE(response.indexOf(QStringLiteral("red")), -1) 
+        << "Response should mention 'red'. Response was: " << responseRaw.toStdString();
+
+    delete node;
+}
+
+TEST(UniversalLLMNodeTest, MissingImageFileError)
+{
+    ensureApp();
+
+    // For this test, we don't need real credentials since we're testing error handling
+    // The backend will fail on file read before making any API call
+    // However, we still need to configure valid provider/model to reach the file check
+    
+    auto* node = new UniversalLLMNode();
+
+    // Configure via loadState: use OpenAI as provider (could be any provider)
+    QJsonObject state;
+    state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
+    state.insert(QStringLiteral("model"), QStringLiteral("gpt-5.1"));
+    state.insert(QStringLiteral("systemPrompt"), QStringLiteral("You are a helpful assistant."));
+    state.insert(QStringLiteral("temperature"), 0.7);
+    node->loadState(state);
+
+    // Prepare input with a non-existent image file path
+    const QString nonExistentPath = QStringLiteral("/tmp/this_file_does_not_exist_12345.png");
+    DataPacket inputs;
+    inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
+    inputs.insert(QStringLiteral("image"), nonExistentPath);
+
+    // Execute
+    QFuture<DataPacket> future = node->Execute(inputs);
+    future.waitForFinished();
+    const DataPacket output = future.result();
+
+    // Verify that an error was reported
+    ASSERT_TRUE(output.contains(QStringLiteral("__error"))) 
+        << "Output should contain __error key when image file is missing";
+
+    const QString error = output.value(QStringLiteral("__error")).toString();
+    ASSERT_FALSE(error.isEmpty()) << "Error message should not be empty";
+
+    // Verify the error message mentions the file issue
+    const QString errorLower = error.toLower();
+    EXPECT_TRUE(errorLower.contains(QStringLiteral("failed")) || 
+                errorLower.contains(QStringLiteral("error")) ||
+                errorLower.contains(QStringLiteral("read")) ||
+                errorLower.contains(QStringLiteral("open")))
+        << "Error message should indicate file read/open failure. Error was: " << error.toStdString();
+
+    // The response field should also contain error information
+    const QString response = output.value(QStringLiteral("response")).toString();
+    EXPECT_FALSE(response.isEmpty()) << "Response should contain error information";
 
     delete node;
 }

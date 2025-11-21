@@ -23,30 +23,29 @@
 //
 #pragma once
 
-#include "ILLMBackend.h"
+#include <QWidget>
+#include <QLabel>
+#include <QPushButton>
+#include <QVBoxLayout>
 
-/**
- * @brief OpenAI backend implementation using the Chat Completions API.
- *
- * This backend communicates with OpenAI's API endpoints and supports
- * models including gpt-4o, o1-preview, and legacy models.
- */
-class OpenAIBackend : public ILLMBackend {
+// Properties widget for ImageNode
+class ImagePropertiesWidget : public QWidget {
+    Q_OBJECT
 public:
-    OpenAIBackend() = default;
-    ~OpenAIBackend() override = default;
+    explicit ImagePropertiesWidget(QWidget* parent = nullptr);
+    ~ImagePropertiesWidget() override = default;
 
-    QString id() const override;
-    QString name() const override;
-    QStringList availableModels() const override;
+    // Initialize / update UI value from external state
+    void setImagePath(const QString& path);
 
-    LLMResult sendPrompt(
-        const QString& apiKey,
-        const QString& modelName,
-        double temperature,
-        int maxTokens,
-        const QString& systemPrompt,
-        const QString& userPrompt,
-        const QString& imagePath = QString()
-    ) override;
+    // Read current value
+    QString imagePath() const;
+
+signals:
+    void imagePathChanged(const QString& path);
+
+private:
+    QLabel* m_previewLabel {nullptr};
+    QLabel* m_pathLabel {nullptr};
+    QPushButton* m_selectButton {nullptr};
 };

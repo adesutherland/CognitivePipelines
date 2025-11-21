@@ -27,6 +27,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QFile>
+#include <QFileInfo>
 
 QString OpenAIBackend::id() const {
     return QStringLiteral("openai");
@@ -57,7 +59,8 @@ LLMResult OpenAIBackend::sendPrompt(
     double temperature,
     int maxTokens,
     const QString& systemPrompt,
-    const QString& userPrompt
+    const QString& userPrompt,
+    const QString& imagePath
 ) {
     LLMResult result;
     
@@ -70,7 +73,71 @@ LLMResult OpenAIBackend::sendPrompt(
 
     QJsonObject userMsg;
     userMsg.insert(QStringLiteral("role"), QStringLiteral("user"));
-    userMsg.insert(QStringLiteral("content"), userPrompt);
+    
+    // Check if image path is provided for multimodal (Vision) request
+    if (!imagePath.trimmed().isEmpty()) {
+        // Read image file
+        QFile imageFile(imagePath);
+        if (!imageFile.open(QIODevice::ReadOnly)) {
+            result.hasError = true;
+            result.errorMsg = QStringLiteral("Failed to read image file at: %1").arg(imagePath);
+            result.content = result.errorMsg;
+            return result;
+        }
+        
+        QByteArray imageData = imageFile.readAll();
+        imageFile.close();
+        
+        if (imageData.isEmpty()) {
+            result.hasError = true;
+            result.errorMsg = QStringLiteral("Failed to read image file at: %1").arg(imagePath);
+            result.content = result.errorMsg;
+            return result;
+        }
+        
+        // Encode to Base64
+        QString base64Image = QString::fromLatin1(imageData.toBase64());
+        
+        // Determine MIME type based on file extension
+        QFileInfo fileInfo(imagePath);
+        QString extension = fileInfo.suffix().toLower();
+        QString mimeType = QStringLiteral("image/jpeg"); // default
+        
+        if (extension == QStringLiteral("png")) {
+            mimeType = QStringLiteral("image/png");
+        } else if (extension == QStringLiteral("jpg") || extension == QStringLiteral("jpeg")) {
+            mimeType = QStringLiteral("image/jpeg");
+        } else if (extension == QStringLiteral("gif")) {
+            mimeType = QStringLiteral("image/gif");
+        } else if (extension == QStringLiteral("webp")) {
+            mimeType = QStringLiteral("image/webp");
+        }
+        
+        // Build multimodal content array for Vision API
+        QJsonArray contentArray;
+        
+        // Text part
+        QJsonObject textPart;
+        textPart.insert(QStringLiteral("type"), QStringLiteral("text"));
+        textPart.insert(QStringLiteral("text"), userPrompt);
+        contentArray.append(textPart);
+        
+        // Image part
+        QJsonObject imageUrlObj;
+        imageUrlObj.insert(QStringLiteral("url"), 
+                          QStringLiteral("data:%1;base64,%2").arg(mimeType, base64Image));
+        
+        QJsonObject imagePart;
+        imagePart.insert(QStringLiteral("type"), QStringLiteral("image_url"));
+        imagePart.insert(QStringLiteral("image_url"), imageUrlObj);
+        contentArray.append(imagePart);
+        
+        // Set content as array
+        userMsg.insert(QStringLiteral("content"), contentArray);
+    } else {
+        // Text-only: content is a simple string
+        userMsg.insert(QStringLiteral("content"), userPrompt);
+    }
 
     QJsonArray messages;
     messages.append(sysMsg);

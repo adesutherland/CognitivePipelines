@@ -67,7 +67,7 @@ TEST(UniversalLLMInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
     ASSERT_NE(textNodeId, InvalidNodeId);
     ASSERT_NE(llmNodeId, InvalidNodeId);
 
-    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, 0u }); // TextInput output -> LLM prompt input (index 0 -> "prompt")
+    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, 1u }); // TextInput output -> LLM prompt input (index 1 -> "prompt", pins sorted alphabetically: image=0, prompt=1, system=2)
 
     // Configure TextInput
     {
@@ -153,7 +153,7 @@ TEST(UniversalLLMInvalidModelTest, StopsPipelineOnError)
     ASSERT_NE(llmNodeId, InvalidNodeId);
     ASSERT_NE(promptNodeId, InvalidNodeId);
 
-    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, 0u });      // text -> llm (prompt)
+    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, 1u });      // text -> llm (prompt, index 1 after alphabetical sorting)
     model.addConnection(ConnectionId{ llmNodeId, 0u, promptNodeId, 0u });    // llm.response -> prompt.input
 
     // Configure nodes

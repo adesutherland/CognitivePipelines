@@ -66,6 +66,13 @@ NodeDescriptor UniversalLLMNode::GetDescriptor() const
     promptPin.type = QStringLiteral("text");
     desc.inputPins.insert(promptPin.id, promptPin);
 
+    PinDefinition imagePin;
+    imagePin.direction = PinDirection::Input;
+    imagePin.id = QString::fromLatin1(kInputImageId);
+    imagePin.name = QStringLiteral("Image");
+    imagePin.type = QStringLiteral("image");
+    desc.inputPins.insert(imagePin.id, imagePin);
+
     // Output pin
     PinDefinition responsePin;
     responsePin.direction = PinDirection::Output;
@@ -111,6 +118,7 @@ QFuture<DataPacket> UniversalLLMNode::Execute(const DataPacket& inputs)
     // Retrieve input pins (may override defaults from properties)
     const QString systemInput = inputs.value(QString::fromLatin1(kInputSystemId)).toString();
     const QString promptInput = inputs.value(QString::fromLatin1(kInputPromptId)).toString();
+    const QString imageInput = inputs.value(QString::fromLatin1(kInputImageId)).toString();
 
     // Copy state to use in background thread
     const QString providerId = m_providerId;
@@ -120,7 +128,7 @@ QFuture<DataPacket> UniversalLLMNode::Execute(const DataPacket& inputs)
     const double temperature = m_temperature;
     const int maxTokens = m_maxTokens;
 
-    return QtConcurrent::run([systemInput, promptInput, providerId, modelId,
+    return QtConcurrent::run([systemInput, promptInput, imageInput, providerId, modelId,
                               systemDefault, userDefault, temperature, maxTokens]() -> DataPacket {
         DataPacket output;
         // Clear the output pin at the start
@@ -184,7 +192,7 @@ QFuture<DataPacket> UniversalLLMNode::Execute(const DataPacket& inputs)
         LLMResult result;
         try {
             result = backend->sendPrompt(apiKey, validatedModelId, temperature, maxTokens, 
-                                        systemPrompt, userPrompt);
+                                        systemPrompt, userPrompt, imageInput);
         } catch (const std::exception& e) {
             const QString err = QStringLiteral("ERROR: Exception during backend call: %1").arg(QString::fromUtf8(e.what()));
             qWarning() << "UniversalLLMNode:" << err;
