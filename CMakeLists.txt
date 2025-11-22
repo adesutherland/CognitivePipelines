@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.4.6 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.4.7 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -65,7 +65,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # Dependencies resolved from the system (no FetchContent)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql Pdf)
 find_package(Boost 1.70 REQUIRED)
 find_package(cpr REQUIRED)
 find_package(GTest REQUIRED)
@@ -123,6 +123,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ImageNode.h
     ${SRC_DIR}/ImagePropertiesWidget.cpp
     ${SRC_DIR}/ImagePropertiesWidget.h
+    ${SRC_DIR}/PdfToImageNode.cpp
+    ${SRC_DIR}/PdfToImageNode.h
+    ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
+    ${SRC_DIR}/PdfToImagePropertiesWidget.h
     ${SRC_DIR}/HumanInputNode.cpp
     ${SRC_DIR}/HumanInputNode.h
     ${SRC_DIR}/HumanInputPropertiesWidget.cpp
@@ -168,6 +172,7 @@ target_link_libraries(CognitivePipelines PRIVATE
     Qt6::Network
     Qt6::Concurrent
     Qt6::Sql
+    Qt6::Pdf
     QtNodes::QtNodes
     Boost::boost
     cpr::cpr
@@ -251,6 +256,7 @@ if(ENABLE_TESTING)
             tests/test_universal_llm.cpp
             tests/test_logging.cpp
             tests/test_image_node.cpp
+            tests/test_pdf_node.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
@@ -274,6 +280,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ImageNode.h
             ${SRC_DIR}/ImagePropertiesWidget.cpp
             ${SRC_DIR}/ImagePropertiesWidget.h
+            ${SRC_DIR}/PdfToImageNode.cpp
+            ${SRC_DIR}/PdfToImageNode.h
+            ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
+            ${SRC_DIR}/PdfToImagePropertiesWidget.h
             ${SRC_DIR}/HumanInputNode.cpp
             ${SRC_DIR}/HumanInputNode.h
             ${SRC_DIR}/HumanInputPropertiesWidget.cpp
@@ -322,6 +332,7 @@ if(ENABLE_TESTING)
             Qt6::Test
             Qt6::Concurrent
             Qt6::Sql
+            Qt6::Pdf
             QtNodes::QtNodes
             Boost::boost
     )
@@ -377,6 +388,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ImageNode.h
             ${SRC_DIR}/ImagePropertiesWidget.cpp
             ${SRC_DIR}/ImagePropertiesWidget.h
+            ${SRC_DIR}/PdfToImageNode.cpp
+            ${SRC_DIR}/PdfToImageNode.h
+            ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
+            ${SRC_DIR}/PdfToImagePropertiesWidget.h
             ${SRC_DIR}/HumanInputNode.cpp
             ${SRC_DIR}/HumanInputNode.h
             ${SRC_DIR}/HumanInputPropertiesWidget.cpp
@@ -411,6 +426,7 @@ if(ENABLE_TESTING)
             Qt6::Network
             Qt6::Concurrent
             Qt6::Sql
+            Qt6::Pdf
             QtNodes::QtNodes
             Boost::boost
             cpr::cpr

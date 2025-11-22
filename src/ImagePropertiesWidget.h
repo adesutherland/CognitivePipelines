@@ -35,11 +35,12 @@ public:
     explicit ImagePropertiesWidget(QWidget* parent = nullptr);
     ~ImagePropertiesWidget() override = default;
 
-    // Initialize / update UI value from external state
-    void setImagePath(const QString& path);
-
     // Read current value
     QString imagePath() const;
+
+public slots:
+    // Initialize / update UI value from external state
+    void setImagePath(const QString& path);
 
 signals:
     void imagePathChanged(const QString& path);

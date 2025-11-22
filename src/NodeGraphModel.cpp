@@ -34,6 +34,7 @@
 #include "DatabaseConnector.h"
 #include "TextOutputNode.h"
 #include "HumanInputNode.h"
+#include "PdfToImageNode.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -62,6 +63,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // Register ImageNode under the "Input / Output" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto tool = std::make_shared<ImageNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Input / Output"));
+
+    // Register PdfToImageNode under the "Input / Output" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<PdfToImageNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Input / Output"));
 
