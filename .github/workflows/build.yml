@@ -247,10 +247,10 @@ jobs:
           # Prune Qt SQL drivers that require external client libraries.
           # We only need the SQLite driver (libqsqlite.dylib); removing others avoids macdeployqt warnings
           # about missing dependencies like libpq, libiodbc, etc. on CI runners.
-          if [ -d "${QT_ROOT_DIR}/plugins/sqldrivers" ]; then
-            echo "Pruning Qt SQL drivers to keep only SQLite..."
-            find "${QT_ROOT_DIR}/plugins/sqldrivers" -name "libqsql*.dylib" ! -name "*sqlite*" -delete || true
-          fi
+          echo "Contents of ${QT_ROOT_DIR}/plugins/sqldrivers before pruning:"
+          ls -l "${QT_ROOT_DIR}/plugins/sqldrivers"
+          echo "Pruning Qt SQL drivers to keep only SQLite..."
+          find "${QT_ROOT_DIR}/plugins/sqldrivers" -name "libqsql*" ! -name "*sqlite*" -print -delete
 
       - name: Deploy and Ad-hoc Sign (macOS)
         if: runner.os == 'macOS'
