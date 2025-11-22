@@ -236,10 +236,6 @@ jobs:
             cmake $CMAKE_FLAGS
           fi
 
-      - name: Build (Release)
-        shell: bash
-        run: cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
-
       - name: Prune unused Qt SQL drivers (macOS)
         if: runner.os == 'macOS'
         shell: bash
@@ -251,6 +247,10 @@ jobs:
           ls -l "${QT_ROOT_DIR}/plugins/sqldrivers"
           echo "Pruning Qt SQL drivers to keep only SQLite..."
           find "${QT_ROOT_DIR}/plugins/sqldrivers" -name "libqsql*" ! -name "*sqlite*" -print -delete
+
+      - name: Build (Release)
+        shell: bash
+        run: cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
 
       - name: Deploy and Ad-hoc Sign (macOS)
         if: runner.os == 'macOS'
