@@ -22,6 +22,7 @@
 // SOFTWARE.
 //
 #include "ImagePropertiesWidget.h"
+#include "ImagePopupDialog.h"
 #include <QFileDialog>
 #include <QPixmap>
 #include <QEvent>
@@ -79,6 +80,13 @@ ImagePropertiesWidget::ImagePropertiesWidget(QWidget* parent)
             emit imagePathChanged(fileName);
         }
     });
+
+    // View Full Size button
+    m_viewFullSizeButton = new QPushButton(tr("View Full Size"), this);
+    layout->addWidget(m_viewFullSizeButton);
+
+    // Connect view full size button
+    connect(m_viewFullSizeButton, &QPushButton::clicked, this, &ImagePropertiesWidget::onViewFullSize);
 
     layout->addStretch();
 }
@@ -196,4 +204,17 @@ void ImagePropertiesWidget::showEvent(QShowEvent* event)
     QWidget::showEvent(event);
     m_isLayoutReady = true;
     updatePreview();
+}
+
+void ImagePropertiesWidget::onViewFullSize()
+{
+    // Check if we have a valid image
+    if (m_currentPath.isEmpty() || m_originalPixmap.isNull()) {
+        qWarning() << "ImagePropertiesWidget::onViewFullSize: No valid image to display";
+        return;
+    }
+    
+    // Create and show the popup dialog
+    ImagePopupDialog dialog(m_originalPixmap, this);
+    dialog.exec();
 }

@@ -23,46 +23,41 @@
 //
 #pragma once
 
-#include <QWidget>
-#include <QLabel>
-#include <QPushButton>
-#include <QVBoxLayout>
+#include <QDialog>
 #include <QPixmap>
 
-// Properties widget for ImageNode
-class ImagePropertiesWidget : public QWidget {
+class QLabel;
+class QScrollArea;
+class QDialogButtonBox;
+
+// Popup dialog for viewing full-resolution images
+class ImagePopupDialog : public QDialog {
     Q_OBJECT
 public:
-    explicit ImagePropertiesWidget(QWidget* parent = nullptr);
-    ~ImagePropertiesWidget() override = default;
-
-    // Read current value
-    QString imagePath() const;
-
-public slots:
-    // Initialize / update UI value from external state
-    void setImagePath(const QString& path);
-
-signals:
-    void imagePathChanged(const QString& path);
-    void galleryRequested(const QString& path);
-
-private slots:
-    void onViewFullSize();
+    explicit ImagePopupDialog(const QPixmap& pixmap, QWidget* parent = nullptr);
+    explicit ImagePopupDialog(const QString& imagePath, QWidget* parent = nullptr);
+    ~ImagePopupDialog() override = default;
 
 protected:
-    bool eventFilter(QObject* watched, QEvent* event) override;
-    void resizeEvent(QResizeEvent* event) override;
+    void wheelEvent(QWheelEvent* event) override;
     void showEvent(QShowEvent* event) override;
 
-private:
-    void updatePreview();
+private slots:
+    void zoomIn();
+    void zoomOut();
+    void zoomFit();
+    void zoomFitToWidth();
+    void normalSize();
 
-    QLabel* m_previewLabel {nullptr};
-    QLabel* m_pathLabel {nullptr};
-    QPushButton* m_selectButton {nullptr};
-    QPushButton* m_viewFullSizeButton {nullptr};
+private:
+    void setupUI(const QPixmap& pixmap);
+    void updateImageDisplay();
+
+    QLabel* m_imageLabel {nullptr};
+    QScrollArea* m_scrollArea {nullptr};
+    QDialogButtonBox* m_buttonBox {nullptr};
+    
     QPixmap m_originalPixmap;
-    QString m_currentPath;
-    bool m_isLayoutReady = false;
+    double m_scaleFactor {1.0};
+    bool m_initialZoomDone {false};
 };

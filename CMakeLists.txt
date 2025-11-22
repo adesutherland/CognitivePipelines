@@ -123,6 +123,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ImageNode.h
     ${SRC_DIR}/ImagePropertiesWidget.cpp
     ${SRC_DIR}/ImagePropertiesWidget.h
+    ${SRC_DIR}/ImagePopupDialog.cpp
+    ${SRC_DIR}/ImagePopupDialog.h
     ${SRC_DIR}/PdfToImageNode.cpp
     ${SRC_DIR}/PdfToImageNode.h
     ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
@@ -280,6 +282,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ImageNode.h
             ${SRC_DIR}/ImagePropertiesWidget.cpp
             ${SRC_DIR}/ImagePropertiesWidget.h
+            ${SRC_DIR}/ImagePopupDialog.cpp
+            ${SRC_DIR}/ImagePopupDialog.h
             ${SRC_DIR}/PdfToImageNode.cpp
             ${SRC_DIR}/PdfToImageNode.h
             ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
@@ -388,6 +392,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ImageNode.h
             ${SRC_DIR}/ImagePropertiesWidget.cpp
             ${SRC_DIR}/ImagePropertiesWidget.h
+            ${SRC_DIR}/ImagePopupDialog.cpp
+            ${SRC_DIR}/ImagePopupDialog.h
             ${SRC_DIR}/PdfToImageNode.cpp
             ${SRC_DIR}/PdfToImageNode.h
             ${SRC_DIR}/PdfToImagePropertiesWidget.cpp

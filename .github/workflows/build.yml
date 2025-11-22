@@ -15,6 +15,7 @@ permissions:
 jobs:
   build:
     name: ${{ matrix.name }} • Qt ${{ matrix.qt-version }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -238,6 +239,18 @@ jobs:
       - name: Build (Release)
         shell: bash
         run: cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
+
+      - name: Prune unused Qt SQL drivers (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          # Prune Qt SQL drivers that require external client libraries.
+          # We only need the SQLite driver (libqsqlite.dylib); removing others avoids macdeployqt warnings
+          # about missing dependencies like libpq, libiodbc, etc. on CI runners.
+          if [ -d "${QT_ROOT_DIR}/plugins/sqldrivers" ]; then
+            echo "Pruning Qt SQL drivers to keep only SQLite..."
+            find "${QT_ROOT_DIR}/plugins/sqldrivers" -name "libqsql*.dylib" ! -name "*sqlite*" -delete || true
+          fi
 
       - name: Deploy and Ad-hoc Sign (macOS)
         if: runner.os == 'macOS'
