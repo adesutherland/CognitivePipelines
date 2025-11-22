@@ -72,7 +72,9 @@ QWidget* ImageNode::createConfigurationWidget(QWidget* parent)
     m_widget = w;
     
     // Initialize from current state
-    w->setImagePath(m_imagePath);
+    // Prefer m_lastExecutedPath if Execute has already run, otherwise use m_imagePath
+    QString initialPath = m_lastExecutedPath.isEmpty() ? m_imagePath : m_lastExecutedPath;
+    w->setImagePath(initialPath);
 
     // UI -> Node (live updates)
     QObject::connect(w, &ImagePropertiesWidget::imagePathChanged,
@@ -89,8 +91,9 @@ QFuture<DataPacket> ImageNode::Execute(const DataPacket& inputs)
 {
     const QString internalPath = m_imagePath;
     QPointer<ImagePropertiesWidget> widget = m_widget;
+    QPointer<ImageNode> self(this);
     
-    return QtConcurrent::run([inputs, internalPath, widget]() -> DataPacket {
+    return QtConcurrent::run([inputs, internalPath, widget, self]() -> DataPacket {
         DataPacket output;
         
         // Step 1: Resolve Path
@@ -99,8 +102,8 @@ QFuture<DataPacket> ImageNode::Execute(const DataPacket& inputs)
         QString resolvedPath;
         
         if (inputs.contains(pinId) && inputs.value(pinId).isValid()) {
-            // Viewer Mode: use input from upstream node
             QVariant inputValue = inputs.value(pinId);
+            // Viewer Mode: use input from upstream node
             if (inputValue.canConvert<QString>()) {
                 resolvedPath = inputValue.toString();
             }
@@ -111,7 +114,17 @@ QFuture<DataPacket> ImageNode::Execute(const DataPacket& inputs)
             resolvedPath = internalPath;
         }
         
-        // Step 2: Update UI (Thread-Safe)
+        // Step 2: Store the resolved path for late widget initialization
+        // If the widget is created AFTER Execute runs, it needs to know the last executed path
+        if (self && !resolvedPath.isEmpty()) {
+            QMetaObject::invokeMethod(self, [self, resolvedPath]() {
+                if (self) {
+                    self->m_lastExecutedPath = resolvedPath;
+                }
+            }, Qt::QueuedConnection);
+        }
+        
+        // Step 3: Update UI (Thread-Safe)
         // The Execute method runs on a background thread, so we must use
         // QMetaObject::invokeMethod to call setImagePath on the main thread
         if (widget && !resolvedPath.isEmpty()) {

@@ -85,10 +85,15 @@ QWidget* PdfToImageNode::createConfigurationWidget(QWidget* parent)
 
 QFuture<DataPacket> PdfToImageNode::Execute(const DataPacket& inputs)
 {
+    // Reset the temporary file for this execution (destroys previous file if any)
+    m_tempFile = std::make_unique<QTemporaryFile>();
+    m_tempFile->setFileTemplate(QStringLiteral("pdf_stitched_XXXXXX.png"));
+    m_tempFile->setAutoRemove(true); // Will be removed when node is destroyed or re-run
+    
     // Capture m_pdfPath for use in the worker thread
     QString configuredPath = m_pdfPath;
     
-    return QtConcurrent::run([inputs, configuredPath]() -> DataPacket {
+    return QtConcurrent::run([this, inputs, configuredPath]() -> DataPacket {
         DataPacket output;
         
         // Step 1: Extract PDF path from input or use configured path (Source Mode)
@@ -169,28 +174,28 @@ QFuture<DataPacket> PdfToImageNode::Execute(const DataPacket& inputs)
         
         painter.end();
         
-        // Step 7: Save to temporary file
-        QTemporaryFile tempFile;
-        tempFile.setFileTemplate(QStringLiteral("pdf_stitched_XXXXXX.png"));
-        tempFile.setAutoRemove(false); // Keep the file for downstream nodes
-        
-        if (!tempFile.open()) {
-            // Failed to create temp file
+        // Step 7: Save to temporary file (using persistent member variable)
+        if (!m_tempFile->open()) {
+            // Failed to open temp file
             return output;
         }
         
-        QString outputPath = tempFile.fileName();
-        tempFile.close();
-        
-        // Save the stitched image
-        if (!stitchedImage.save(outputPath, "PNG")) {
+        // Save the stitched image directly to the temp file
+        if (!stitchedImage.save(m_tempFile.get(), "PNG")) {
             // Failed to save image
             return output;
         }
+
+        // Explicitly close the file to flush data and release the file handle
+        // This prevents race conditions where downstream nodes try to read before data is flushed
+        m_tempFile->close();
+
+        QString outputPath = m_tempFile->fileName();
         
-        // Step 8: Return output with image path
+        // Step 8: Return output with image path (MUST use absolute path for downstream nodes)
         const QString imagePathPinId = QString::fromLatin1(kImagePathPinId);
-        output.insert(imagePathPinId, outputPath);
+        QString absolutePath = QFileInfo(outputPath).absoluteFilePath();
+        output.insert(imagePathPinId, absolutePath);
         
         return output;
     });

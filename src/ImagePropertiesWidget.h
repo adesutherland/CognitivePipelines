@@ -27,6 +27,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
+#include <QPixmap>
 
 // Properties widget for ImageNode
 class ImagePropertiesWidget : public QWidget {
@@ -44,9 +45,20 @@ public slots:
 
 signals:
     void imagePathChanged(const QString& path);
+    void galleryRequested(const QString& path);
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
 private:
+    void updatePreview();
+
     QLabel* m_previewLabel {nullptr};
     QLabel* m_pathLabel {nullptr};
     QPushButton* m_selectButton {nullptr};
+    QPixmap m_originalPixmap;
+    QString m_currentPath;
+    bool m_isLayoutReady = false;
 };

@@ -62,5 +62,6 @@ public:
 
 private:
     QString m_imagePath;
+    QString m_lastExecutedPath; // Last resolved path from Execute (for late widget initialization)
     QPointer<ImagePropertiesWidget> m_widget;
 };

@@ -28,6 +28,8 @@
 #include <QFuture>
 #include <QString>
 #include <QPointer>
+#include <QTemporaryFile>
+#include <memory>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
@@ -55,4 +57,5 @@ public:
 private:
     QPointer<PdfToImagePropertiesWidget> m_widget;
     QString m_pdfPath;  // PDF path configured via properties widget (Source Mode)
+    std::unique_ptr<QTemporaryFile> m_tempFile;  // Persistent temp file for output image
 };

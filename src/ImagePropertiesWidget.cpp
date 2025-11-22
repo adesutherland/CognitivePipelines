@@ -24,10 +24,16 @@
 #include "ImagePropertiesWidget.h"
 #include <QFileDialog>
 #include <QPixmap>
+#include <QEvent>
+#include <QResizeEvent>
+#include <QShowEvent>
 
 ImagePropertiesWidget::ImagePropertiesWidget(QWidget* parent)
     : QWidget(parent)
 {
+    // Initialize layout ready flag
+    m_isLayoutReady = false;
+    
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
     layout->setSpacing(8);
@@ -35,10 +41,16 @@ ImagePropertiesWidget::ImagePropertiesWidget(QWidget* parent)
     // Preview label - configured for image display
     m_previewLabel = new QLabel(this);
     m_previewLabel->setMinimumSize(200, 200);
-    m_previewLabel->setScaledContents(true);
-    m_previewLabel->setAlignment(Qt::AlignCenter);
+    // Set size policy: Ignored (horizontal) and Fixed (vertical)
+    // This decouples the label's content size from the parent widget's size
+    m_previewLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    m_previewLabel->setMinimumHeight(1);
+    m_previewLabel->setMaximumHeight(300);
+    m_previewLabel->setScaledContents(false);
+    m_previewLabel->setAlignment(Qt::AlignTop | Qt::AlignHCenter);
     m_previewLabel->setFrameStyle(QFrame::Box | QFrame::Sunken);
     m_previewLabel->setText(tr("No image selected"));
+    m_previewLabel->installEventFilter(this);
     layout->addWidget(m_previewLabel);
 
     // Path label - displays the filename/path
@@ -73,6 +85,9 @@ ImagePropertiesWidget::ImagePropertiesWidget(QWidget* parent)
 
 void ImagePropertiesWidget::setImagePath(const QString& path)
 {
+    // Store the current path
+    m_currentPath = path;
+    
     // Update the path label
     if (m_pathLabel) {
         if (path.isEmpty()) {
@@ -82,28 +97,19 @@ void ImagePropertiesWidget::setImagePath(const QString& path)
         }
     }
     
-    // Attempt to load and display the image
-    if (m_previewLabel) {
-        if (path.isEmpty()) {
-            // Clear preview
-            m_previewLabel->clear();
-            m_previewLabel->setText(tr("No image selected"));
-        } else {
-            QPixmap pixmap(path);
-            if (!pixmap.isNull()) {
-                // Successfully loaded - display scaled version
-                m_previewLabel->setPixmap(pixmap.scaled(
-                    m_previewLabel->size(),
-                    Qt::KeepAspectRatio,
-                    Qt::SmoothTransformation
-                ));
-            } else {
-                // Failed to load
-                m_previewLabel->clear();
-                m_previewLabel->setText(tr("Failed to load image"));
-            }
+    // Load the image into m_originalPixmap
+    if (path.isEmpty()) {
+        m_originalPixmap = QPixmap();
+    } else {
+        m_originalPixmap.load(path);
+        // Verify that the pixmap loaded successfully
+        if (m_originalPixmap.isNull()) {
+            qWarning() << "ImagePropertiesWidget::setImagePath: Failed to load image from path:" << path;
         }
     }
+    
+    // Update the preview
+    updatePreview();
 }
 
 QString ImagePropertiesWidget::imagePath() const
@@ -112,4 +118,82 @@ QString ImagePropertiesWidget::imagePath() const
         return m_pathLabel->text();
     }
     return QString();
+}
+
+void ImagePropertiesWidget::updatePreview()
+{
+    if (!m_previewLabel) {
+        qWarning() << "[ImagePropertiesWidget::updatePreview] Aborting: m_previewLabel is null";
+        return;
+    }
+    
+    if (m_originalPixmap.isNull()) {
+        // Clear preview
+        m_previewLabel->clear();
+        m_previewLabel->setText(tr("No image selected"));
+    } else {
+        // Calculate available width by subtracting layout margins from widget width
+        auto* layout = qobject_cast<QVBoxLayout*>(this->layout());
+        if (!layout) {
+            qWarning() << "[ImagePropertiesWidget::updatePreview] Aborting: Could not cast layout to QVBoxLayout";
+            return;
+        }
+        
+        QMargins margins = layout->contentsMargins();
+        int availableWidth = this->width() - margins.left() - margins.right();
+        
+        // Sanity check: Ensure we have positive width before scaling
+        if (availableWidth <= 0) {
+            qWarning() << "[ImagePropertiesWidget::updatePreview] Aborting: availableWidth <= 0 (width =" << availableWidth << ")";
+            return;
+        }
+        
+        // Step 1: Scale the image to fit the available width exactly, maintaining aspect ratio
+        // Critical: Use scaledToWidth() to ensure the image fills the panel width
+        // The height will scale proportionally, and if it exceeds 300px, it will be cropped below
+        QPixmap scaled = m_originalPixmap.scaledToWidth(
+            availableWidth,
+            Qt::SmoothTransformation
+        );
+        
+        // Step 2: If the scaled height exceeds our maximum, crop it in memory
+        // This prevents the layout system from trying to accommodate oversized content
+        const int maxHeight = 300;
+        if (scaled.height() > maxHeight) {
+            // Create a cropped pixmap containing only the top portion
+            QPixmap cropped = scaled.copy(0, 0, scaled.width(), maxHeight);
+            m_previewLabel->setPixmap(cropped);
+        } else {
+            // Image fits within height constraint, use as-is
+            m_previewLabel->setPixmap(scaled);
+        }
+    }
+}
+
+bool ImagePropertiesWidget::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_previewLabel && event->type() == QEvent::MouseButtonRelease) {
+        if (!m_currentPath.isEmpty()) {
+            emit galleryRequested(m_currentPath);
+        }
+        return true;
+    }
+    return QWidget::eventFilter(watched, event);
+}
+
+void ImagePropertiesWidget::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    // Guard: Don't update preview until layout is ready
+    if (!m_isLayoutReady) {
+        return;
+    }
+    updatePreview();
+}
+
+void ImagePropertiesWidget::showEvent(QShowEvent* event)
+{
+    QWidget::showEvent(event);
+    m_isLayoutReady = true;
+    updatePreview();
 }
