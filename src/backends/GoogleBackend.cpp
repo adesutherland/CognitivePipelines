@@ -48,6 +48,12 @@ QStringList GoogleBackend::availableModels() const {
     };
 }
 
+QStringList GoogleBackend::availableEmbeddingModels() const {
+    return {
+        QStringLiteral("text-embedding-004")
+    };
+}
+
 LLMResult GoogleBackend::sendPrompt(
     const QString& apiKey,
     const QString& modelName,
@@ -312,5 +318,21 @@ LLMResult GoogleBackend::sendPrompt(
         result.usage.totalTokens = usageMetadata[QStringLiteral("totalTokenCount")].toInt(0);
     }
     
+    return result;
+}
+
+EmbeddingResult GoogleBackend::getEmbedding(
+    const QString& apiKey,
+    const QString& modelName,
+    const QString& text
+) {
+    // Suppress unused parameter warnings
+    (void)apiKey;
+    (void)modelName;
+    (void)text;
+    
+    EmbeddingResult result;
+    result.hasError = true;
+    result.errorMsg = QStringLiteral("Google embeddings not yet implemented");
     return result;
 }

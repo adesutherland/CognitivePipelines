@@ -47,6 +47,14 @@ NodeDescriptor DatabaseConnector::GetDescriptor() const
     desc.name = QStringLiteral("Database Connector");
     desc.category = QStringLiteral("Data");
 
+    // Input pin: database (text)
+    PinDefinition inDatabase;
+    inDatabase.direction = PinDirection::Input;
+    inDatabase.id = QStringLiteral("database");
+    inDatabase.name = QStringLiteral("Database");
+    inDatabase.type = QStringLiteral("text");
+    desc.inputPins.insert(inDatabase.id, inDatabase);
+
     // Input pin: sql (text)
     PinDefinition inSql;
     inSql.direction = PinDirection::Input;
@@ -54,6 +62,14 @@ NodeDescriptor DatabaseConnector::GetDescriptor() const
     inSql.name = QStringLiteral("SQL");
     inSql.type = QStringLiteral("text");
     desc.inputPins.insert(inSql.id, inSql);
+
+    // Output pin: database (text)
+    PinDefinition outDatabase;
+    outDatabase.direction = PinDirection::Output;
+    outDatabase.id = QStringLiteral("database");
+    outDatabase.name = QStringLiteral("Database");
+    outDatabase.type = QStringLiteral("text");
+    desc.outputPins.insert(outDatabase.id, outDatabase);
 
     // Output pin: stdout (text)
     PinDefinition outStdout;
@@ -80,17 +96,29 @@ QWidget* DatabaseConnector::createConfigurationWidget(QWidget* parent)
         propertiesWidget = new DatabaseConnectorPropertiesWidget(parent);
         // initialize UI from current state
         propertiesWidget->setDatabasePath(m_databasePath);
+        propertiesWidget->setSqlQuery(m_sqlQuery);
         // connect UI -> node
         QObject::connect(propertiesWidget, &DatabaseConnectorPropertiesWidget::databasePathChanged,
                          this, &DatabaseConnector::onDatabasePathChanged);
+        QObject::connect(propertiesWidget, &DatabaseConnectorPropertiesWidget::sqlQueryChanged,
+                         this, &DatabaseConnector::onSqlQueryChanged);
     }
     return propertiesWidget;
 }
 
 QFuture<DataPacket> DatabaseConnector::Execute(const DataPacket& inputs)
 {
-    const QString sql = inputs.value(QStringLiteral("sql")).toString();
-    const QString dbPath = m_databasePath;
+    // Check if SQL is provided via input pin, otherwise use internal property
+    QString sql = inputs.value(QStringLiteral("sql")).toString();
+    if (sql.trimmed().isEmpty()) {
+        sql = m_sqlQuery;
+    }
+    
+    // Check if database path is provided via input pin, otherwise use internal property
+    QString dbPath = inputs.value(QStringLiteral("database")).toString();
+    if (dbPath.trimmed().isEmpty()) {
+        dbPath = m_databasePath;
+    }
 
     return QtConcurrent::run([sql, dbPath]() -> DataPacket {
         DataPacket packet;
@@ -101,6 +129,7 @@ QFuture<DataPacket> DatabaseConnector::Execute(const DataPacket& inputs)
             const QString msg = QStringLiteral("ERROR: Database path is empty.");
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
+            packet.insert(QStringLiteral("database"), dbPath);
             qWarning() << "DatabaseConnector:" << msg;
             return packet;
         }
@@ -108,6 +137,7 @@ QFuture<DataPacket> DatabaseConnector::Execute(const DataPacket& inputs)
             const QString msg = QStringLiteral("ERROR: SQL is empty.");
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
+            packet.insert(QStringLiteral("database"), dbPath);
             qWarning() << "DatabaseConnector:" << msg;
             return packet;
         }
@@ -127,56 +157,114 @@ QFuture<DataPacket> DatabaseConnector::Execute(const DataPacket& inputs)
                 // Ensure close before leaving scope
                 if (db.isOpen()) db.close();
             } else {
-                QSqlQuery query(db);
-                if (!query.exec(sql)) {
-                    stderrText = query.lastError().text();
-                    qWarning() << "DatabaseConnector: query exec failed:" << stderrText;
+                // Split SQL by semicolon to handle multi-statement scripts
+                QStringList statements = sql.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+                
+                // Start transaction for multi-statement execution
+                if (!db.transaction()) {
+                    stderrText = QStringLiteral("Failed to start transaction: ") + db.lastError().text();
+                    qWarning() << "DatabaseConnector:" << stderrText;
                     db.close();
                 } else {
-                    // Success: format results. If not a SELECT, show rows affected.
-                    if (!query.isSelect()) {
-                        const qint64 rows = query.numRowsAffected();
-                        stdoutText = QStringLiteral("Rows affected: ") + QString::number(rows);
-                    } else {
-                        // Build CSV with headers
-                        auto csvEscape = [](const QString& in) -> QString {
-                            QString s = in;
-                            s.replace('"', "\"\"");
-                            return QStringLiteral("\"") + s + QStringLiteral("\"");
-                        };
-
-                        QSqlRecord rec = query.record();
-                        const int colCount = rec.count();
-                        QStringList lines;
-
-                        // Header line
-                        {
-                            QStringList headers;
-                            headers.reserve(colCount);
-                            for (int i = 0; i < colCount; ++i) {
-                                headers << csvEscape(rec.fieldName(i));
-                            }
-                            lines << headers.join(QLatin1Char(','));
+                    QSqlQuery query(db);
+                    bool allSuccess = true;
+                    qint64 totalRowsAffected = 0;
+                    
+                    // Execute each statement
+                    for (const QString& stmt : statements) {
+                        QString trimmedStmt = stmt.trimmed();
+                        if (trimmedStmt.isEmpty()) {
+                            continue;
                         }
-
-                        // Rows
-                        while (query.next()) {
-                            QStringList row;
-                            row.reserve(colCount);
-                            for (int i = 0; i < colCount; ++i) {
-                                const QVariant v = query.value(i);
-                                if (v.isNull()) {
-                                    row << QStringLiteral("NULL");
-                                } else {
-                                    row << csvEscape(v.toString());
-                                }
-                            }
-                            lines << row.join(QLatin1Char(','));
+                        
+                        if (!query.exec(trimmedStmt)) {
+                            stderrText = QStringLiteral("Statement failed: ") + query.lastError().text();
+                            qWarning() << "DatabaseConnector: statement exec failed:" << stderrText;
+                            allSuccess = false;
+                            break;
                         }
-
-                        stdoutText = lines.join(QLatin1Char('\n'));
+                        
+                        if (!query.isSelect()) {
+                            totalRowsAffected += query.numRowsAffected();
+                        }
                     }
-                    db.close();
+                    
+                    if (!allSuccess) {
+                        // Rollback on failure
+                        if (!db.rollback()) {
+                            stderrText += QStringLiteral(" (Rollback also failed: ") + db.lastError().text() + QStringLiteral(")");
+                            qWarning() << "DatabaseConnector: rollback failed:" << db.lastError().text();
+                        }
+                        db.close();
+                    } else {
+                        // Commit on success
+                        if (!db.commit()) {
+                            stderrText = QStringLiteral("Failed to commit transaction: ") + db.lastError().text();
+                            qWarning() << "DatabaseConnector: commit failed:" << stderrText;
+                            db.close();
+                        } else {
+                            // Success: format results. If last query was a SELECT, show table
+                            if (query.isSelect()) {
+                                // Build Markdown table with headers
+                                auto sanitizeCell = [](const QString& in) -> QString {
+                                    QString s = in;
+                                    // Replace newlines and carriage returns with spaces to prevent breaking table structure
+                                    s.replace(QLatin1Char('\n'), QStringLiteral(" "));
+                                    s.replace(QLatin1Char('\r'), QStringLiteral(" "));
+                                    // Collapse consecutive whitespace into single space
+                                    s = s.simplified();
+                                    // Escape pipe characters to avoid confusing Markdown parser
+                                    s.replace(QLatin1Char('|'), QStringLiteral("\\|"));
+                                    return s;
+                                };
+
+                                QSqlRecord rec = query.record();
+                                const int colCount = rec.count();
+                                QStringList lines;
+
+                                // Header row
+                                {
+                                    QStringList headers;
+                                    headers.reserve(colCount);
+                                    for (int i = 0; i < colCount; ++i) {
+                                        headers << sanitizeCell(rec.fieldName(i));
+                                    }
+                                    lines << QStringLiteral("| ") + headers.join(QStringLiteral(" | ")) + QStringLiteral(" |");
+                                }
+
+                                // Separator row
+                                {
+                                    QStringList separators;
+                                    separators.reserve(colCount);
+                                    for (int i = 0; i < colCount; ++i) {
+                                        separators << QStringLiteral("---");
+                                    }
+                                    lines << QStringLiteral("|") + separators.join(QStringLiteral("|")) + QStringLiteral("|");
+                                }
+
+                                // Data rows
+                                while (query.next()) {
+                                    QStringList row;
+                                    row.reserve(colCount);
+                                    for (int i = 0; i < colCount; ++i) {
+                                        const QVariant v = query.value(i);
+                                        if (v.isNull()) {
+                                            row << QStringLiteral("NULL");
+                                        } else {
+                                            row << sanitizeCell(v.toString());
+                                        }
+                                    }
+                                    lines << QStringLiteral("| ") + row.join(QStringLiteral(" | ")) + QStringLiteral(" |");
+                                }
+
+                                stdoutText = lines.join(QLatin1Char('\n'));
+                            } else {
+                                // Non-SELECT queries: show total rows affected
+                                stdoutText = QStringLiteral("Rows affected: ") + QString::number(totalRowsAffected);
+                            }
+                            db.close();
+                        }
+                    }
                 }
             }
         }
@@ -185,6 +273,7 @@ QFuture<DataPacket> DatabaseConnector::Execute(const DataPacket& inputs)
 
         packet.insert(QStringLiteral("stdout"), stdoutText);
         packet.insert(QStringLiteral("stderr"), stderrText);
+        packet.insert(QStringLiteral("database"), dbPath);
         return packet;
     });
 }
@@ -193,6 +282,7 @@ QJsonObject DatabaseConnector::saveState() const
 {
     QJsonObject state;
     state.insert(QStringLiteral("databasePath"), m_databasePath);
+    state.insert(QStringLiteral("sqlQuery"), m_sqlQuery);
     return state;
 }
 
@@ -204,10 +294,22 @@ void DatabaseConnector::loadState(const QJsonObject& data)
             propertiesWidget->setDatabasePath(m_databasePath);
         }
     }
+    if (data.contains(QStringLiteral("sqlQuery"))) {
+        m_sqlQuery = data.value(QStringLiteral("sqlQuery")).toString();
+        if (propertiesWidget) {
+            propertiesWidget->setSqlQuery(m_sqlQuery);
+        }
+    }
 }
 
 void DatabaseConnector::onDatabasePathChanged(const QString& path)
 {
     if (m_databasePath == path) return;
     m_databasePath = path;
+}
+
+void DatabaseConnector::onSqlQueryChanged(const QString& query)
+{
+    if (m_sqlQuery == query) return;
+    m_sqlQuery = query;
 }

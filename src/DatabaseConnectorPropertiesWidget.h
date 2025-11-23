@@ -27,6 +27,7 @@
 #include <QString>
 
 class QLineEdit;
+class QTextEdit;
 
 // Properties panel widget for the Database Connector node.
 class DatabaseConnectorPropertiesWidget : public QWidget {
@@ -38,9 +39,14 @@ public:
     void setDatabasePath(const QString& path);
     QString databasePath() const;
 
+    void setSqlQuery(const QString& query);
+    QString sqlQuery() const;
+
 signals:
     void databasePathChanged(const QString& path);
+    void sqlQueryChanged(const QString& query);
 
 private:
     QLineEdit* m_pathEdit {nullptr};
+    QTextEdit* m_sqlEdit {nullptr};
 };

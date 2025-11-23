@@ -25,6 +25,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <vector>
 
 /**
  * @brief Token usage statistics returned by LLM backends.
@@ -47,6 +48,19 @@ struct LLMResult {
     QString rawResponse;    ///< The original full JSON for debugging
     bool hasError = false;  ///< Whether an error occurred
     QString errorMsg;       ///< Error message if hasError is true
+};
+
+/**
+ * @brief Result structure returned by embedding API calls.
+ *
+ * This struct encapsulates the vector embedding, token usage statistics,
+ * and error information for text-to-vector conversion operations.
+ */
+struct EmbeddingResult {
+    std::vector<float> vector;  ///< The embedding vector (typically 1536 or 3072 dimensions for OpenAI)
+    LLMUsage usage;             ///< Token usage statistics
+    bool hasError = false;      ///< Whether an error occurred
+    QString errorMsg;           ///< Error message if hasError is true
 };
 
 /**
@@ -78,6 +92,12 @@ public:
     virtual QStringList availableModels() const = 0;
 
     /**
+     * @brief Returns the list of embedding models supported by this backend.
+     * @return A list of embedding model identifiers (e.g., ["text-embedding-3-small", "text-embedding-3-large"]).
+     */
+    virtual QStringList availableEmbeddingModels() const = 0;
+
+    /**
      * @brief Sends a prompt to the backend and returns the normalized response.
      *
      * This is a synchronous method that should be called from a background thread
@@ -100,5 +120,22 @@ public:
         const QString& systemPrompt,
         const QString& userPrompt,
         const QString& imagePath = QString()
+    ) = 0;
+
+    /**
+     * @brief Converts text into a vector embedding for RAG (Retrieval-Augmented Generation).
+     *
+     * This is a synchronous method that should be called from a background thread
+     * (e.g., via QtConcurrent::run) to avoid blocking the UI.
+     *
+     * @param apiKey The API key for authentication with the backend.
+     * @param modelName The embedding model to use (e.g., "text-embedding-3-small").
+     * @param text The text to convert into a vector embedding.
+     * @return EmbeddingResult containing the vector, usage statistics, and error information.
+     */
+    virtual EmbeddingResult getEmbedding(
+        const QString& apiKey,
+        const QString& modelName,
+        const QString& text
     ) = 0;
 };

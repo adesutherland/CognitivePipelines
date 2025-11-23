@@ -39,6 +39,7 @@ public:
     QString id() const override;
     QString name() const override;
     QStringList availableModels() const override;
+    QStringList availableEmbeddingModels() const override;
 
     LLMResult sendPrompt(
         const QString& apiKey,
@@ -48,5 +49,11 @@ public:
         const QString& systemPrompt,
         const QString& userPrompt,
         const QString& imagePath = QString()
+    ) override;
+
+    EmbeddingResult getEmbedding(
+        const QString& apiKey,
+        const QString& modelName,
+        const QString& text
     ) override;
 };

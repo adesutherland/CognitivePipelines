@@ -25,6 +25,7 @@
 
 #include <QFormLayout>
 #include <QLineEdit>
+#include <QTextEdit>
 #include <QSignalBlocker>
 
 DatabaseConnectorPropertiesWidget::DatabaseConnectorPropertiesWidget(QWidget* parent)
@@ -39,11 +40,19 @@ DatabaseConnectorPropertiesWidget::DatabaseConnectorPropertiesWidget(QWidget* pa
 
     layout->addRow(tr("Database File Path:"), m_pathEdit);
 
+    m_sqlEdit = new QTextEdit(this);
+    m_sqlEdit->setPlaceholderText(tr("SELECT * FROM table_name"));
+    m_sqlEdit->setMaximumHeight(100);
+
+    layout->addRow(tr("SQL Query:"), m_sqlEdit);
+
     setLayout(layout);
 
     // Forward edits to our signal
     QObject::connect(m_pathEdit, &QLineEdit::textChanged,
                      this, &DatabaseConnectorPropertiesWidget::databasePathChanged);
+    QObject::connect(m_sqlEdit, &QTextEdit::textChanged,
+                     this, [this]() { emit sqlQueryChanged(m_sqlEdit->toPlainText()); });
 }
 
 void DatabaseConnectorPropertiesWidget::setDatabasePath(const QString& path)
@@ -65,4 +74,25 @@ void DatabaseConnectorPropertiesWidget::setDatabasePath(const QString& path)
 QString DatabaseConnectorPropertiesWidget::databasePath() const
 {
     return m_pathEdit ? m_pathEdit->text() : QString();
+}
+
+void DatabaseConnectorPropertiesWidget::setSqlQuery(const QString& query)
+{
+    if (!m_sqlEdit)
+        return;
+
+    if (m_sqlEdit->toPlainText() == query)
+        return; // No change
+
+    {
+        QSignalBlocker blocker(m_sqlEdit);
+        m_sqlEdit->setPlainText(query);
+    }
+    // Emit after programmatic set so listeners (e.g., node model) can react
+    emit sqlQueryChanged(query);
+}
+
+QString DatabaseConnectorPropertiesWidget::sqlQuery() const
+{
+    return m_sqlEdit ? m_sqlEdit->toPlainText() : QString();
 }

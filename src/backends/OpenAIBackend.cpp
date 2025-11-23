@@ -53,6 +53,14 @@ QStringList OpenAIBackend::availableModels() const {
     };
 }
 
+QStringList OpenAIBackend::availableEmbeddingModels() const {
+    return {
+        QStringLiteral("text-embedding-3-small"),
+        QStringLiteral("text-embedding-3-large"),
+        QStringLiteral("text-embedding-ada-002")
+    };
+}
+
 LLMResult OpenAIBackend::sendPrompt(
     const QString& apiKey,
     const QString& modelName,
@@ -241,6 +249,113 @@ LLMResult OpenAIBackend::sendPrompt(
         result.usage.inputTokens = usage[QStringLiteral("prompt_tokens")].toInt(0);
         result.usage.outputTokens = usage[QStringLiteral("completion_tokens")].toInt(0);
         result.usage.totalTokens = usage[QStringLiteral("total_tokens")].toInt(0);
+    }
+    
+    return result;
+}
+
+EmbeddingResult OpenAIBackend::getEmbedding(
+    const QString& apiKey,
+    const QString& modelName,
+    const QString& text
+) {
+    EmbeddingResult result;
+    
+    const std::string url = "https://api.openai.com/v1/embeddings";
+
+    // Build request payload
+    QJsonObject root;
+    root.insert(QStringLiteral("input"), text);
+    root.insert(QStringLiteral("model"), modelName);
+
+    const QByteArray jsonBytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+
+    cpr::Header headers{
+        {"Authorization", std::string("Bearer ") + apiKey.toStdString()},
+        {"Content-Type", "application/json"}
+    };
+
+    // Perform POST synchronously
+    auto response = cpr::Post(cpr::Url{url}, headers, cpr::Body{jsonBytes.constData()}, cpr::Timeout{60000});
+    
+    if (response.error) {
+        result.hasError = true;
+        result.errorMsg = QStringLiteral("Network error: %1").arg(QString::fromStdString(response.error.message));
+        return result;
+    }
+    
+    if (response.status_code != 200) {
+        result.hasError = true;
+        // Try to parse error from JSON
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(response.text.c_str(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+            QJsonObject obj = doc.object();
+            if (obj.contains(QStringLiteral("error")) && obj[QStringLiteral("error")].isObject()) {
+                QJsonObject errorObj = obj[QStringLiteral("error")].toObject();
+                result.errorMsg = errorObj[QStringLiteral("message")].toString(
+                    QStringLiteral("HTTP %1").arg(response.status_code));
+            } else {
+                result.errorMsg = QStringLiteral("HTTP %1").arg(response.status_code);
+            }
+        } else {
+            result.errorMsg = QStringLiteral("HTTP %1").arg(response.status_code);
+        }
+        return result;
+    }
+    
+    // Parse successful response
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(response.text.c_str(), &parseError);
+    
+    if (parseError.error != QJsonParseError::NoError) {
+        result.hasError = true;
+        result.errorMsg = QStringLiteral("JSON parse error: %1").arg(parseError.errorString());
+        return result;
+    }
+    
+    if (!doc.isObject()) {
+        result.hasError = true;
+        result.errorMsg = QStringLiteral("Invalid JSON: root is not an object");
+        return result;
+    }
+    
+    QJsonObject rootObj = doc.object();
+    
+    // Check for error object in response
+    if (rootObj.contains(QStringLiteral("error"))) {
+        result.hasError = true;
+        if (rootObj[QStringLiteral("error")].isObject()) {
+            QJsonObject errorObj = rootObj[QStringLiteral("error")].toObject();
+            result.errorMsg = errorObj[QStringLiteral("message")].toString(QStringLiteral("Unknown error"));
+        } else {
+            result.errorMsg = QStringLiteral("Unknown error");
+        }
+        return result;
+    }
+    
+    // Extract embedding vector from data[0].embedding
+    if (rootObj.contains(QStringLiteral("data")) && rootObj[QStringLiteral("data")].isArray()) {
+        QJsonArray dataArray = rootObj[QStringLiteral("data")].toArray();
+        if (!dataArray.isEmpty() && dataArray[0].isObject()) {
+            QJsonObject dataObj = dataArray[0].toObject();
+            if (dataObj.contains(QStringLiteral("embedding")) && dataObj[QStringLiteral("embedding")].isArray()) {
+                QJsonArray embeddingArray = dataObj[QStringLiteral("embedding")].toArray();
+                result.vector.reserve(embeddingArray.size());
+                for (const QJsonValue& val : embeddingArray) {
+                    result.vector.push_back(static_cast<float>(val.toDouble()));
+                }
+            }
+        }
+    }
+    
+    // Extract usage statistics
+    if (rootObj.contains(QStringLiteral("usage")) && rootObj[QStringLiteral("usage")].isObject()) {
+        QJsonObject usage = rootObj[QStringLiteral("usage")].toObject();
+        result.usage.inputTokens = usage[QStringLiteral("prompt_tokens")].toInt(0);
+        result.usage.totalTokens = usage[QStringLiteral("total_tokens")].toInt(0);
+        // Embedding API doesn't have output tokens, only input
+        result.usage.outputTokens = 0;
     }
     
     return result;

@@ -48,8 +48,10 @@ public:
 
 private slots:
     void onDatabasePathChanged(const QString& path);
+    void onSqlQueryChanged(const QString& query);
 
 private:
     DatabaseConnectorPropertiesWidget* propertiesWidget {nullptr};
     QString m_databasePath;
+    QString m_sqlQuery;
 };

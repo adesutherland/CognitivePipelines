@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.4.7 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.5.1 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -107,6 +107,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/backends/GoogleBackend.h
     ${SRC_DIR}/core/LLMProviderRegistry.cpp
     ${SRC_DIR}/core/LLMProviderRegistry.h
+    ${SRC_DIR}/core/DocumentLoader.cpp
+    ${SRC_DIR}/core/DocumentLoader.h
+    ${SRC_DIR}/core/TextChunker.cpp
+    ${SRC_DIR}/core/TextChunker.h
     ${SRC_DIR}/PromptBuilderNode.cpp
     ${SRC_DIR}/PromptBuilderNode.h
     ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
@@ -143,6 +147,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/DatabaseConnector.h
     ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
     ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
+    ${SRC_DIR}/RagIndexerNode.cpp
+    ${SRC_DIR}/RagIndexerNode.h
+    ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
+    ${SRC_DIR}/RagIndexerPropertiesWidget.h
     ${SRC_DIR}/NodeGraphModel.cpp
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp
@@ -259,6 +267,10 @@ if(ENABLE_TESTING)
             tests/test_logging.cpp
             tests/test_image_node.cpp
             tests/test_pdf_node.cpp
+            tests/test_rag_foundation.cpp
+            tests/test_document_loader.cpp
+            tests/test_text_chunker.cpp
+            tests/test_rag_indexer.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
@@ -312,6 +324,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/DatabaseConnector.h
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
+            ${SRC_DIR}/RagIndexerNode.cpp
+            ${SRC_DIR}/RagIndexerNode.h
+            ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
+            ${SRC_DIR}/RagIndexerPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             ${SRC_DIR}/UniversalLLMNode.cpp
@@ -320,6 +336,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/UniversalLLMPropertiesWidget.h
             ${SRC_DIR}/core/LLMProviderRegistry.cpp
             ${SRC_DIR}/core/LLMProviderRegistry.h
+            ${SRC_DIR}/core/DocumentLoader.cpp
+            ${SRC_DIR}/core/DocumentLoader.h
+            ${SRC_DIR}/core/TextChunker.cpp
+            ${SRC_DIR}/core/TextChunker.h
             ${SRC_DIR}/backends/ILLMBackend.h
             ${SRC_DIR}/backends/OpenAIBackend.cpp
             ${SRC_DIR}/backends/OpenAIBackend.h
@@ -376,6 +396,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/backends/OpenAIBackend.h
             ${SRC_DIR}/backends/GoogleBackend.cpp
             ${SRC_DIR}/backends/GoogleBackend.h
+            ${SRC_DIR}/core/DocumentLoader.cpp
+            ${SRC_DIR}/core/DocumentLoader.h
+            ${SRC_DIR}/core/TextChunker.cpp
+            ${SRC_DIR}/core/TextChunker.h
             ${SRC_DIR}/PromptBuilderNode.cpp
             ${SRC_DIR}/PromptBuilderNode.h
             ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
@@ -418,6 +442,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/DatabaseConnector.h
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
+            ${SRC_DIR}/RagIndexerNode.cpp
+            ${SRC_DIR}/RagIndexerNode.h
+            ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
+            ${SRC_DIR}/RagIndexerPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>

@@ -12,3 +12,6 @@ out/
 
 # Ignore macOS system files
 .DS_Store
+
+# Ignore testing work files
+/tests/test_data/rag.db
