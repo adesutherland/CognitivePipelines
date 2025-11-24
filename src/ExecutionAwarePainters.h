@@ -23,11 +23,13 @@
 #include "ExecutionStateModel.h"
 #include "ExecutionIdUtils.h"
 
+class NodeGraphModel;
+
 class ExecutionAwareNodePainter : public QtNodes::AbstractNodePainter
 {
 public:
     explicit ExecutionAwareNodePainter(std::shared_ptr<ExecutionStateModel> model,
-                                        QtNodes::AbstractGraphModel* graphModel,
+                                        NodeGraphModel* graphModel,
                                         QtNodes::BasicGraphicsScene* scene)
         : model_(std::move(model)), graphModel_(graphModel), scene_(scene) {}
 
@@ -38,7 +40,7 @@ private:
 
 private:
     std::shared_ptr<ExecutionStateModel> model_;
-    QtNodes::AbstractGraphModel* graphModel_;
+    NodeGraphModel* graphModel_;
     QtNodes::BasicGraphicsScene* scene_;
 };
 

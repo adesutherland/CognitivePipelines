@@ -31,6 +31,7 @@
 #include <QSet>
 
 #include "PromptBuilderNode.h"
+#include "NodeInfoWidget.h"
 
 using namespace QtNodes;
 
@@ -184,9 +185,13 @@ void ToolNodeDelegate::onConnectorInputPinsUpdateRequested(const QStringList& ne
 
 QWidget *ToolNodeDelegate::embeddedWidget()
 {
-    // Do not embed any configuration UI inside the node itself.
-    // The configuration widget must appear only in the MainWindow's properties panel.
-    return nullptr;
+    // Lazily create the info widget to display the node description inside the node
+    if (!m_infoWidget) {
+        m_infoWidget = new NodeInfoWidget();
+        // Initialize with current description
+        m_infoWidget->setDescription(m_nodeDescription);
+    }
+    return m_infoWidget;
 }
 
 QWidget* ToolNodeDelegate::configurationWidget()
@@ -196,6 +201,20 @@ QWidget* ToolNodeDelegate::configurationWidget()
         _widget = _connector ? _connector->createConfigurationWidget(nullptr) : nullptr;
     }
     return _widget;
+}
+
+void ToolNodeDelegate::setDescription(const QString& desc)
+{
+    m_nodeDescription = desc;
+    
+    // Sync with the embedded info widget if it exists
+    if (m_infoWidget) {
+        m_infoWidget->setDescription(desc);
+    }
+    
+    // Notify the view that the embedded widget size may have changed
+    // This triggers the node to recalculate its geometry
+    emit embeddedWidgetSizeUpdated();
 }
 
 void ToolNodeDelegate::ensureDescriptorCached() const
@@ -281,6 +300,11 @@ QJsonObject ToolNodeDelegate::save() const
     // Persist the registry lookup key so loader can instantiate the correct model
     obj.insert(QStringLiteral("model-name"), name());
 
+    // Persist node description
+    if (!m_nodeDescription.isEmpty()) {
+        obj.insert(QStringLiteral("node-description"), m_nodeDescription);
+    }
+
     // Merge connector-specific state into the internal-data object
     if (_connector) {
         const QJsonObject state = _connector->saveState();
@@ -293,6 +317,11 @@ QJsonObject ToolNodeDelegate::save() const
 
 void ToolNodeDelegate::load(QJsonObject const& data)
 {
+    // Restore node description
+    if (data.contains(QStringLiteral("node-description"))) {
+        m_nodeDescription = data.value(QStringLiteral("node-description")).toString();
+    }
+
     if (_connector) {
         _connector->loadState(data);
     }

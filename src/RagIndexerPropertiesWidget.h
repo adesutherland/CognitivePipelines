@@ -57,7 +57,6 @@ public:
     int chunkOverlap() const;
     QString fileFilter() const;
     QString chunkingStrategy() const;
-    QString externalCommand() const;
     bool clearDatabase() const;
 
 public slots:
@@ -71,7 +70,6 @@ public slots:
     void setChunkOverlap(int overlap);
     void setFileFilter(const QString& filter);
     void setChunkingStrategy(const QString& strategy);
-    void setExternalCommand(const QString& command);
     void setClearDatabase(bool clear);
 
 signals:
@@ -85,7 +83,6 @@ signals:
     void chunkOverlapChanged(int overlap);
     void fileFilterChanged(const QString& filter);
     void chunkingStrategyChanged(const QString& strategy);
-    void externalCommandChanged(const QString& command);
     void clearDatabaseChanged(bool clear);
 
 private slots:
@@ -106,6 +103,5 @@ private:
     QPushButton* m_browseDatabaseBtn {nullptr};
     QLineEdit* m_fileFilterEdit {nullptr};
     QComboBox* m_chunkingStrategyCombo {nullptr};
-    QLineEdit* m_externalCommandEdit {nullptr};
     QCheckBox* m_clearDatabaseCheckBox {nullptr};
 };

@@ -76,7 +76,6 @@ public:
     int chunkOverlap() const { return m_chunkOverlap; }
     QString fileFilter() const { return m_fileFilter; }
     QString chunkingStrategy() const { return m_chunkingStrategy; }
-    QString externalCommand() const { return m_externalCommand; }
     bool clearDatabase() const { return m_clearDatabase; }
 
 public slots:
@@ -89,7 +88,6 @@ public slots:
     void setChunkOverlap(int overlap);
     void setFileFilter(const QString& filter);
     void setChunkingStrategy(const QString& strategy);
-    void setExternalCommand(const QString& command);
     void setClearDatabase(bool clear);
 
 signals:
@@ -102,7 +100,6 @@ signals:
     void chunkOverlapChanged(int overlap);
     void fileFilterChanged(const QString& filter);
     void chunkingStrategyChanged(const QString& strategy);
-    void externalCommandChanged(const QString& command);
     void clearDatabaseChanged(bool clear);
 
 private:
@@ -116,6 +113,5 @@ private:
     int m_chunkOverlap { 200 };
     QString m_fileFilter;
     QString m_chunkingStrategy { QStringLiteral("Auto") };
-    QString m_externalCommand;
     bool m_clearDatabase { false };
 };

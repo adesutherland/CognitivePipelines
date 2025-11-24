@@ -144,6 +144,11 @@ QtNodes::NodeId NodeGraphModel::addNode(QString const nodeType)
                     this, &NodeGraphModel::onNodePortsInserted);
             connect(model, &QtNodes::NodeDelegateModel::portsDeleted,
                     this, &NodeGraphModel::onNodePortsDeleted);
+            
+            // Also connect embeddedWidgetSizeUpdated to trigger geometry recalculation
+            // This is needed for embedded widgets like NodeInfoWidget to resize the node
+            connect(model, &QtNodes::NodeDelegateModel::embeddedWidgetSizeUpdated,
+                    this, &NodeGraphModel::onNodePortsInserted);
         }
     }
     

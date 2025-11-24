@@ -105,14 +105,7 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     m_chunkingStrategyCombo->addItem(QStringLiteral("Rexx"));
     m_chunkingStrategyCombo->addItem(QStringLiteral("SQL"));
     m_chunkingStrategyCombo->addItem(QStringLiteral("Cobol"));
-    m_chunkingStrategyCombo->addItem(QStringLiteral("External (Command)"));
     formLayout->addRow(QStringLiteral("Chunking Strategy:"), m_chunkingStrategyCombo);
-
-    // External command
-    m_externalCommandEdit = new QLineEdit(this);
-    m_externalCommandEdit->setPlaceholderText(QStringLiteral("Command to execute for chunking"));
-    m_externalCommandEdit->setEnabled(false);  // Disabled by default
-    formLayout->addRow(QStringLiteral("External Command:"), m_externalCommandEdit);
 
     // Clear database checkbox
     m_clearDatabaseCheckBox = new QCheckBox(QStringLiteral("Clear Database before Indexing"), this);
@@ -152,7 +145,6 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     connect(m_fileFilterEdit, &QLineEdit::textChanged, this, &RagIndexerPropertiesWidget::fileFilterChanged);
     connect(m_chunkingStrategyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RagIndexerPropertiesWidget::onStrategyChanged);
-    connect(m_externalCommandEdit, &QLineEdit::textChanged, this, &RagIndexerPropertiesWidget::externalCommandChanged);
     connect(m_clearDatabaseCheckBox, &QCheckBox::toggled, this, &RagIndexerPropertiesWidget::clearDatabaseChanged);
 
     // Initialize model list for the first provider
@@ -211,11 +203,6 @@ QString RagIndexerPropertiesWidget::fileFilter() const
 QString RagIndexerPropertiesWidget::chunkingStrategy() const
 {
     return m_chunkingStrategyCombo->currentText();
-}
-
-QString RagIndexerPropertiesWidget::externalCommand() const
-{
-    return m_externalCommandEdit->text();
 }
 
 bool RagIndexerPropertiesWidget::clearDatabase() const
@@ -322,15 +309,6 @@ void RagIndexerPropertiesWidget::setChunkingStrategy(const QString& strategy)
     }
 }
 
-void RagIndexerPropertiesWidget::setExternalCommand(const QString& command)
-{
-    if (m_externalCommandEdit->text() != command) {
-        m_externalCommandEdit->blockSignals(true);
-        m_externalCommandEdit->setText(command);
-        m_externalCommandEdit->blockSignals(false);
-    }
-}
-
 void RagIndexerPropertiesWidget::setClearDatabase(bool clear)
 {
     if (m_clearDatabaseCheckBox->isChecked() != clear) {
@@ -409,15 +387,11 @@ void RagIndexerPropertiesWidget::onProviderChanged(int index)
 
 void RagIndexerPropertiesWidget::onStrategyChanged(int index)
 {
-    if (!m_chunkingStrategyCombo || !m_externalCommandEdit) {
+    if (!m_chunkingStrategyCombo) {
         return;
     }
     
-    // Enable external command field only when "External (Command)" is selected
-    const QString strategy = m_chunkingStrategyCombo->itemText(index);
-    const bool isExternal = (strategy == QStringLiteral("External (Command)"));
-    m_externalCommandEdit->setEnabled(isExternal);
-    
     // Emit signal for strategy change
+    const QString strategy = m_chunkingStrategyCombo->itemText(index);
     emit chunkingStrategyChanged(strategy);
 }

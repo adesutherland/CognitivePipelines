@@ -155,6 +155,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp
     ${SRC_DIR}/ToolNodeDelegate.h
+    ${SRC_DIR}/NodeInfoWidget.cpp
+    ${SRC_DIR}/NodeInfoWidget.h
     ${SRC_DIR}/ExecutionEngine.cpp
     ${SRC_DIR}/ExecutionEngine.h
     ${SRC_DIR}/CredentialsEditorDialog.cpp

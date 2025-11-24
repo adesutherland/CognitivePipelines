@@ -38,6 +38,8 @@
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
 
+class NodeInfoWidget;
+
 // Generic adapter that bridges IToolConnector to QtNodes::NodeDelegateModel
 class ToolNodeDelegate : public QtNodes::NodeDelegateModel {
     Q_OBJECT
@@ -67,6 +69,10 @@ public:
 
     // Expose underlying connector for engine/execution control
     std::shared_ptr<IToolConnector> connector() const { return _connector; }
+
+    // Node description accessor methods
+    QString description() const { return m_nodeDescription; }
+    void setDescription(const QString& desc);
 
 private:
     // Minimal generic NodeData that carries QVariant and a declared type id/name
@@ -109,4 +115,10 @@ private:
 
     // Lazily created config widget
     QPointer<QWidget> _widget;
+    
+    // Embedded info widget for displaying description inside the node
+    QPointer<NodeInfoWidget> m_infoWidget;
+
+    // Node description (generic metadata)
+    QString m_nodeDescription;
 };

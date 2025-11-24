@@ -38,6 +38,7 @@ class QDockWidget;
 class QVBoxLayout;
 class QLabel;
 class QTextEdit;
+class QPlainTextEdit;
 class NodeGraphModel;
 
 namespace QtNodes {
@@ -114,6 +115,7 @@ private:
     QWidget* propertiesHost_ {nullptr};
     QVBoxLayout* propertiesLayout_ {nullptr};
     QLabel* placeholderLabel_ {nullptr};
+    QPlainTextEdit* descriptionEdit_ {nullptr};
     QPointer<QWidget> currentConfigWidget_ {nullptr};
 
     // Output docks

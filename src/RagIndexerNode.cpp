@@ -87,7 +87,6 @@ QWidget* RagIndexerNode::createConfigurationWidget(QWidget* parent)
     widget->setChunkOverlap(m_chunkOverlap);
     widget->setFileFilter(m_fileFilter);
     widget->setChunkingStrategy(m_chunkingStrategy);
-    widget->setExternalCommand(m_externalCommand);
     widget->setClearDatabase(m_clearDatabase);
 
     // Connect widget signals to node slots
@@ -109,8 +108,6 @@ QWidget* RagIndexerNode::createConfigurationWidget(QWidget* parent)
                      this, &RagIndexerNode::setFileFilter);
     QObject::connect(widget, &RagIndexerPropertiesWidget::chunkingStrategyChanged,
                      this, &RagIndexerNode::setChunkingStrategy);
-    QObject::connect(widget, &RagIndexerPropertiesWidget::externalCommandChanged,
-                     this, &RagIndexerNode::setExternalCommand);
     QObject::connect(widget, &RagIndexerPropertiesWidget::clearDatabaseChanged,
                      this, &RagIndexerNode::setClearDatabase);
 
@@ -133,8 +130,6 @@ QWidget* RagIndexerNode::createConfigurationWidget(QWidget* parent)
                      widget, &RagIndexerPropertiesWidget::setFileFilter);
     QObject::connect(this, &RagIndexerNode::chunkingStrategyChanged,
                      widget, &RagIndexerPropertiesWidget::setChunkingStrategy);
-    QObject::connect(this, &RagIndexerNode::externalCommandChanged,
-                     widget, &RagIndexerPropertiesWidget::setExternalCommand);
     QObject::connect(this, &RagIndexerNode::clearDatabaseChanged,
                      widget, &RagIndexerPropertiesWidget::setClearDatabase);
 
@@ -479,7 +474,6 @@ QJsonObject RagIndexerNode::saveState() const
     state.insert(QStringLiteral("chunk_overlap"), m_chunkOverlap);
     state.insert(QStringLiteral("file_filter"), m_fileFilter);
     state.insert(QStringLiteral("chunking_strategy"), m_chunkingStrategy);
-    state.insert(QStringLiteral("external_command"), m_externalCommand);
     state.insert(QStringLiteral("clear_database"), m_clearDatabase);
     return state;
 }
@@ -512,9 +506,6 @@ void RagIndexerNode::loadState(const QJsonObject& data)
     }
     if (data.contains(QStringLiteral("chunking_strategy"))) {
         m_chunkingStrategy = data[QStringLiteral("chunking_strategy")].toString();
-    }
-    if (data.contains(QStringLiteral("external_command"))) {
-        m_externalCommand = data[QStringLiteral("external_command")].toString();
     }
     if (data.contains(QStringLiteral("clear_database"))) {
         m_clearDatabase = data[QStringLiteral("clear_database")].toBool();
@@ -591,14 +582,6 @@ void RagIndexerNode::setChunkingStrategy(const QString& strategy)
     if (m_chunkingStrategy != strategy) {
         m_chunkingStrategy = strategy;
         emit chunkingStrategyChanged(strategy);
-    }
-}
-
-void RagIndexerNode::setExternalCommand(const QString& command)
-{
-    if (m_externalCommand != command) {
-        m_externalCommand = command;
-        emit externalCommandChanged(command);
     }
 }
 

@@ -52,6 +52,7 @@
 #include <QLabel>
 #include <QGraphicsView>
 #include <QTextEdit>
+#include <QPlainTextEdit>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -109,6 +110,15 @@ MainWindow::MainWindow(QWidget* parent)
     propertiesLayout_ = new QVBoxLayout(propertiesHost_);
     propertiesLayout_->setContentsMargins(6, 6, 6, 6);
     propertiesLayout_->setSpacing(6);
+    
+    // Add Node Description section at the top
+    auto* descLabel = new QLabel(tr("Node Description"), propertiesHost_);
+    propertiesLayout_->addWidget(descLabel);
+    descriptionEdit_ = new QPlainTextEdit(propertiesHost_);
+    descriptionEdit_->setMaximumHeight(60);
+    descriptionEdit_->setEnabled(false);
+    propertiesLayout_->addWidget(descriptionEdit_);
+    
     placeholderLabel_ = new QLabel(tr("No node selected"), propertiesHost_);
     placeholderLabel_->setAlignment(Qt::AlignCenter);
     propertiesLayout_->addWidget(placeholderLabel_);
@@ -289,13 +299,53 @@ void MainWindow::setPropertiesWidget(QWidget* w)
 
 void MainWindow::onNodeSelected(QtNodes::NodeId nodeId)
 {
-    if (!_graphModel) { setPropertiesWidget(nullptr); return; }
+    if (!_graphModel) { 
+        setPropertiesWidget(nullptr);
+        // Clear and disable description edit
+        if (descriptionEdit_) {
+            descriptionEdit_->blockSignals(true);
+            descriptionEdit_->clear();
+            descriptionEdit_->setEnabled(false);
+            descriptionEdit_->blockSignals(false);
+        }
+        return; 
+    }
 
     // Fetch our ToolNodeDelegate for this nodeId
     auto* delegate = _graphModel->delegateModel<ToolNodeDelegate>(nodeId);
     if (!delegate) {
         setPropertiesWidget(nullptr);
+        // Clear and disable description edit
+        if (descriptionEdit_) {
+            descriptionEdit_->blockSignals(true);
+            descriptionEdit_->clear();
+            descriptionEdit_->setEnabled(false);
+            descriptionEdit_->blockSignals(false);
+        }
         return;
+    }
+
+    // Update description edit
+    if (descriptionEdit_) {
+        descriptionEdit_->blockSignals(true);
+        descriptionEdit_->setPlainText(delegate->description());
+        descriptionEdit_->setEnabled(true);
+        descriptionEdit_->blockSignals(false);
+        
+        // Disconnect any previous connections to avoid duplicates
+        disconnect(descriptionEdit_, &QPlainTextEdit::textChanged, nullptr, nullptr);
+        
+        // Connect textChanged to update delegate and trigger repaint
+        connect(descriptionEdit_, &QPlainTextEdit::textChanged, this, [this, nodeId, delegate]() {
+            if (delegate) {
+                delegate->setDescription(descriptionEdit_->toPlainText());
+                // Trigger repaint of the node on canvas
+                auto* scene = qobject_cast<QtNodes::DataFlowGraphicsScene*>(_graphView ? _graphView->scene() : nullptr);
+                if (scene) {
+                    scene->update();
+                }
+            }
+        });
     }
 
     // Request the configuration widget from ToolNodeDelegate (not embedded in node)

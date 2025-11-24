@@ -1,4 +1,6 @@
 #include "ExecutionAwarePainters.h"
+#include "ToolNodeDelegate.h"
+#include "NodeGraphModel.h"
 
 #include <QLinearGradient>
 #include <QPainter>
