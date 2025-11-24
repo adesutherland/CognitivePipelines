@@ -40,8 +40,8 @@ NodeInfoWidget::NodeInfoWidget(QWidget* parent)
     
     // Configure the description label with fixed width for proper wrapping
     m_descriptionLabel->setWordWrap(true);
-    m_descriptionLabel->setAlignment(Qt::AlignCenter | Qt::AlignCenter);
-    m_descriptionLabel->setFixedWidth(100);
+    m_descriptionLabel->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    m_descriptionLabel->setFixedWidth(150);
     
     // Apply "Clean UI" styling: transparent background, light grey text, italic
     m_descriptionLabel->setStyleSheet(
@@ -58,12 +58,13 @@ NodeInfoWidget::NodeInfoWidget(QWidget* parent)
     m_layout->addWidget(m_descriptionLabel);
     setLayout(m_layout);
     
-    // Set fixed width on the widget itself to ensure proper height calculation
-    setFixedWidth(100);
-    
-    // Set layout constraint to ensure the widget resizes to fit the label's height
-    m_layout->setSizeConstraint(QLayout::SetFixedSize);
-    
+    // Set layout constraint to allow dynamic height while maintaining fixed width
+    m_layout->setSizeConstraint(QLayout::SetMinimumSize);
+
+    // Make sure it is the right size
+    m_descriptionLabel->adjustSize();
+    this->adjustSize();
+
     // Initially hidden until description is set
     hide();
 }
@@ -71,45 +72,16 @@ NodeInfoWidget::NodeInfoWidget(QWidget* parent)
 void NodeInfoWidget::setDescription(const QString& text)
 {
     if (text.isEmpty()) {
+        m_descriptionLabel->clear();
+        m_descriptionLabel->adjustSize();
+        this->adjustSize();
         hide();
-        return;
     }
-
-    m_descriptionLabel->setText(text);
-
-    // 1. Invalidate the layout to ensure it recalculates based on the new text
-    m_layout->invalidate();
-    m_layout->activate();
-
-    // 2. Explicitly resize the widget to the layout's preferred size (height-for-width)
-    // This removes ambiguity for the parent QGraphicsProxyWidget
-    QSize newSize = m_layout->sizeHint();
-    this->resize(newSize);
-
-    // 3. Show and force a repaint
-    show();
-    m_descriptionLabel->update();
-    this->update();
-
-/*
-
-    if (text.isEmpty()) {
-        // Hide the widget when there's no description, allowing the node to shrink
-        hide();
-    } else {
-        // Update the label text and show the widget
+    else {
         m_descriptionLabel->setText(text);
-        
-        // Force geometry recalculation immediately to ensure proper wrapping
         m_descriptionLabel->adjustSize();
         this->adjustSize();
         show();
-        
-        // Force repaint after resize (important: repaint AFTER geometry changes)
-        //m_descriptionLabel->update();
-        //this->update();
-        
-        show();
     }
-    */
 }
+
