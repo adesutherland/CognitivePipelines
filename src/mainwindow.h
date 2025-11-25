@@ -77,6 +77,7 @@ private slots:
     void onClearCanvas();
     void onSaveOutput();
     void onDeleteSelected();
+    void onRunPipeline();
 
     // Selection handling
     void onNodeSelected(QtNodes::NodeId nodeId);
@@ -92,6 +93,7 @@ private:
 
     void setPropertiesWidget(QWidget* w);
     void refreshStageOutput();
+    void clearAllTextOutputNodes();
 
     QAction* exitAction {nullptr};
     QAction* openAction_ {nullptr};

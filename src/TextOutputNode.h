@@ -47,6 +47,9 @@ public:
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 
+    // Clear all output state (internal cache and widget display)
+    void clearOutput();
+
 public:
     static constexpr const char* kInputId = "text";
 

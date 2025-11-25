@@ -105,20 +105,11 @@ QFuture<DataPacket> TextOutputNode::Execute(const DataPacket& inputs)
 
 QJsonObject TextOutputNode::saveState() const
 {
-    QString textToSave = m_loadedText;
-    if (!m_propertiesWidget && m_hasPendingText) {
-        // If a value was received but the widget hasn't been created yet, prefer that
-        textToSave = m_lastText;
-    }
-    if (m_propertiesWidget) {
-        // Try to read the current contents directly from the QTextEdit
-        if (auto* edit = m_propertiesWidget->findChild<QTextEdit*>()) {
-            textToSave = edit->toPlainText();
-        }
-    }
-
+    // TextOutputNode is a display-only sink node that shows runtime results.
+    // It should never persist its content to saved files.
+    // Always return empty state.
     QJsonObject obj;
-    obj.insert(QStringLiteral("text"), textToSave);
+    obj.insert(QStringLiteral("text"), QString());
     return obj;
 }
 
@@ -129,5 +120,24 @@ void TextOutputNode::loadState(const QJsonObject& data)
     if (m_propertiesWidget) {
         QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", Qt::QueuedConnection,
                                   Q_ARG(QString, m_loadedText));
+    }
+}
+
+void TextOutputNode::clearOutput()
+{
+    // Clear all internal state
+    m_lastText.clear();
+    m_loadedText.clear();
+    m_hasPendingText = false;
+
+    // Clear the widget display if it exists
+    // Use immediate invocation to ensure the widget is cleared before saveState() is called
+    if (m_propertiesWidget) {
+        const bool crossThread = QThread::currentThread() != m_propertiesWidget->thread();
+        const Qt::ConnectionType type = crossThread
+                                        ? Qt::BlockingQueuedConnection
+                                        : Qt::DirectConnection;
+        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", type,
+                                  Q_ARG(QString, QString()));
     }
 }

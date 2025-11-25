@@ -26,6 +26,7 @@
 #include "about_dialog.h"
 #include "NodeGraphModel.h"
 #include "ToolNodeDelegate.h"
+#include "TextOutputNode.h"
 #include "ExecutionEngine.h"
 #include "ExecutionAwarePainters.h"
 #include "ExecutionStateModel.h"
@@ -206,8 +207,8 @@ void MainWindow::createActions() {
     // Run action (moved from toolbar to the Pipeline menu)
     runAction_ = new QAction(tr("&Run"), this);
     runAction_->setStatusTip(tr("Execute the current pipeline"));
-    // Keep the same behavior: trigger the execution engine
-    connect(runAction_, &QAction::triggered, execEngine_, &ExecutionEngine::run);
+    // Connect to slot that clears output before running
+    connect(runAction_, &QAction::triggered, this, &MainWindow::onRunPipeline);
 
     // Save last output action (Pipeline menu)
     saveOutputAction_ = new QAction(tr("Save Last Output..."), this);
@@ -402,7 +403,31 @@ void MainWindow::onSaveAs()
     file.write(QJsonDocument(json).toJson());
     file.close();
 
+    // Clear the stage output after saving (UI only, not part of saved state)
+    if (stageOutputText_) {
+        stageOutputText_->clear();
+    }
+
+    // Clear all TextOutputNode displays after saving (UI cleanup)
+    clearAllTextOutputNodes();
+
     statusBar()->showMessage(tr("Saved to %1").arg(QFileInfo(fileName).fileName()), 3000);
+}
+
+void MainWindow::onRunPipeline()
+{
+    // Clear the stage output before running the pipeline
+    if (stageOutputText_) {
+        stageOutputText_->clear();
+    }
+    
+    // Clear all TextOutputNode instances before running
+    clearAllTextOutputNodes();
+    
+    // Execute the pipeline
+    if (execEngine_) {
+        execEngine_->run();
+    }
 }
 
 void MainWindow::onEditCredentials()
@@ -439,6 +464,11 @@ void MainWindow::onOpen()
 
     const QByteArray data = file.readAll();
     file.close();
+
+    // Clear the stage output before loading
+    if (stageOutputText_) {
+        stageOutputText_->clear();
+    }
 
     // Clear properties panel to avoid dangling widgets from nodes being deleted
     setPropertiesWidget(nullptr);
@@ -515,6 +545,23 @@ void MainWindow::onOpen()
         QMessageBox::critical(this, tr("Open Failed"),
                               tr("An unknown error occurred while loading the pipeline."));
         return;
+    }
+
+    // Clear all TextOutputNode instances after loading
+    clearAllTextOutputNodes();
+
+    // Zoom to fit the entire pipeline in view
+    if (_graphView && _graphView->scene()) {
+        QRectF boundingRect = _graphView->scene()->itemsBoundingRect();
+        if (!boundingRect.isEmpty()) {
+            // Add a small margin (10% on each side) so nodes aren't glued to the edges
+            const qreal margin = 0.1;
+            boundingRect.adjust(-boundingRect.width() * margin,
+                                -boundingRect.height() * margin,
+                                boundingRect.width() * margin,
+                                boundingRect.height() * margin);
+            _graphView->fitInView(boundingRect, Qt::KeepAspectRatio);
+        }
     }
 
     statusBar()->showMessage(tr("Loaded from %1").arg(QFileInfo(fileName).fileName()), 3000);
@@ -705,6 +752,33 @@ void MainWindow::refreshStageOutput()
     
     const QString markdown = lines.join(QStringLiteral("\n\n"));
     stageOutputText_->setMarkdown(markdown);
+}
+
+void MainWindow::clearAllTextOutputNodes()
+{
+    if (!_graphModel) {
+        return;
+    }
+
+    // Iterate through all nodes in the graph
+    for (auto nodeId : _graphModel->allNodeIds()) {
+        // Get the delegate for this node
+        auto* delegate = _graphModel->delegateModel<ToolNodeDelegate>(nodeId);
+        if (!delegate) {
+            continue;
+        }
+
+        // Get the underlying connector
+        auto connector = delegate->connector();
+        if (!connector) {
+            continue;
+        }
+
+        // Try to cast to TextOutputNode
+        if (auto* textOutputNode = dynamic_cast<TextOutputNode*>(connector.get())) {
+            textOutputNode->clearOutput();
+        }
+    }
 }
 
 void MainWindow::onSaveOutput()

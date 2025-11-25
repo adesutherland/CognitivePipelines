@@ -263,6 +263,7 @@ if(ENABLE_TESTING)
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
             tests/test_text_output_fanout.cpp
+            tests/test_text_output_save.cpp
             tests/test_invalid_model_pipeline.cpp
             tests/test_process_connector.cpp
             tests/test_universal_llm.cpp
@@ -280,6 +281,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/NodeGraphModel.h
             ${SRC_DIR}/ToolNodeDelegate.cpp
             ${SRC_DIR}/ToolNodeDelegate.h
+            ${SRC_DIR}/NodeInfoWidget.cpp
+            ${SRC_DIR}/NodeInfoWidget.h
             ${SRC_DIR}/PromptBuilderNode.cpp
             ${SRC_DIR}/PromptBuilderNode.h
             ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
@@ -432,6 +435,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/NodeGraphModel.h
             ${SRC_DIR}/ToolNodeDelegate.cpp
             ${SRC_DIR}/ToolNodeDelegate.h
+            ${SRC_DIR}/NodeInfoWidget.cpp
+            ${SRC_DIR}/NodeInfoWidget.h
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
             ${SRC_DIR}/CredentialsEditorDialog.cpp
