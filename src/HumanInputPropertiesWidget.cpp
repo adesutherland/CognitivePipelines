@@ -22,6 +22,7 @@
 // SOFTWARE.
 //
 #include "HumanInputPropertiesWidget.h"
+#include <QLabel>
 
 HumanInputPropertiesWidget::HumanInputPropertiesWidget(QWidget* parent)
     : QWidget(parent)
@@ -29,17 +30,34 @@ HumanInputPropertiesWidget::HumanInputPropertiesWidget(QWidget* parent)
     auto* vbox = new QVBoxLayout(this);
     vbox->setContentsMargins(4, 4, 4, 4);
 
+    // Add label
+    auto* label = new QLabel(QStringLiteral("Default Prompt:"), this);
+    vbox->addWidget(label);
+
     m_textEdit = new QTextEdit(this);
-    m_textEdit->setReadOnly(true);
+    m_textEdit->setPlaceholderText(QStringLiteral("Enter a default prompt to use when no input is provided..."));
     m_textEdit->setMaximumHeight(150);
 
     vbox->addWidget(m_textEdit);
     vbox->addStretch();
+
+    // Connect textChanged signal to emit defaultPromptChanged
+    connect(m_textEdit, &QTextEdit::textChanged, this, [this]() {
+        emit defaultPromptChanged(m_textEdit->toPlainText());
+    });
 }
 
-void HumanInputPropertiesWidget::onSetText(const QString& text)
+QString HumanInputPropertiesWidget::defaultPrompt() const
+{
+    return m_textEdit ? m_textEdit->toPlainText() : QString();
+}
+
+void HumanInputPropertiesWidget::setDefaultPrompt(const QString& text)
 {
     if (m_textEdit) {
-        m_textEdit->setMarkdown(text);
+        // Block signals temporarily to avoid emitting defaultPromptChanged during programmatic set
+        m_textEdit->blockSignals(true);
+        m_textEdit->setPlainText(text);
+        m_textEdit->blockSignals(false);
     }
 }

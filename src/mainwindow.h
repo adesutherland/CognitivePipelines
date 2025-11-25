@@ -67,7 +67,8 @@ public slots:
     void onNodeLog(const QString& message);
 
     // Request user input from worker thread (blocking)
-    Q_INVOKABLE QString requestUserInput(const QString& prompt);
+    // Returns true if user accepted (OK), false if canceled
+    Q_INVOKABLE bool requestUserInput(const QString& prompt, QString& outText);
 
 private slots:
     void onAbout();

@@ -69,15 +69,11 @@ QWidget* HumanInputNode::createConfigurationWidget(QWidget* parent)
 {
     if (!m_propertiesWidget) {
         m_propertiesWidget = new HumanInputPropertiesWidget(parent);
-        // If we have a pending value from a previous Execute before the widget existed,
-        // apply it immediately. Otherwise, fall back to any text loaded from state.
-        if (m_hasPendingText) {
-            m_propertiesWidget->onSetText(m_lastText);
-            m_hasPendingText = false; // consumed
-        } else if (!m_loadedText.isEmpty()) {
-            QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", Qt::QueuedConnection,
-                                      Q_ARG(QString, m_loadedText));
-        }
+        // Load the default prompt into the widget
+        m_propertiesWidget->setDefaultPrompt(m_defaultPrompt);
+        // Connect signal to update m_defaultPrompt when user edits
+        connect(m_propertiesWidget, &HumanInputPropertiesWidget::defaultPromptChanged,
+                this, &HumanInputNode::onDefaultPromptChanged);
     } else if (m_propertiesWidget->parent() != parent && parent) {
         m_propertiesWidget->setParent(parent);
     }
@@ -86,31 +82,21 @@ QWidget* HumanInputNode::createConfigurationWidget(QWidget* parent)
 
 QFuture<DataPacket> HumanInputNode::Execute(const DataPacket& inputs)
 {
-    const QString prompt = inputs.value(QString::fromLatin1(kInputId)).toString();
-    // Remember the last prompt even if the widget is not created yet
-    m_lastText = prompt;
-    m_hasPendingText = (m_propertiesWidget == nullptr);
-
-    // Forward prompt to properties widget on the UI thread safely
-    if (m_propertiesWidget) {
-        // Block the worker thread until the UI has processed the update to avoid
-        // a race where the displayed text lags behind by one execution step.
-        // Use a direct call if we're already on the same thread to avoid deadlocks.
-        const bool crossThread = QThread::currentThread() != m_propertiesWidget->thread();
-        const Qt::ConnectionType type = crossThread
-                                        ? Qt::BlockingQueuedConnection
-                                        : Qt::DirectConnection;
-        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", type,
-                                  Q_ARG(QString, prompt));
+    // Retrieve text from input pin
+    const QString inputPrompt = inputs.value(QString::fromLatin1(kInputId)).toString();
+    
+    // Determine effective prompt: input pin > default prompt > hardcoded fallback
+    QString effectivePrompt;
+    if (!inputPrompt.isEmpty()) {
+        effectivePrompt = inputPrompt;
+    } else if (!m_defaultPrompt.isEmpty()) {
+        effectivePrompt = m_defaultPrompt;
+    } else {
+        effectivePrompt = QStringLiteral("Please provide input:");
     }
 
     // Execute on worker thread, blocking to wait for user input
-    return QtConcurrent::run([prompt]() -> DataPacket {
-        // Use default prompt if none provided
-        const QString effectivePrompt = prompt.isEmpty() 
-                                        ? QStringLiteral("Please provide input:") 
-                                        : prompt;
-
+    return QtConcurrent::run([effectivePrompt]() -> DataPacket {
         // Get MainWindow instance
         MainWindow* mainWindow = nullptr;
         QWidget* activeWindow = QApplication::activeWindow();
@@ -126,46 +112,62 @@ QFuture<DataPacket> HumanInputNode::Execute(const DataPacket& inputs)
         }
 
         QString returnedText;
+        bool accepted = false;
         if (mainWindow) {
             // Call the slot on the main thread using BlockingQueuedConnection
             QMetaObject::invokeMethod(mainWindow, "requestUserInput",
                                      Qt::BlockingQueuedConnection,
-                                     Q_RETURN_ARG(QString, returnedText),
-                                     Q_ARG(QString, effectivePrompt));
+                                     Q_RETURN_ARG(bool, accepted),
+                                     Q_ARG(QString, effectivePrompt),
+                                     Q_ARG(QString&, returnedText));
         }
 
-        // Create output packet with the returned text
+        // Create output packet
         DataPacket output;
-        output.insert(QString::fromLatin1(kOutputId), returnedText);
+        
+        // If user canceled, return error to stop the pipeline
+        if (!accepted) {
+            output.insert(QStringLiteral("__error"), QStringLiteral("User canceled input"));
+        } else {
+            // User accepted: return the text
+            output.insert(QString::fromLatin1(kOutputId), returnedText);
+        }
+        
         return output;
     });
 }
 
 QJsonObject HumanInputNode::saveState() const
 {
-    QString textToSave = m_loadedText;
-    if (!m_propertiesWidget && m_hasPendingText) {
-        // If a value was received but the widget hasn't been created yet, prefer that
-        textToSave = m_lastText;
-    }
+    QString textToSave = m_defaultPrompt;
+    
+    // If widget exists, read current value from it (user may have edited it)
     if (m_propertiesWidget) {
-        // Try to read the current contents directly from the QTextEdit
-        if (auto* edit = m_propertiesWidget->findChild<QTextEdit*>()) {
-            textToSave = edit->toPlainText();
-        }
+        textToSave = m_propertiesWidget->defaultPrompt();
     }
 
     QJsonObject obj;
-    obj.insert(QStringLiteral("text"), textToSave);
+    obj.insert(QStringLiteral("default_prompt"), textToSave);
     return obj;
 }
 
 void HumanInputNode::loadState(const QJsonObject& data)
 {
-    m_loadedText = data.value(QStringLiteral("text")).toString();
-
-    if (m_propertiesWidget) {
-        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", Qt::QueuedConnection,
-                                  Q_ARG(QString, m_loadedText));
+    // Load default prompt with backward compatibility
+    if (data.contains(QStringLiteral("default_prompt"))) {
+        m_defaultPrompt = data.value(QStringLiteral("default_prompt")).toString();
+    } else if (data.contains(QStringLiteral("text"))) {
+        // Backward compatibility: migrate old "text" key to new meaning
+        m_defaultPrompt = data.value(QStringLiteral("text")).toString();
     }
+
+    // Update widget if it already exists
+    if (m_propertiesWidget) {
+        m_propertiesWidget->setDefaultPrompt(m_defaultPrompt);
+    }
+}
+
+void HumanInputNode::onDefaultPromptChanged(const QString& text)
+{
+    m_defaultPrompt = text;
 }

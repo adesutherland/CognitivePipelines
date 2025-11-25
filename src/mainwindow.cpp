@@ -645,13 +645,15 @@ void MainWindow::onNodeLog(const QString& message)
     }
 }
 
-QString MainWindow::requestUserInput(const QString& prompt)
+bool MainWindow::requestUserInput(const QString& prompt, QString& outText)
 {
     UserInputDialog dialog(prompt, this);
     if (dialog.exec() == QDialog::Accepted) {
-        return dialog.getText();
+        outText = dialog.getText();
+        return true;
     }
-    return QString(); // Return empty if canceled
+    outText = QString(); // Clear output on cancel
+    return false; // User canceled
 }
 
 

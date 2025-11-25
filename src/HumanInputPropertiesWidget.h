@@ -34,9 +34,14 @@ public:
     explicit HumanInputPropertiesWidget(QWidget* parent = nullptr);
     ~HumanInputPropertiesWidget() override = default;
 
-public slots:
-    // Update the displayed text
-    void onSetText(const QString& text);
+    // Get the current default prompt text
+    QString defaultPrompt() const;
+    // Set the default prompt text (used when loading state)
+    void setDefaultPrompt(const QString& text);
+
+signals:
+    // Emitted when the user edits the default prompt
+    void defaultPromptChanged(const QString& text);
 
 private:
     QTextEdit* m_textEdit {nullptr};
