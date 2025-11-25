@@ -112,13 +112,15 @@ MainWindow::MainWindow(QWidget* parent)
     propertiesLayout_->setSpacing(6);
     
     // Add Node Description section at the top
-    auto* descLabel = new QLabel(tr("Node Description"), propertiesHost_);
-    propertiesLayout_->addWidget(descLabel);
+    descriptionLabel_ = new QLabel(tr("Node Description"), propertiesHost_);
+    propertiesLayout_->addWidget(descriptionLabel_);
     descriptionEdit_ = new QPlainTextEdit(propertiesHost_);
     descriptionEdit_->setMaximumHeight(60);
     descriptionEdit_->setEnabled(false);
     propertiesLayout_->addWidget(descriptionEdit_);
-    
+    descriptionLabel_->setVisible(false);
+    descriptionEdit_->setVisible(false);
+
     placeholderLabel_ = new QLabel(tr("No node selected"), propertiesHost_);
     placeholderLabel_->setAlignment(Qt::AlignCenter);
     propertiesLayout_->addWidget(placeholderLabel_);
@@ -280,12 +282,16 @@ void MainWindow::setPropertiesWidget(QWidget* w)
 
     if (!w) {
         if (placeholderLabel_) placeholderLabel_->setVisible(true);
+        if (descriptionLabel_) descriptionLabel_->setVisible(false);
+        if (descriptionEdit_) descriptionEdit_->setVisible(false);
         currentConfigWidget_.clear();
         return;
     }
 
     // Add/show new widget
     if (placeholderLabel_) placeholderLabel_->setVisible(false);
+    if (descriptionLabel_) descriptionLabel_->setVisible(true);
+    if (descriptionEdit_) descriptionEdit_->setVisible(true);
 
     currentConfigWidget_ = w;
     if (currentConfigWidget_ && currentConfigWidget_->parent() != propertiesHost_) {

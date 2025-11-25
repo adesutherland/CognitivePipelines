@@ -25,7 +25,6 @@
 
 #include <QWidget>
 #include <QTextEdit>
-#include <QFormLayout>
 #include <QStringList>
 #include <QTimer>
 

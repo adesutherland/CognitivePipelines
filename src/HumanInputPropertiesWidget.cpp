@@ -31,8 +31,10 @@ HumanInputPropertiesWidget::HumanInputPropertiesWidget(QWidget* parent)
 
     m_textEdit = new QTextEdit(this);
     m_textEdit->setReadOnly(true);
+    m_textEdit->setMaximumHeight(150);
 
     vbox->addWidget(m_textEdit);
+    vbox->addStretch();
 }
 
 void HumanInputPropertiesWidget::onSetText(const QString& text)

@@ -22,21 +22,28 @@
 // SOFTWARE.
 //
 #include "PromptBuilderPropertiesWidget.h"
+#include <QVBoxLayout>
+#include <QLabel>
 #include <QRegularExpression>
 #include <QSet>
 
 PromptBuilderPropertiesWidget::PromptBuilderPropertiesWidget(QWidget* parent)
     : QWidget(parent)
 {
-    auto* form = new QFormLayout(this);
-    form->setContentsMargins(4, 4, 4, 4);
-    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(8);
+
+    // Label
+    auto* label = new QLabel(tr("Template:"), this);
+    layout->addWidget(label);
 
     m_templateEdit = new QTextEdit(this);
     m_templateEdit->setPlaceholderText(tr("Write your prompt template here, e.g., 'Summarize this: {question} {context}'"));
     m_templateEdit->setAcceptRichText(false);
+    layout->addWidget(m_templateEdit);
 
-    form->addRow(tr("Template"), m_templateEdit);
+    layout->addStretch();
 
     // Debounce timer to avoid heavy parsing on every keystroke
     m_debounceTimer = new QTimer(this);

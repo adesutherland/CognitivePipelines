@@ -25,19 +25,24 @@
 #include "core/LLMProviderRegistry.h"
 #include "backends/ILLMBackend.h"
 
+#include <QVBoxLayout>
+#include <QLabel>
 #include <QComboBox>
 #include <QTextEdit>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
-#include <QFormLayout>
 #include <QSignalBlocker>
 
 UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
     : QWidget(parent)
 {
-    auto* form = new QFormLayout(this);
-    form->setContentsMargins(4, 4, 4, 4);
-    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(8);
+
+    // Provider label
+    auto* providerLabel = new QLabel(tr("Provider:"), this);
+    layout->addWidget(providerLabel);
 
     // Provider combo box
     m_providerCombo = new QComboBox(this);
@@ -49,25 +54,41 @@ UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
             m_providerCombo->addItem(backend->name(), backend->id());
         }
     }
-    form->addRow(tr("Provider:"), m_providerCombo);
+    layout->addWidget(m_providerCombo);
+
+    // Model label
+    auto* modelLabel = new QLabel(tr("Model:"), this);
+    layout->addWidget(modelLabel);
 
     // Model combo box
     m_modelCombo = new QComboBox(this);
-    form->addRow(tr("Model:"), m_modelCombo);
+    layout->addWidget(m_modelCombo);
+
+    // System Prompt label
+    auto* systemPromptLabel = new QLabel(tr("System Prompt:"), this);
+    layout->addWidget(systemPromptLabel);
 
     // System Prompt text edit
     m_systemPromptEdit = new QTextEdit(this);
     m_systemPromptEdit->setPlaceholderText(tr("Enter system instructions..."));
     m_systemPromptEdit->setAcceptRichText(false);
     m_systemPromptEdit->setMaximumHeight(100);
-    form->addRow(tr("System Prompt:"), m_systemPromptEdit);
+    layout->addWidget(m_systemPromptEdit);
+
+    // User Prompt label
+    auto* userPromptLabel = new QLabel(tr("User Prompt:"), this);
+    layout->addWidget(userPromptLabel);
 
     // User Prompt text edit
     m_userPromptEdit = new QTextEdit(this);
     m_userPromptEdit->setPlaceholderText(tr("Enter user prompt..."));
     m_userPromptEdit->setAcceptRichText(false);
     m_userPromptEdit->setMaximumHeight(100);
-    form->addRow(tr("User Prompt:"), m_userPromptEdit);
+    layout->addWidget(m_userPromptEdit);
+
+    // Temperature label
+    auto* temperatureLabel = new QLabel(tr("Temperature:"), this);
+    layout->addWidget(temperatureLabel);
 
     // Temperature spin box
     m_temperatureSpinBox = new QDoubleSpinBox(this);
@@ -75,13 +96,19 @@ UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
     m_temperatureSpinBox->setSingleStep(0.1);
     m_temperatureSpinBox->setDecimals(2);
     m_temperatureSpinBox->setValue(0.7);
-    form->addRow(tr("Temperature:"), m_temperatureSpinBox);
+    layout->addWidget(m_temperatureSpinBox);
+
+    // Max Tokens label
+    auto* maxTokensLabel = new QLabel(tr("Max Tokens:"), this);
+    layout->addWidget(maxTokensLabel);
 
     // Max Tokens spin box
     m_maxTokensSpinBox = new QSpinBox(this);
     m_maxTokensSpinBox->setRange(1, 100000);
     m_maxTokensSpinBox->setValue(1024);
-    form->addRow(tr("Max Tokens:"), m_maxTokensSpinBox);
+    layout->addWidget(m_maxTokensSpinBox);
+
+    layout->addStretch();
 
     // Connect signals
     connect(m_providerCombo, qOverload<int>(&QComboBox::currentIndexChanged),

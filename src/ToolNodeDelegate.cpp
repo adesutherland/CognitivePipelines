@@ -177,10 +177,10 @@ void ToolNodeDelegate::onConnectorInputPinsUpdateRequested(const QStringList& ne
         }
         
         emit portsInserted();
-        
-        // Hint the scene that the node geometry may have changed due to port layout
-        emit dataUpdated(0);
     }
+    
+    // Trigger node geometry recalculation after port changes
+    emit embeddedWidgetSizeUpdated();
 }
 
 QWidget *ToolNodeDelegate::embeddedWidget()

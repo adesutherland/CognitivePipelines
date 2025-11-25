@@ -115,6 +115,7 @@ private:
     QWidget* propertiesHost_ {nullptr};
     QVBoxLayout* propertiesLayout_ {nullptr};
     QLabel* placeholderLabel_ {nullptr};
+    QLabel* descriptionLabel_ {nullptr};
     QPlainTextEdit* descriptionEdit_ {nullptr};
     QPointer<QWidget> currentConfigWidget_ {nullptr};
 

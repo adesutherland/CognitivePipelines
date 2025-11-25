@@ -23,23 +23,27 @@
 //
 #include "ProcessConnectorPropertiesWidget.h"
 
-#include <QFormLayout>
+#include <QVBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QSignalBlocker>
 
 ProcessConnectorPropertiesWidget::ProcessConnectorPropertiesWidget(QWidget* parent)
     : QWidget(parent)
 {
-    auto* layout = new QFormLayout(this);
+    auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
-    layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    layout->setSpacing(8);
+
+    // Label
+    auto* label = new QLabel(tr("Command:"), this);
+    layout->addWidget(label);
 
     commandLineEdit = new QLineEdit(this);
     commandLineEdit->setPlaceholderText(tr("Enter command line (e.g., /usr/bin/python3 script.py --arg)")); 
+    layout->addWidget(commandLineEdit);
 
-    layout->addRow(tr("Command:"), commandLineEdit);
-
-    setLayout(layout);
+    layout->addStretch();
 
     // Forward edits to our signal
     QObject::connect(commandLineEdit, &QLineEdit::textChanged,

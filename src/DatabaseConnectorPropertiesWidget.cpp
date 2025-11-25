@@ -23,7 +23,8 @@
 //
 #include "DatabaseConnectorPropertiesWidget.h"
 
-#include <QFormLayout>
+#include <QVBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QSignalBlocker>
@@ -31,22 +32,28 @@
 DatabaseConnectorPropertiesWidget::DatabaseConnectorPropertiesWidget(QWidget* parent)
     : QWidget(parent)
 {
-    auto* layout = new QFormLayout(this);
+    auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(4, 4, 4, 4);
-    layout->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    layout->setSpacing(8);
+
+    // Database File Path label
+    auto* pathLabel = new QLabel(tr("Database File Path:"), this);
+    layout->addWidget(pathLabel);
 
     m_pathEdit = new QLineEdit(this);
     m_pathEdit->setPlaceholderText(tr("/path/to/database.sqlite"));
+    layout->addWidget(m_pathEdit);
 
-    layout->addRow(tr("Database File Path:"), m_pathEdit);
+    // SQL Query label
+    auto* sqlLabel = new QLabel(tr("SQL Query:"), this);
+    layout->addWidget(sqlLabel);
 
     m_sqlEdit = new QTextEdit(this);
     m_sqlEdit->setPlaceholderText(tr("SELECT * FROM table_name"));
     m_sqlEdit->setMaximumHeight(100);
+    layout->addWidget(m_sqlEdit);
 
-    layout->addRow(tr("SQL Query:"), m_sqlEdit);
-
-    setLayout(layout);
+    layout->addStretch();
 
     // Forward edits to our signal
     QObject::connect(m_pathEdit, &QLineEdit::textChanged,

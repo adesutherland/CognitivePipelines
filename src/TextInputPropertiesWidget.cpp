@@ -22,19 +22,26 @@
 // SOFTWARE.
 //
 #include "TextInputPropertiesWidget.h"
+#include <QVBoxLayout>
+#include <QLabel>
 
 TextInputPropertiesWidget::TextInputPropertiesWidget(QWidget* parent)
     : QWidget(parent)
 {
-    auto* form = new QFormLayout(this);
-    form->setContentsMargins(4, 4, 4, 4);
-    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(8);
+
+    // Label
+    auto* label = new QLabel(tr("Text:"), this);
+    layout->addWidget(label);
 
     m_textEdit = new QTextEdit(this);
     m_textEdit->setPlaceholderText(tr("Enter text to inject into the pipeline..."));
     m_textEdit->setAcceptRichText(false);
+    layout->addWidget(m_textEdit);
 
-    form->addRow(tr("Text"), m_textEdit);
+    layout->addStretch();
 
     connect(m_textEdit, &QTextEdit::textChanged, this, [this]() {
         emit textChanged(m_textEdit->toPlainText());

@@ -42,6 +42,9 @@ public:
     explicit NodeInfoWidget(QWidget* parent = nullptr);
     ~NodeInfoWidget() override = default;
 
+    // Override to provide proper size hint for layout system
+    QSize sizeHint() const override;
+
 public slots:
     /**
      * @brief Sets the description text to display.

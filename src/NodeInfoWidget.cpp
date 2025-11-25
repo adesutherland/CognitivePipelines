@@ -69,6 +69,16 @@ NodeInfoWidget::NodeInfoWidget(QWidget* parent)
     hide();
 }
 
+QSize NodeInfoWidget::sizeHint() const
+{
+    if (!isVisible() || m_descriptionLabel->text().isEmpty()) {
+        return QSize(0, 0);
+    }
+    
+    // Return the size hint from the layout, which will calculate based on children
+    return m_layout->sizeHint();
+}
+
 void NodeInfoWidget::setDescription(const QString& text)
 {
     if (text.isEmpty()) {
@@ -76,12 +86,16 @@ void NodeInfoWidget::setDescription(const QString& text)
         m_descriptionLabel->adjustSize();
         this->adjustSize();
         hide();
+        // Notify layout system that size hint has changed
+        updateGeometry();
     }
     else {
         m_descriptionLabel->setText(text);
         m_descriptionLabel->adjustSize();
         this->adjustSize();
         show();
+        // Notify layout system that size hint has changed
+        updateGeometry();
     }
 }
 

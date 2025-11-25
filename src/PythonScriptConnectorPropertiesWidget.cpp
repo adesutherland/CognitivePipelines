@@ -23,27 +23,37 @@
 //
 #include "PythonScriptConnectorPropertiesWidget.h"
 
-#include <QFormLayout>
+#include <QVBoxLayout>
+#include <QLabel>
 #include <QLineEdit>
 #include <QTextEdit>
 
 PythonScriptConnectorPropertiesWidget::PythonScriptConnectorPropertiesWidget(QWidget* parent)
     : QWidget(parent)
 {
-    auto* form = new QFormLayout(this);
-    form->setContentsMargins(4, 4, 4, 4);
-    form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(4, 4, 4, 4);
+    layout->setSpacing(8);
+
+    // Executable label
+    auto* execLabel = new QLabel(tr("Executable:"), this);
+    layout->addWidget(execLabel);
 
     m_executableEdit = new QLineEdit(this);
     m_executableEdit->setText(QStringLiteral("python3 -u"));
     m_executableEdit->setPlaceholderText(tr("Path or command for Python executable"));
+    layout->addWidget(m_executableEdit);
+
+    // Script Content label
+    auto* scriptLabel = new QLabel(tr("Script Content:"), this);
+    layout->addWidget(scriptLabel);
 
     m_scriptEdit = new QTextEdit(this);
     m_scriptEdit->setAcceptRichText(false);
     m_scriptEdit->setPlaceholderText(tr("Write your Python script here"));
+    layout->addWidget(m_scriptEdit);
 
-    form->addRow(tr("Executable:"), m_executableEdit);
-    form->addRow(tr("Script Content:"), m_scriptEdit);
+    layout->addStretch();
 
     // Forward changes to public signals
     connect(m_executableEdit, &QLineEdit::textChanged,
