@@ -319,7 +319,7 @@ void ToolNodeDelegate::load(QJsonObject const& data)
 {
     // Restore node description
     if (data.contains(QStringLiteral("node-description"))) {
-        m_nodeDescription = data.value(QStringLiteral("node-description")).toString();
+        setDescription(data.value(QStringLiteral("node-description")).toString());
     }
 
     if (_connector) {

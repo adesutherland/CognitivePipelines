@@ -41,6 +41,9 @@ public:
     // Override to connect port change signals when nodes are added
     QtNodes::NodeId addNode(QString const nodeType = QString()) override;
 
+    // Override to connect port change signals when nodes are loaded from file
+    void loadNode(QJsonObject const &nodeJson) override;
+
     // Disable reactive data propagation from the base model. Our pipelines execute only via ExecutionEngine.
     bool setPortData(QtNodes::NodeId nodeId,
                      QtNodes::PortType portType,
@@ -56,4 +59,7 @@ public Q_SLOTS:
 private:
     // Helper to emit nodeUpdated for the sender node (triggers geometry recalculation)
     void notifyNodeGeometryChanged();
+    
+    // Helper to establish signal connections for a node (used by both addNode and loadNode)
+    void connectNodeSignals(QtNodes::NodeId nodeId);
 };

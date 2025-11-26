@@ -134,25 +134,62 @@ QtNodes::NodeId NodeGraphModel::addNode(QString const nodeType)
     QtNodes::NodeId nodeId = DataFlowGraphModel::addNode(nodeType);
     
     if (nodeId != QtNodes::InvalidNodeId) {
-        // Get the delegate model for the new node
-        auto model = delegateModel<QtNodes::NodeDelegateModel>(nodeId);
-        if (model) {
-            // Connect port change signals to our slots
-            // When ports are inserted/deleted, we need to emit nodeUpdated(nodeId)
-            // to trigger geometry recalculation in BasicGraphicsScene
-            connect(model, &QtNodes::NodeDelegateModel::portsInserted,
-                    this, &NodeGraphModel::onNodePortsInserted);
-            connect(model, &QtNodes::NodeDelegateModel::portsDeleted,
-                    this, &NodeGraphModel::onNodePortsDeleted);
-            
-            // Also connect embeddedWidgetSizeUpdated to trigger geometry recalculation
-            // This is needed for embedded widgets like NodeInfoWidget to resize the node
-            connect(model, &QtNodes::NodeDelegateModel::embeddedWidgetSizeUpdated,
-                    this, &NodeGraphModel::onNodePortsInserted);
-        }
+        connectNodeSignals(nodeId);
     }
     
     return nodeId;
+}
+
+void NodeGraphModel::loadNode(QJsonObject const &nodeJson)
+{
+    // Get the current number of nodes before loading
+    const size_t nodeCountBefore = allNodeIds().size();
+    
+    // Call base class to actually load and create the node
+    // This will create the node and call ToolNodeDelegate::load() which restores state
+    DataFlowGraphModel::loadNode(nodeJson);
+    
+    // Get the current number of nodes after loading
+    const auto allIds = allNodeIds();
+    const size_t nodeCountAfter = allIds.size();
+    
+    // If a new node was created, find it and connect signals + trigger initial geometry update
+    if (nodeCountAfter > nodeCountBefore) {
+        // The new node is in the set. We need to find which one is new.
+        // Since allNodeIds() returns an unordered_set, we can't reliably get "the last one"
+        // Instead, we'll iterate and connect signals to ALL nodes (safe, as Qt ignores duplicate connections)
+        for (auto nodeId : allIds) {
+            connectNodeSignals(nodeId);
+            
+            // Emit nodeUpdated for the newly loaded node to trigger initial geometry calculation
+            // This is necessary because ToolNodeDelegate::load() may have emitted embeddedWidgetSizeUpdated()
+            // BEFORE we connected the signals above, so the initial size change was missed
+            if (nodeCountAfter == nodeCountBefore + 1) {
+                // Only one new node - emit update for it
+                Q_EMIT nodeUpdated(nodeId);
+            }
+        }
+    }
+}
+
+void NodeGraphModel::connectNodeSignals(QtNodes::NodeId nodeId)
+{
+    // Get the delegate model for the node
+    auto model = delegateModel<QtNodes::NodeDelegateModel>(nodeId);
+    if (model) {
+        // Connect port change signals to our slots
+        // When ports are inserted/deleted, we need to emit nodeUpdated(nodeId)
+        // to trigger geometry recalculation in BasicGraphicsScene
+        connect(model, &QtNodes::NodeDelegateModel::portsInserted,
+                this, &NodeGraphModel::onNodePortsInserted);
+        connect(model, &QtNodes::NodeDelegateModel::portsDeleted,
+                this, &NodeGraphModel::onNodePortsDeleted);
+        
+        // Also connect embeddedWidgetSizeUpdated to trigger geometry recalculation
+        // This is needed for embedded widgets like NodeInfoWidget to resize the node
+        connect(model, &QtNodes::NodeDelegateModel::embeddedWidgetSizeUpdated,
+                this, &NodeGraphModel::onNodePortsInserted);
+    }
 }
 
 void NodeGraphModel::onNodePortsInserted()
