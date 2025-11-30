@@ -111,6 +111,11 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/core/DocumentLoader.h
     ${SRC_DIR}/core/TextChunker.cpp
     ${SRC_DIR}/core/TextChunker.h
+    ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
+    ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
+    ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
+    ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.cpp
+    ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.h
     ${SRC_DIR}/PromptBuilderNode.cpp
     ${SRC_DIR}/PromptBuilderNode.h
     ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
@@ -174,6 +179,7 @@ target_include_directories(CognitivePipelines PRIVATE
     ${SRC_DIR}
     ${SRC_DIR}/backends
     ${SRC_DIR}/core
+    ${SRC_DIR}/chunkingstrategies
     ${Boost_INCLUDE_DIRS}
 )
 
@@ -273,6 +279,7 @@ if(ENABLE_TESTING)
             tests/test_rag_foundation.cpp
             tests/test_document_loader.cpp
             tests/test_text_chunker.cpp
+            tests/test_chunker_viz.cpp
             tests/test_rag_indexer.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionEngine.cpp
@@ -345,6 +352,11 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/core/DocumentLoader.h
             ${SRC_DIR}/core/TextChunker.cpp
             ${SRC_DIR}/core/TextChunker.h
+            ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
+            ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
+            ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
+            ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.cpp
+            ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.h
             ${SRC_DIR}/backends/ILLMBackend.h
             ${SRC_DIR}/backends/OpenAIBackend.cpp
             ${SRC_DIR}/backends/OpenAIBackend.h
@@ -405,6 +417,11 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/core/DocumentLoader.h
             ${SRC_DIR}/core/TextChunker.cpp
             ${SRC_DIR}/core/TextChunker.h
+            ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
+            ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
+            ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
+            ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.cpp
+            ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.h
             ${SRC_DIR}/PromptBuilderNode.cpp
             ${SRC_DIR}/PromptBuilderNode.h
             ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp

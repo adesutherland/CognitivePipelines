@@ -165,6 +165,14 @@ TEST(TextChunkerTest, MultipleConsecutiveSeparators) {
     QStringList chunks = TextChunker::split(text, chunkSize, chunkOverlap);
     
     ASSERT_GT(chunks.size(), 1);
+
+    // Debug: print chunks to aid diagnosing duplication regressions.
+    // (Output is harmless in passing runs and useful when investigating
+    // failing behaviour.)
+    for (int i = 0; i < chunks.size(); ++i) {
+        std::cout << "[NoDuplicationInChunks] chunk[" << i << "]: '"
+                  << chunks[i].toStdString() << "'\n";
+    }
     
     // Verify chunks respect size limit
     for (const QString& chunk : chunks) {
@@ -294,6 +302,13 @@ TEST(TextChunkerTest, CodePython_SplitsAtDefBoundaries) {
     
     ASSERT_GT(chunks.size(), 1);
     
+    // Debug: print chunks to inspect Python def-boundary behaviour when
+    // diagnosing regressions.
+    for (int i = 0; i < chunks.size(); ++i) {
+        std::cout << "[CodePython_SplitsAtDefBoundaries] chunk[" << i << "]: '"
+                  << chunks[i].toStdString() << "'\n";
+    }
+    
     // Verify that splits happen at function boundaries (def)
     // The chunker should prefer splitting before "def" rather than mid-function
     for (const QString& chunk : chunks) {
@@ -393,6 +408,89 @@ TEST(TextChunkerTest, CodeRexx_RespectsLabelsAndReturns) {
         << "Rexx chunker should respect ::routine directives and label boundaries";
 }
 
+// Regression: Rexx leading comments should stay attached to the following
+// routine/label even when a chunk boundary falls at the label.
+TEST(TextChunkerTest, CodeRexx_LeadingCommentStaysWithRoutine) {
+    const QString text =
+        "/* Routine: ziggy_played_guitar */\n"
+        "ziggy_played_guitar: Procedure\n"
+        "  parse arg hand_technique\n";
+
+    // Force a very small chunk size to trigger a boundary between the
+    // comment and the routine header in the legacy splitter.
+    const int chunkSize = 40;
+    const int chunkOverlap = 5;
+
+    const QStringList chunks =
+        TextChunker::split(text, chunkSize, chunkOverlap, FileType::CodeRexx);
+
+    ASSERT_FALSE(chunks.isEmpty());
+
+    // The leading comment should appear in the same chunk as the
+    // ziggy_played_guitar routine header, not in an isolated chunk.
+    bool foundCombined = false;
+    for (const QString &chunk : chunks) {
+        if (chunk.contains("/* Routine: ziggy_played_guitar */") &&
+            chunk.contains("ziggy_played_guitar: Procedure")) {
+            foundCombined = true;
+            break;
+        }
+    }
+
+    EXPECT_TRUE(foundCombined)
+        << "REXX leading comment should stay attached to its routine header";
+}
+
+// Regression: Nested separators must not introduce ghost characters between
+// tokens when higher-level separators (e.g. "}\n") and lower-level ones
+// (e.g. space) both participate in the split.
+TEST(TextChunkerTest, CodeCpp_NestedSeparatorsDoNotCreateGhostBraces) {
+    const QString text = "void func() { if(a) { b; } }";
+
+    // Small chunk size forces multiple levels of splitting, including on
+    // braces and spaces. The implementation must never re-insert "{" between
+    // "if" and "(a)" when recombining recursive sub-chunks.
+    const int chunkSize = 10;
+    const int chunkOverlap = 2;
+
+    const QStringList chunks = TextChunker::split(text, chunkSize, chunkOverlap, FileType::CodeCpp);
+
+    ASSERT_FALSE(chunks.isEmpty());
+
+    for (const QString &chunk : chunks) {
+        EXPECT_EQ(chunk.indexOf("if{"), -1) << "Ghost '{' found between 'if' and '(a)' in chunk: "
+                                             << chunk.toStdString();
+    }
+}
+
+// Regression: splitting must not duplicate short tokens such as "return"
+// around chunk boundaries.
+TEST(TextChunkerTest, CodeCpp_NoReturnDuplication) {
+    const QString text = "return value;";
+
+    // Force a tight limit so that the line is split using the separator
+    // hierarchy and possibly character-level splitting, but without creating
+    // duplicated "return" tokens.
+    const int chunkSize = 7;
+    const int chunkOverlap = 3;
+
+    const QStringList chunks = TextChunker::split(text, chunkSize, chunkOverlap, FileType::CodeCpp);
+
+    ASSERT_FALSE(chunks.isEmpty());
+
+    int returnCount = 0;
+    for (const QString &chunk : chunks) {
+        int index = -1;
+        while ((index = chunk.indexOf("return", index + 1)) != -1) {
+            ++returnCount;
+        }
+    }
+
+    // The source text contains exactly one "return" token; duplication would
+    // increase this count.
+    EXPECT_EQ(returnCount, 1) << "'return' token was duplicated across chunks";
+}
+
 // Code-Aware Test: SQL with CREATE TABLE statements separated by semicolons
 TEST(TextChunkerTest, CodeSql_SplitsBetweenCreateTableStatements) {
     QString text = "-- Table for users\n"
@@ -434,6 +532,37 @@ TEST(TextChunkerTest, CodeSql_SplitsBetweenCreateTableStatements) {
     
     EXPECT_TRUE(hasUsersTable) << "Should have chunk with users table";
     EXPECT_TRUE(hasOrdersTable) << "Should have chunk with orders table";
+}
+
+// Regression: SQL chunking must not duplicate a single logical line within
+// the same chunk when overlap is applied across large chunks.
+TEST(TextChunkerTest, CodeSql_NoIntraChunkLineDuplication) {
+    const QString text = "-- Golden Years / Sound and Vision Discography Database\n"
+                         "-- Ch-ch-ch-ch-changes: Turn and face the strange\n\n"
+                         "CREATE TABLE albums (\n"
+                         "                        id INT PRIMARY KEY,\n"
+                         "                        title VARCHAR(255) NOT NULL,\n"
+                         "                        year INT,\n"
+                         "                        persona VARCHAR(100) -- E.g., Ziggy, Thin White Duke\n"
+                         ");\n";
+
+    // Use the same parameters as the visualisation harness
+    const int chunkSize = 500;
+    const int chunkOverlap = 50;
+
+    const QString targetLine =
+        "persona VARCHAR(100) -- E.g., Ziggy, Thin White Duke";
+
+    const QStringList chunks =
+        TextChunker::split(text, chunkSize, chunkOverlap, FileType::CodeSql);
+
+    ASSERT_FALSE(chunks.isEmpty());
+
+    for (const QString &chunk : chunks) {
+        const int count = chunk.count(targetLine);
+        EXPECT_LE(count, 1) << "Target SQL line should not be duplicated within a single chunk: "
+                            << chunk.toStdString();
+    }
 }
 
 // Code-Aware Test: Cobol with DIVISION and SECTION boundaries
@@ -636,30 +765,50 @@ TEST(TextChunkerTest, MarkdownTableHandling) {
     int chunkOverlap = 10;
     
     QStringList chunks = TextChunker::split(text, chunkSize, chunkOverlap, FileType::CodeMarkdown);
-    
+
     ASSERT_GT(chunks.size(), 0);
-    
-    // All chunks should respect size limit
+
+    // All chunks should respect the size limit, with a small relaxation for
+    // Markdown tables: to keep header and rows together we allow a chunk to
+    // overflow by up to ~25% of the requested size.
+    const int tableAwareMax = chunkSize + chunkSize / 4; // +25%
     for (const QString& chunk : chunks) {
-        EXPECT_LE(chunk.length(), chunkSize);
+        EXPECT_LE(chunk.length(), tableAwareMax);
     }
-    
-    // Ideally, table rows should stay together when possible
-    // Check if any chunk contains partial table structure
+    // Ideally, table rows should stay together when possible.
+    // Additionally, table row formatting must preserve newlines so rows are
+    // not flattened into a single line like "| Row1 | | Row2 |".
+    bool sawTable = false;
     for (const QString& chunk : chunks) {
-        int pipeCount = chunk.count('|');
-        
-        // If a chunk contains table markers, it should have balanced structure
-        // (at least 2 pipes per row, and rows should be complete)
-        if (pipeCount > 0) {
-            QStringList lines = chunk.split('\n');
-            for (const QString& line : lines) {
-                if (line.contains('|')) {
-                    // Table row should have at least 2 pipes (start and end, or delimiters)
-                    int linePipes = line.count('|');
-                    EXPECT_GE(linePipes, 2) << "Incomplete table row in chunk: " << line.toStdString();
-                }
+        if (!chunk.contains("| Column A |")) {
+            continue;
+        }
+
+        sawTable = true;
+
+        QStringList lines = chunk.split('\n');
+
+        // Locate the header row index within this chunk
+        int headerIndex = -1;
+        for (int i = 0; i < lines.size(); ++i) {
+            if (lines[i].contains("| Column A | Column B | Column C |")) {
+                headerIndex = i;
+                break;
             }
         }
+
+        ASSERT_NE(headerIndex, -1) << "Table header row not found in chunk containing table";
+
+        // The alignment row and at least the first data row should appear on
+        // distinct subsequent lines, not concatenated onto the header line.
+        ASSERT_LT(headerIndex + 2, lines.size());
+        EXPECT_TRUE(lines[headerIndex + 1].startsWith("| :---"))
+            << "Alignment row should be on its own line, not glued to header: "
+            << lines[headerIndex + 1].toStdString();
+        EXPECT_TRUE(lines[headerIndex + 2].startsWith("| Value 1"))
+            << "First data row should start on its own line, preserving table row newline: "
+            << lines[headerIndex + 2].toStdString();
     }
+
+    EXPECT_TRUE(sawTable) << "Markdown table should appear in at least one chunk";
 }

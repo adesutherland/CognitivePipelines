@@ -50,62 +50,8 @@ public:
      * 6. Recursively apply next separator if a segment is still too large
      * 7. Force split at character boundary if no separator helps
      */
-    static QStringList split(const QString& text, int chunkSize, int chunkOverlap, 
-                            FileType fileType = FileType::PlainText);
-
-private:
-    /**
-     * @brief Get the prioritized list of separators for a given file type.
-     *
-     * @param fileType The type of file content
-     * @return QStringList List of separators in priority order
-     */
-    static QStringList getSeparatorsForType(FileType fileType);
-
-    /**
-     * @brief Check if a line starts with a comment marker for the given file type.
-     *
-     * @param line The line to check
-     * @param fileType The type of file content
-     * @return bool True if the line starts with a comment marker
-     */
-    static bool isCommentStart(const QString& line, FileType fileType);
-
-    /**
-     * @brief Internal recursive splitting helper.
-     *
-     * @param text Text to split
-     * @param chunkSize Maximum chunk size
-     * @param chunkOverlap Overlap size
-     * @param separators List of separators to try in order
-     * @param fileType Type of file content (for Comment Glue logic)
-     * @return QStringList List of chunks
-     */
-    static QStringList splitRecursive(
-        const QString& text,
-        int chunkSize,
-        int chunkOverlap,
-        const QStringList& separators,
-        FileType fileType
-    );
-
-    /**
-     * @brief Merge small splits into chunks respecting size limits and overlap.
-     *
-     * @param splits List of text segments to merge
-     * @param chunkSize Maximum chunk size
-     * @param chunkOverlap Overlap size
-     * @param separator The separator used to create these splits
-     * @param fileType Type of file content (for Comment Glue logic)
-     * @return QStringList List of merged chunks
-     */
-    static QStringList mergeSplits(
-        const QStringList& splits,
-        int chunkSize,
-        int chunkOverlap,
-        const QString& separator,
-        FileType fileType
-    );
+    static QStringList split(const QString& text, int chunkSize, int chunkOverlap,
+                             FileType fileType = FileType::PlainText);
 };
 
 #endif // TEXTCHUNKER_H
