@@ -111,6 +111,12 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/core/DocumentLoader.h
     ${SRC_DIR}/core/TextChunker.cpp
     ${SRC_DIR}/core/TextChunker.h
+    ${SRC_DIR}/core/RagUtils.cpp
+    ${SRC_DIR}/core/RagUtils.h
+    ${SRC_DIR}/RagQueryNode.cpp
+    ${SRC_DIR}/RagQueryNode.h
+    ${SRC_DIR}/RagQueryPropertiesWidget.cpp
+    ${SRC_DIR}/RagQueryPropertiesWidget.h
     ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
     ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
     ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
@@ -281,6 +287,10 @@ if(ENABLE_TESTING)
             tests/test_text_chunker.cpp
             tests/test_chunker_viz.cpp
             tests/test_rag_indexer.cpp
+            tests/test_rag.cpp
+            tests/test_rag_integration.cpp
+            tests/test_sql_edge_cases.cpp
+            tests/test_ziggy_repro.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
@@ -352,6 +362,12 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/core/DocumentLoader.h
             ${SRC_DIR}/core/TextChunker.cpp
             ${SRC_DIR}/core/TextChunker.h
+            ${SRC_DIR}/core/RagUtils.cpp
+            ${SRC_DIR}/core/RagUtils.h
+            ${SRC_DIR}/RagQueryNode.cpp
+            ${SRC_DIR}/RagQueryNode.h
+            ${SRC_DIR}/RagQueryPropertiesWidget.cpp
+            ${SRC_DIR}/RagQueryPropertiesWidget.h
             ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
             ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
             ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
@@ -417,6 +433,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/core/DocumentLoader.h
             ${SRC_DIR}/core/TextChunker.cpp
             ${SRC_DIR}/core/TextChunker.h
+            ${SRC_DIR}/core/RagUtils.cpp
+            ${SRC_DIR}/core/RagUtils.h
             ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
             ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
             ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
@@ -470,6 +488,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/RagIndexerNode.h
             ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
             ${SRC_DIR}/RagIndexerPropertiesWidget.h
+            ${SRC_DIR}/RagQueryNode.cpp
+            ${SRC_DIR}/RagQueryNode.h
+            ${SRC_DIR}/RagQueryPropertiesWidget.cpp
+            ${SRC_DIR}/RagQueryPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>

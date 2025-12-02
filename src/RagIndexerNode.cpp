@@ -141,6 +141,11 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
     return QtConcurrent::run([this, inputs]() -> DataPacket {
         DataPacket output;
 
+        // Verbose logging is opt-in to avoid noisy debug output during
+        // normal application use. Set CP_RAG_INDEXER_VERBOSE=1 in the
+        // environment to re-enable detailed tracing of indexing steps.
+        const bool verbose = qEnvironmentVariableIsSet("CP_RAG_INDEXER_VERBOSE");
+
         // Get input parameters - check if input pin has valid/non-empty data, otherwise use properties
         QString dirPath = inputs.value(QString::fromLatin1(kInputDirectoryPath)).toString();
         if (dirPath.trimmed().isEmpty()) {
@@ -194,7 +199,9 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
             return output;
         }
 
-        qDebug() << "RagIndexerNode: Using provider:" << m_providerId << "with model:" << m_modelId;
+        if (verbose) {
+            qDebug() << "RagIndexerNode: Using provider:" << m_providerId << "with model:" << m_modelId;
+        }
 
         // Setup database connection with unique name
         QString connectionName = QStringLiteral("rag_indexer_") + QUuid::createUuid().toString();
@@ -204,6 +211,9 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
         if (!db.open()) {
             qWarning() << "RagIndexerNode: Failed to open database:" << db.lastError().text();
             output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
+            // Reset handle before removing the connection to avoid
+            // QSqlDatabasePrivate::removeDatabase "still in use" warnings.
+            db = QSqlDatabase();
             QSqlDatabase::removeDatabase(connectionName);
             return output;
         }
@@ -216,6 +226,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
             if (!checkQuery.exec(QString::fromLatin1(kRagSchemaPragma))) {
                 qWarning() << "RagIndexerNode: Failed to enable foreign keys:" << checkQuery.lastError().text();
                 db.close();
+                db = QSqlDatabase();
                 QSqlDatabase::removeDatabase(connectionName);
                 output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
                 return output;
@@ -236,6 +247,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 if (!checkQuery.exec(QString::fromLatin1(kRagSchemaSourceFiles))) {
                     qWarning() << "RagIndexerNode: Failed to create source_files table:" << checkQuery.lastError().text();
                     db.close();
+                    db = QSqlDatabase();
                     QSqlDatabase::removeDatabase(connectionName);
                     output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
                     return output;
@@ -257,6 +269,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 if (!checkQuery.exec(QString::fromLatin1(kRagSchemaFragments))) {
                     qWarning() << "RagIndexerNode: Failed to create fragments table:" << checkQuery.lastError().text();
                     db.close();
+                    db = QSqlDatabase();
                     QSqlDatabase::removeDatabase(connectionName);
                     output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
                     return output;
@@ -299,6 +312,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                         qWarning() << "RagIndexerNode: Rollback failed:" << db.lastError().text();
                     }
                     db.close();
+                    db = QSqlDatabase();
                     QSqlDatabase::removeDatabase(connectionName);
                     output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
                     return output;
@@ -306,6 +320,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                     if (!db.commit()) {
                         qWarning() << "RagIndexerNode: Failed to commit clear transaction:" << db.lastError().text();
                         db.close();
+                        db = QSqlDatabase();
                         QSqlDatabase::removeDatabase(connectionName);
                         output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
                         return output;
@@ -328,12 +343,15 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
         
         // Scan directory for files (with optional name filters)
         QStringList files = DocumentLoader::scanDirectory(dirPath, nameFilters);
-        qDebug() << "RagIndexerNode: Found" << files.size() << "files in" << dirPath
-                 << (nameFilters.isEmpty() ? "(no filter)" : QStringLiteral("(filter: %1)").arg(nameFilters.join(", ")));
+        if (verbose) {
+            qDebug() << "RagIndexerNode: Found" << files.size() << "files in" << dirPath
+                     << (nameFilters.isEmpty() ? "(no filter)" : QStringLiteral("(filter: %1)").arg(nameFilters.join(", ")));
+        }
 
         if (files.isEmpty()) {
             qWarning() << "RagIndexerNode: No files found in directory";
             db.close();
+            db = QSqlDatabase();
             QSqlDatabase::removeDatabase(connectionName);
             output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
             output.insert(QString::fromLatin1(kOutputDatabasePath), dbPath);
@@ -366,10 +384,16 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
 
             // Process each file
             for (const QString& filePath : files) {
+                if (verbose) {
+                    qDebug() << "RagIndexerNode: Processing file" << filePath;
+                }
+
                 // Read file content
                 QString content = DocumentLoader::readTextFile(filePath);
                 if (content.isEmpty()) {
-                    qDebug() << "RagIndexerNode: Skipping empty file:" << filePath;
+                    if (verbose) {
+                        qDebug() << "RagIndexerNode: Skipping empty file:" << filePath;
+                    }
                     continue;
                 }
 
@@ -400,7 +424,11 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
 
                 // Chunk the text
                 QStringList chunks = TextChunker::split(content, m_chunkSize, m_chunkOverlap, fileType);
-                qDebug() << "RagIndexerNode: Split" << filePath << "into" << chunks.size() << "chunks";
+                if (verbose) {
+                    qDebug() << "RagIndexerNode: Generated" << chunks.size() << "chunks for" << filePath;
+                }
+
+                int insertedForFile = 0;
 
                 // Process each chunk
                 for (int i = 0; i < chunks.size(); ++i) {
@@ -437,6 +465,11 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                     }
 
                     totalChunks++;
+                    ++insertedForFile;
+                }
+                
+                if (verbose) {
+                    qDebug() << "RagIndexerNode: Inserted" << insertedForFile << "fragments for" << filePath;
                 }
             }
 
@@ -445,13 +478,16 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 qWarning() << "RagIndexerNode: Failed to commit transaction:" << db.lastError().text();
                 db.rollback();
             } else {
-                qDebug() << "RagIndexerNode: Successfully indexed" << totalChunks << "chunks from" 
-                         << files.size() << "files";
+                if (verbose) {
+                    qDebug() << "RagIndexerNode: Successfully indexed" << totalChunks << "chunks from" 
+                             << files.size() << "files";
+                }
             }
         } // All QSqlQuery objects (fileQuery, fileIdQuery, fragmentQuery) go out of scope here
 
         // Close database - now safe since all queries are destroyed
         db.close();
+        db = QSqlDatabase();
         QSqlDatabase::removeDatabase(connectionName);
 
         // Set outputs

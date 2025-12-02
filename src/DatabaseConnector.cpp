@@ -207,7 +207,9 @@ QFuture<DataPacket> DatabaseConnector::Execute(const DataPacket& inputs)
                             if (query.isSelect()) {
                                 // Build Markdown table with headers
                                 auto sanitizeCell = [](const QString& in) -> QString {
-                                    QString s = in;
+                                    // First escape HTML-sensitive characters so Markdown renderers
+                                    // display them literally (e.g. "<vector>" -> "&lt;vector&gt;").
+                                    QString s = in.toHtmlEscaped();
                                     // Replace newlines and carriage returns with spaces to prevent breaking table structure
                                     s.replace(QLatin1Char('\n'), QStringLiteral(" "));
                                     s.replace(QLatin1Char('\r'), QStringLiteral(" "));

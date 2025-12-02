@@ -24,6 +24,60 @@
 #pragma once
 
 #include <QString>
+#include <vector>
+
+/**
+ * @brief Helper utilities for working with the RAG SQLite index.
+ */
+class RagUtils
+{
+public:
+    struct IndexConfig {
+        QString providerId; ///< Embedding provider identifier (e.g. "openai")
+        QString modelId;    ///< Embedding model identifier (e.g. "text-embedding-3-small")
+    };
+
+    struct SearchResult {
+        qint64 fragmentId {0}; ///< fragments.id
+        qint64 fileId {0};     ///< fragments.file_id
+        int chunkIndex {0};    ///< fragments.chunk_index
+        QString content;       ///< fragments.content
+        double score {0.0};    ///< Cosine similarity score in [0,1]
+    };
+
+    /**
+     * @brief Inspect the RAG index and return the unique embedding configuration.
+     *
+     * Queries the source_files table for distinct (provider, model) pairs.
+     * - If exactly one pair exists, returns it.
+     * - If zero rows exist, throws std::runtime_error to signal an empty index.
+     * - If more than one distinct pair exists, throws std::runtime_error because
+     *   mixed-model RAG is not supported.
+     */
+    static IndexConfig getIndexConfig(const QString& dbPath);
+
+    /**
+     * @brief Compute cosine similarity between two float vectors.
+     *
+     * Returns dot(a,b) / (||a|| * ||b||).
+     * If either vector is empty, the sizes differ, or the magnitude is zero,
+     * the function returns 0.0.
+     */
+    static double cosineSimilarity(const std::vector<float>& a, const std::vector<float>& b);
+
+    /**
+     * @brief Brute-force vector similarity search over all fragments.
+     *
+     * Loads every embedding from the fragments table, computes cosine similarity
+     * with @p queryEmbedding, filters results below @p minRelevance, sorts them
+     * in descending score order, and returns at most @p limit entries.
+     */
+    static std::vector<SearchResult> findMostRelevantChunks(
+        const QString& dbPath,
+        const std::vector<float>& queryEmbedding,
+        int limit,
+        double minRelevance);
+};
 
 /**
  * @brief RAG (Retrieval-Augmented Generation) database schema and utilities.

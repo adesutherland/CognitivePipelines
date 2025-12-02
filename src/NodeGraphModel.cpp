@@ -36,6 +36,7 @@
 #include "HumanInputNode.h"
 #include "PdfToImageNode.h"
 #include "RagIndexerNode.h"
+#include "RagQueryNode.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -108,6 +109,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto tool = std::make_shared<RagIndexerNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Persistence"));
+
+    // Register RagQueryNode under the "Retrieval" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<RagQueryNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Retrieval"));
 
     // Register HumanInputNode under the "Input / Output" category via ToolNodeDelegate
     registry->registerModel([this]() {
