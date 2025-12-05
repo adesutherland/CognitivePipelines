@@ -28,6 +28,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QDebug>
 
 QString GoogleBackend::id() const {
     return QStringLiteral("google");
@@ -167,11 +168,27 @@ LLMResult GoogleBackend::sendPrompt(
         {"Content-Type", "application/json"}
     };
 
-    auto response = cpr::Post(cpr::Url{url}, headers, cpr::Body{jsonBytes.constData()}, cpr::Timeout{60000});
+    // Perform POST synchronously with explicit timeouts to avoid hanging indefinitely
+    auto response = cpr::Post(
+        cpr::Url{url},
+        headers,
+        cpr::Body{jsonBytes.constData()},
+        cpr::ConnectTimeout{10000},   // 10s connect timeout
+        cpr::Timeout{60000}           // 60s total request timeout
+    );
     
     if (response.error) {
         result.hasError = true;
-        result.errorMsg = QStringLiteral("Network error: %1").arg(QString::fromStdString(response.error.message));
+
+        if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
+            result.errorMsg = QStringLiteral("Google Gemini API Timeout");
+            qWarning() << "GoogleBackend::sendPrompt timeout:" << QString::fromStdString(response.error.message);
+        } else {
+            const QString msg = QString::fromStdString(response.error.message);
+            result.errorMsg = QStringLiteral("Google Gemini network error: %1").arg(msg);
+            qWarning() << "GoogleBackend::sendPrompt network error:" << msg;
+        }
+
         result.content = result.errorMsg;
         return result;
     }
@@ -181,6 +198,10 @@ LLMResult GoogleBackend::sendPrompt(
     
     if (response.status_code != 200) {
         result.hasError = true;
+
+        qWarning() << "GoogleBackend::sendPrompt HTTP error" << response.status_code
+                   << "body:" << result.rawResponse;
+
         // Try to parse error from JSON
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(response.text.c_str(), &parseError);

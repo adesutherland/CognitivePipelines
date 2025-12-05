@@ -56,15 +56,23 @@ public:
 
     // Port IDs
     static constexpr const char* kInputQuery = "query";
-    static constexpr const char* kInputDbPath = "db_path";
+    static constexpr const char* kInputDbPath = "database";
     static constexpr const char* kOutputContext = "context";
     static constexpr const char* kOutputResults = "results";
+
+    // Property accessors (used by tests and potential UI bindings)
+    QString databasePath() const { return m_databasePath; }
+    QString queryText() const { return m_queryText; }
 
 public slots:
     void setMaxResults(int value);
     void setMinRelevance(double value);
+    void setDatabasePath(const QString& path);
+    void setQueryText(const QString& text);
 
 private:
     int m_maxResults {5};
     double m_minRelevance {0.5};
+    QString m_databasePath;
+    QString m_queryText;
 };

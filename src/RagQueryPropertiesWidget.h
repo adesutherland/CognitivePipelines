@@ -27,11 +27,17 @@
 #include <QWidget>
 #include <QSpinBox>
 #include <QDoubleSpinBox>
+#include <QLineEdit>
+#include <QPushButton>
+
+class QPlainTextEdit;
 
 /**
  * @brief Properties widget for configuring RagQueryNode behavior.
  *
- * Exposes two controls:
+ * Exposes controls for:
+ * - Database file path (with browse button)
+ * - Default query text (multi-line)
  * - Max Results: integer in [1, 50], default 5
  * - Min Relevance: double in [0.0, 1.0], default 0.5
  */
@@ -40,19 +46,30 @@ class RagQueryPropertiesWidget : public QWidget {
 public:
     explicit RagQueryPropertiesWidget(QWidget* parent = nullptr);
     ~RagQueryPropertiesWidget() override = default;
-
     int maxResults() const;
     double minRelevance() const;
+    QString databasePath() const;
+    QString queryText() const;
 
 public slots:
     void setMaxResults(int value);
     void setMinRelevance(double value);
+    void setDatabasePath(const QString& path);
+    void setQueryText(const QString& text);
 
 signals:
     void maxResultsChanged(int value);
     void minRelevanceChanged(double value);
+    void databasePathChanged(const QString& path);
+    void queryTextChanged(const QString& text);
 
 private:
     QSpinBox* m_maxResultsSpinBox {nullptr};
     QDoubleSpinBox* m_minRelevanceSpinBox {nullptr};
+    QLineEdit* m_databaseEdit {nullptr};
+    QPushButton* m_browseDatabaseBtn {nullptr};
+    QPlainTextEdit* m_queryEdit {nullptr};
+
+private slots:
+    void onBrowseDatabase();
 };

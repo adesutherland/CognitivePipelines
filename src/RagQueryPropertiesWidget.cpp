@@ -25,11 +25,30 @@
 #include "RagQueryPropertiesWidget.h"
 
 #include <QFormLayout>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFileDialog>
+#include <QPlainTextEdit>
+#include <QSignalBlocker>
 
 RagQueryPropertiesWidget::RagQueryPropertiesWidget(QWidget* parent)
     : QWidget(parent)
 {
-    auto* layout = new QFormLayout(this);
+    auto* mainLayout = new QVBoxLayout(this);
+    auto* formLayout = new QFormLayout();
+
+    // Database path with browse button
+    m_databaseEdit = new QLineEdit(this);
+    m_browseDatabaseBtn = new QPushButton(QStringLiteral("Browse..."), this);
+    auto* dbLayout = new QHBoxLayout();
+    dbLayout->addWidget(m_databaseEdit);
+    dbLayout->addWidget(m_browseDatabaseBtn);
+    formLayout->addRow(tr("Database File:"), dbLayout);
+
+    // Default query (multi-line)
+    m_queryEdit = new QPlainTextEdit(this);
+    m_queryEdit->setPlaceholderText(tr("Enter default query text (optional)"));
+    formLayout->addRow(tr("Default Query:"), m_queryEdit);
 
     m_maxResultsSpinBox = new QSpinBox(this);
     m_maxResultsSpinBox->setRange(1, 50);
@@ -41,13 +60,26 @@ RagQueryPropertiesWidget::RagQueryPropertiesWidget(QWidget* parent)
     m_minRelevanceSpinBox->setDecimals(2);
     m_minRelevanceSpinBox->setValue(0.5);
 
-    layout->addRow(tr("Max Results"), m_maxResultsSpinBox);
-    layout->addRow(tr("Min Relevance"), m_minRelevanceSpinBox);
+    formLayout->addRow(tr("Max Results"), m_maxResultsSpinBox);
+    formLayout->addRow(tr("Min Relevance"), m_minRelevanceSpinBox);
+
+    mainLayout->addLayout(formLayout);
+    mainLayout->addStretch();
 
     connect(m_maxResultsSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &RagQueryPropertiesWidget::maxResultsChanged);
     connect(m_minRelevanceSpinBox, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &RagQueryPropertiesWidget::minRelevanceChanged);
+
+    // New controls wiring
+    connect(m_databaseEdit, &QLineEdit::textChanged,
+            this, &RagQueryPropertiesWidget::databasePathChanged);
+    connect(m_browseDatabaseBtn, &QPushButton::clicked,
+            this, &RagQueryPropertiesWidget::onBrowseDatabase);
+
+    connect(m_queryEdit, &QPlainTextEdit::textChanged, this, [this]() {
+        emit queryTextChanged(m_queryEdit->toPlainText());
+    });
 }
 
 int RagQueryPropertiesWidget::maxResults() const
@@ -58,6 +90,16 @@ int RagQueryPropertiesWidget::maxResults() const
 double RagQueryPropertiesWidget::minRelevance() const
 {
     return m_minRelevanceSpinBox ? m_minRelevanceSpinBox->value() : 0.5;
+}
+
+QString RagQueryPropertiesWidget::databasePath() const
+{
+    return m_databaseEdit ? m_databaseEdit->text() : QString();
+}
+
+QString RagQueryPropertiesWidget::queryText() const
+{
+    return m_queryEdit ? m_queryEdit->toPlainText() : QString();
 }
 
 void RagQueryPropertiesWidget::setMaxResults(int value)
@@ -71,5 +113,42 @@ void RagQueryPropertiesWidget::setMinRelevance(double value)
 {
     if (m_minRelevanceSpinBox && m_minRelevanceSpinBox->value() != value) {
         m_minRelevanceSpinBox->setValue(value);
+    }
+}
+
+void RagQueryPropertiesWidget::setDatabasePath(const QString& path)
+{
+    if (!m_databaseEdit) {
+        return;
+    }
+    if (m_databaseEdit->text() != path) {
+        const QSignalBlocker blocker(m_databaseEdit);
+        m_databaseEdit->setText(path);
+    }
+}
+
+void RagQueryPropertiesWidget::setQueryText(const QString& text)
+{
+    if (!m_queryEdit) {
+        return;
+    }
+    if (m_queryEdit->toPlainText() != text) {
+        const QSignalBlocker blocker(m_queryEdit);
+        m_queryEdit->setPlainText(text);
+    }
+}
+
+void RagQueryPropertiesWidget::onBrowseDatabase()
+{
+    const QString currentPath = m_databaseEdit ? m_databaseEdit->text() : QString();
+    QString filter = QStringLiteral("SQLite Databases (*.db *.sqlite);;All Files (*)");
+    const QString fileName = QFileDialog::getOpenFileName(
+        this,
+        tr("Select Database File"),
+        currentPath,
+        filter);
+
+    if (!fileName.isEmpty() && m_databaseEdit) {
+        m_databaseEdit->setText(fileName);
     }
 }

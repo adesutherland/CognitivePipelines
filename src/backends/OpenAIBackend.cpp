@@ -29,6 +29,7 @@
 #include <QJsonDocument>
 #include <QFile>
 #include <QFileInfo>
+#include <QDebug>
 
 QString OpenAIBackend::id() const {
     return QStringLiteral("openai");
@@ -164,12 +165,27 @@ LLMResult OpenAIBackend::sendPrompt(
         {"Content-Type", "application/json"}
     };
 
-    // Perform POST synchronously
-    auto response = cpr::Post(cpr::Url{url}, headers, cpr::Body{jsonBytes.constData()}, cpr::Timeout{60000});
+    // Perform POST synchronously with explicit timeouts to avoid hanging indefinitely
+    auto response = cpr::Post(
+        cpr::Url{url},
+        headers,
+        cpr::Body{jsonBytes.constData()},
+        cpr::ConnectTimeout{10000},   // 10s connect timeout
+        cpr::Timeout{60000}           // 60s total request timeout
+    );
     
     if (response.error) {
         result.hasError = true;
-        result.errorMsg = QStringLiteral("Network error: %1").arg(QString::fromStdString(response.error.message));
+
+        if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
+            result.errorMsg = QStringLiteral("OpenAI API Timeout");
+            qWarning() << "OpenAIBackend::sendPrompt timeout:" << QString::fromStdString(response.error.message);
+        } else {
+            const QString msg = QString::fromStdString(response.error.message);
+            result.errorMsg = QStringLiteral("OpenAI network error: %1").arg(msg);
+            qWarning() << "OpenAIBackend::sendPrompt network error:" << msg;
+        }
+
         result.content = result.errorMsg;
         return result;
     }
@@ -179,6 +195,10 @@ LLMResult OpenAIBackend::sendPrompt(
     
     if (response.status_code != 200) {
         result.hasError = true;
+
+        qWarning() << "OpenAIBackend::sendPrompt HTTP error" << response.status_code
+                   << "body:" << result.rawResponse;
+
         // Try to parse error from JSON
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(response.text.c_str(), &parseError);
@@ -275,17 +295,36 @@ EmbeddingResult OpenAIBackend::getEmbedding(
         {"Content-Type", "application/json"}
     };
 
-    // Perform POST synchronously
-    auto response = cpr::Post(cpr::Url{url}, headers, cpr::Body{jsonBytes.constData()}, cpr::Timeout{60000});
+    // Perform POST synchronously with explicit timeouts to avoid hanging indefinitely
+    auto response = cpr::Post(
+        cpr::Url{url},
+        headers,
+        cpr::Body{jsonBytes.constData()},
+        cpr::ConnectTimeout{10000},   // 10s connect timeout
+        cpr::Timeout{60000}           // 60s total request timeout
+    );
     
     if (response.error) {
         result.hasError = true;
-        result.errorMsg = QStringLiteral("Network error: %1").arg(QString::fromStdString(response.error.message));
+
+        if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
+            result.errorMsg = QStringLiteral("OpenAI API Timeout");
+            qWarning() << "OpenAIBackend::getEmbedding timeout:" << QString::fromStdString(response.error.message);
+        } else {
+            const QString msg = QString::fromStdString(response.error.message);
+            result.errorMsg = QStringLiteral("OpenAI network error: %1").arg(msg);
+            qWarning() << "OpenAIBackend::getEmbedding network error:" << msg;
+        }
+
         return result;
     }
     
     if (response.status_code != 200) {
         result.hasError = true;
+
+        qWarning() << "OpenAIBackend::getEmbedding HTTP error" << response.status_code
+                   << "body:" << QString::fromStdString(response.text);
+
         // Try to parse error from JSON
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(response.text.c_str(), &parseError);

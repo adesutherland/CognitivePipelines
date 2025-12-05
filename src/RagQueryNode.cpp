@@ -58,7 +58,7 @@ NodeDescriptor RagQueryNode::GetDescriptor() const
                       QStringLiteral("Query"), QStringLiteral("text")});
     desc.inputPins.insert(QString::fromLatin1(kInputDbPath),
         PinDefinition{PinDirection::Input, QString::fromLatin1(kInputDbPath),
-                      QStringLiteral("DB Path"), QStringLiteral("text")});
+                      QStringLiteral("Database"), QStringLiteral("text")});
 
     // Outputs
     desc.outputPins.insert(QString::fromLatin1(kOutputContext),
@@ -76,11 +76,17 @@ QWidget* RagQueryNode::createConfigurationWidget(QWidget* parent)
     auto* widget = new RagQueryPropertiesWidget(parent);
     widget->setMaxResults(m_maxResults);
     widget->setMinRelevance(m_minRelevance);
+    widget->setDatabasePath(m_databasePath);
+    widget->setQueryText(m_queryText);
 
     QObject::connect(widget, &RagQueryPropertiesWidget::maxResultsChanged,
                      this, &RagQueryNode::setMaxResults);
     QObject::connect(widget, &RagQueryPropertiesWidget::minRelevanceChanged,
                      this, &RagQueryNode::setMinRelevance);
+    QObject::connect(widget, &RagQueryPropertiesWidget::databasePathChanged,
+                     this, &RagQueryNode::setDatabasePath);
+    QObject::connect(widget, &RagQueryPropertiesWidget::queryTextChanged,
+                     this, &RagQueryNode::setQueryText);
     return widget;
 }
 
@@ -89,8 +95,15 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
     return QtConcurrent::run([this, inputs]() -> DataPacket {
         DataPacket output;
 
-        const QString queryText = inputs.value(QString::fromLatin1(kInputQuery)).toString().trimmed();
-        const QString dbPath = inputs.value(QString::fromLatin1(kInputDbPath)).toString().trimmed();
+        QString queryText = inputs.value(QString::fromLatin1(kInputQuery)).toString().trimmed();
+        if (queryText.isEmpty()) {
+            queryText = m_queryText.trimmed();
+        }
+
+        QString dbPath = inputs.value(QString::fromLatin1(kInputDbPath)).toString().trimmed();
+        if (dbPath.isEmpty()) {
+            dbPath = m_databasePath.trimmed();
+        }
 
         if (queryText.isEmpty()) {
             qWarning() << "RagQueryNode: Query text is empty";
@@ -246,6 +259,8 @@ QJsonObject RagQueryNode::saveState() const
     QJsonObject obj;
     obj.insert(QStringLiteral("max_results"), m_maxResults);
     obj.insert(QStringLiteral("min_relevance"), m_minRelevance);
+    obj.insert(QStringLiteral("database_path"), m_databasePath);
+    obj.insert(QStringLiteral("query_text"), m_queryText);
     return obj;
 }
 
@@ -256,6 +271,12 @@ void RagQueryNode::loadState(const QJsonObject& data)
     }
     if (data.contains(QStringLiteral("min_relevance"))) {
         m_minRelevance = data.value(QStringLiteral("min_relevance")).toDouble(m_minRelevance);
+    }
+    if (data.contains(QStringLiteral("database_path"))) {
+        m_databasePath = data.value(QStringLiteral("database_path")).toString();
+    }
+    if (data.contains(QStringLiteral("query_text"))) {
+        m_queryText = data.value(QStringLiteral("query_text")).toString();
     }
 }
 
@@ -277,4 +298,14 @@ void RagQueryNode::setMinRelevance(double value)
         value = 1.0;
     }
     m_minRelevance = value;
+}
+
+void RagQueryNode::setDatabasePath(const QString& path)
+{
+    m_databasePath = path;
+}
+
+void RagQueryNode::setQueryText(const QString& text)
+{
+    m_queryText = text;
 }

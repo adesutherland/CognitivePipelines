@@ -9,6 +9,13 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QTemporaryDir>
+#include <QTemporaryFile>
+#include <QtSql/QSqlDatabase>
+#include <QtSql/QSqlQuery>
+#include <QtSql/QSqlError>
+
+#include "RagQueryNode.h"
+#include "core/LLMProviderRegistry.h"
 
 #include "core/RagUtils.h"
 
@@ -48,6 +55,101 @@ void createBasicRagSchema(QSqlDatabase& db)
 }
 
 } // namespace
+
+TEST(RagQueryNodeTest, SavesAndLoadsState)
+{
+    ensureCoreApp();
+
+    RagQueryNode node;
+    node.setDatabasePath(QStringLiteral("stored_db.sqlite"));
+    node.setQueryText(QStringLiteral("stored query"));
+
+    const QJsonObject state = node.saveState();
+
+    RagQueryNode node2;
+    node2.loadState(state);
+
+    EXPECT_EQ(node2.databasePath(), QStringLiteral("stored_db.sqlite"));
+    EXPECT_EQ(node2.queryText(), QStringLiteral("stored query"));
+}
+
+TEST(RagQueryNodeTest, PinOverridesProperty)
+{
+    ensureCoreApp();
+
+    // Try to get provider credentials (same pattern as other RAG tests)
+    QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
+    if (apiKey.isEmpty()) {
+        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
+    }
+
+    if (apiKey.isEmpty()) {
+        GTEST_SKIP() << "No OpenAI API key provided. Set OPENAI_API_KEY environment variable or add to accounts.json.";
+    }
+
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString dbPath = dir.path() + QStringLiteral("/rag_query.db");
+
+    // Create a minimal RAG index with one source_files row and one fragment
+    const QString connectionName = QStringLiteral("rag_query_node_test");
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+        db.setDatabaseName(dbPath);
+        ASSERT_TRUE(db.open()) << "Failed to open temp db: " << db.lastError().text().toStdString();
+
+        createBasicRagSchema(db);
+
+        QSqlQuery insert(db);
+        ASSERT_TRUE(insert.exec(QStringLiteral(
+                        "INSERT INTO source_files (file_path, provider, model) "
+                        "VALUES ('a.txt', 'openai', 'text-embedding-3-small');")))
+            << "Failed to insert row into source_files: " << insert.lastError().text().toStdString();
+
+        ASSERT_TRUE(insert.exec(QStringLiteral(
+                        "INSERT INTO fragments (file_id, chunk_index, content, embedding) "
+                        "VALUES (1, 0, 'test content', zeroblob(1536 * 4));")))
+            << "Failed to insert row into fragments: " << insert.lastError().text().toStdString();
+
+        db.close();
+    }
+    QSqlDatabase::removeDatabase(connectionName);
+
+    RagQueryNode node;
+    node.setMaxResults(1);
+    node.setMinRelevance(0.0);
+
+    // Scenario A: Property fallback (no input pins provided)
+    node.setDatabasePath(dbPath);
+    node.setQueryText(QStringLiteral("hello world"));
+
+    {
+        DataPacket inputs; // empty inputs
+        QFuture<DataPacket> fut = node.Execute(inputs);
+        fut.waitForFinished();
+        const DataPacket out = fut.result();
+
+        // Execution should have attempted to use the property path and produced outputs
+        EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputContext)));
+        EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputResults)));
+    }
+
+    // Scenario B: Pin override (property is invalid but pin provides valid path)
+    node.setDatabasePath(QStringLiteral("invalid_path"));
+
+    {
+        DataPacket inputs;
+        inputs.insert(QString::fromLatin1(RagQueryNode::kInputQuery), QStringLiteral("hello world"));
+        inputs.insert(QString::fromLatin1(RagQueryNode::kInputDbPath), dbPath);
+
+        QFuture<DataPacket> fut = node.Execute(inputs);
+        fut.waitForFinished();
+        const DataPacket out = fut.result();
+
+        EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputContext)));
+        EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputResults)));
+    }
+}
 
 TEST(RagUtilsTest, GetIndexConfigSingleModel)
 {

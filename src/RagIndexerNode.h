@@ -102,6 +102,11 @@ signals:
     void chunkingStrategyChanged(const QString& strategy);
     void clearDatabaseChanged(bool clear);
 
+    // Emitted periodically while indexing is running to report progress
+    // (e.g., current file/chunk and totals). The ExecutionEngine listens
+    // for this signal to surface live status in the Stage Output panel.
+    void progressUpdated(const DataPacket& packet);
+
 private:
     // Configuration properties
     QString m_directoryPath;

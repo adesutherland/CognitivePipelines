@@ -157,6 +157,13 @@ MainWindow::MainWindow(QWidget* parent)
     connect(execEngine_, &ExecutionEngine::nodeLog,
             this, &MainWindow::onNodeLog);
 
+    // Refresh Stage Output whenever a node's output packet changes (including
+    // mid-run progress updates from long-running nodes such as RagIndexerNode).
+    connect(execEngine_, &ExecutionEngine::nodeOutputChanged,
+            this, [this](QtNodes::NodeId /*nodeId*/) {
+                refreshStageOutput();
+            });
+
     // Repaint specific node on status changes to force painter invocation
     connect(execEngine_, &ExecutionEngine::nodeStatusChanged,
             this, [this](const QUuid &nodeId, int /*state*/) { onNodeRepaint(nodeId); });

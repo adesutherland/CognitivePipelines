@@ -38,6 +38,7 @@
 #include <QDateTime>
 #include <QDebug>
 #include <QUuid>
+#include <QElapsedTimer>
 
 RagIndexerNode::RagIndexerNode(QObject* parent)
     : QObject(parent)
@@ -145,6 +146,11 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
         // normal application use. Set CP_RAG_INDEXER_VERBOSE=1 in the
         // environment to re-enable detailed tracing of indexing steps.
         const bool verbose = qEnvironmentVariableIsSet("CP_RAG_INDEXER_VERBOSE");
+
+        // Timer used to throttle progressUpdated emissions so that very large
+        // indexing runs (e.g. tens of thousands of chunks) do not flood the UI.
+        QElapsedTimer progressTimer;
+        progressTimer.start();
 
         // Get input parameters - check if input pin has valid/non-empty data, otherwise use properties
         QString dirPath = inputs.value(QString::fromLatin1(kInputDirectoryPath)).toString();
@@ -382,8 +388,12 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 "INSERT INTO fragments (file_id, chunk_index, content, embedding) "
                 "VALUES (:file_id, :chunk_index, :content, :embedding)"));
 
+            const int totalFiles = files.size();
+
             // Process each file
+            int fileIndex = 0;
             for (const QString& filePath : files) {
+                ++fileIndex;
                 if (verbose) {
                     qDebug() << "RagIndexerNode: Processing file" << filePath;
                 }
@@ -431,8 +441,30 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 int insertedForFile = 0;
 
                 // Process each chunk
+                const int chunkCountForFile = chunks.size();
                 for (int i = 0; i < chunks.size(); ++i) {
                     const QString& chunk = chunks[i];
+
+                    // Emit throttled progress updates for Stage Output so the
+                    // user can see that indexing is still making progress.
+                    if (progressTimer.elapsed() >= 10000) { // ~10 seconds
+                        DataPacket progress;
+                        progress.insert(QStringLiteral("progress"),
+                            QStringLiteral("Indexing file %1 of %2\nChunk %3 of %4")
+                                .arg(fileIndex)
+                                .arg(totalFiles)
+                                .arg(i + 1)
+                                .arg(chunkCountForFile));
+                        progress.insert(QStringLiteral("file_path"), filePath);
+                        progress.insert(QStringLiteral("files_total"), totalFiles);
+                        progress.insert(QStringLiteral("file_index"), fileIndex);
+                        progress.insert(QStringLiteral("chunk_index"), i + 1);
+                        progress.insert(QStringLiteral("chunks_in_file"), chunkCountForFile);
+                        progress.insert(QStringLiteral("chunks_total_completed"), totalChunks);
+
+                        emit progressUpdated(progress);
+                        progressTimer.restart();
+                    }
 
                     // Generate embedding
                     EmbeddingResult embResult = backend->getEmbedding(apiKey, m_modelId, chunk);

@@ -36,6 +36,7 @@
 #include "NodeGraphModel.h"
 #include "ToolNodeDelegate.h"
 #include "IToolConnector.h"
+#include "RagIndexerNode.h"
 
 #include <unordered_set>
 #include <queue>
@@ -249,6 +250,25 @@ void ExecutionEngine::run()
 
             // Execute and wait for result in this worker thread
             DataPacket result;
+
+            // For long-running nodes like RagIndexerNode, listen for
+            // mid-run progress updates and surface them via nodeOutput.
+            RagIndexerNode* ragIndexer = dynamic_cast<RagIndexerNode*>(connector.get());
+            QMetaObject::Connection progressConn;
+            if (ragIndexer) {
+                progressConn = QObject::connect(ragIndexer, &RagIndexerNode::progressUpdated,
+                                                this, [this, nodeId](const DataPacket& progressPacket) {
+                    // Update cached node output under mutex, but emit the change notification
+                    // only after releasing the lock to avoid re-entrant QMutex locking when
+                    // MainWindow::refreshStageOutput() calls nodeOutput() in response.
+                    {
+                        QMutexLocker locker(&_outputMutex);
+                        _nodeOutputs[nodeId] = progressPacket;
+                    }
+                    emit nodeOutputChanged(nodeId);
+                });
+            }
+
             try {
                 QFuture<DataPacket> future = connector->Execute(inputPacket);
                 result = future.result();
@@ -262,6 +282,9 @@ void ExecutionEngine::run()
                     }
                 }
                 aborted = true;
+                if (ragIndexer) {
+                    QObject::disconnect(progressConn);
+                }
                 break;
             } catch (...) {
                 emit nodeLog(QString::fromLatin1("ExecutionEngine: Unknown exception in node %1 %2")
@@ -273,13 +296,22 @@ void ExecutionEngine::run()
                     }
                 }
                 aborted = true;
+                if (ragIndexer) {
+                    QObject::disconnect(progressConn);
+                }
                 break;
+            }
+
+            if (ragIndexer) {
+                QObject::disconnect(progressConn);
             }
 
             {
                 QMutexLocker locker(&_outputMutex);
                 _nodeOutputs[nodeId] = result;
             }
+
+            emit nodeOutputChanged(nodeId);
 
             // Merge output into the main (cumulative) packet using namespaced CURRENT/OLD keys per pin
             const QUuid thisNodeUuid = nodeUuid(nodeId);

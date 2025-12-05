@@ -53,6 +53,11 @@ signals:
     // Emitted when a connection's status changes (state is one of ExecutionState)
     void connectionStatusChanged(const QUuid& connectionId, int state);
 
+    // Emitted whenever a node's output data packet is updated (including mid-run progress
+    // updates for long-running nodes like RagIndexerNode). The UI can listen to this to
+    // refresh the Stage Output view for the currently selected node.
+    void nodeOutputChanged(QtNodes::NodeId nodeId);
+
 public slots:
     void run();
     void setExecutionDelay(int ms);
