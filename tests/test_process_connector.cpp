@@ -45,9 +45,14 @@ TEST(ProcessConnectorTest, ExecutesCommandAndHandlesIO)
     DataPacket in;
     in.insert(QString::fromLatin1(ProcessConnector::kInStdin), kStdin);
 
-    QFuture<DataPacket> fut = node.Execute(in);
-    fut.waitForFinished();
-    DataPacket out = fut.result();
+    ExecutionToken token;
+    token.data = in;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    TokenList outTokens = node.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket out = outTokens.front().data;
 
     QString stdoutStr = out.value(QString::fromLatin1(ProcessConnector::kOutStdout)).toString();
     QString stderrStr = out.value(QString::fromLatin1(ProcessConnector::kOutStderr)).toString();
@@ -60,9 +65,15 @@ TEST(ProcessConnectorTest, ExecutesCommandAndHandlesIO)
     if (maybeNoPython3 || stdoutStr.isEmpty()) {
         props->setCommand(pyCmd2);
         QApplication::processEvents();
-        QFuture<DataPacket> fut2 = node.Execute(in);
-        fut2.waitForFinished();
-        out = fut2.result();
+
+        ExecutionToken token2;
+        token2.data = in;
+        TokenList tokens2;
+        tokens2.push_back(std::move(token2));
+
+        TokenList outTokens2 = node.execute(tokens2);
+        ASSERT_FALSE(outTokens2.empty());
+        out = outTokens2.front().data;
         stdoutStr = out.value(QString::fromLatin1(ProcessConnector::kOutStdout)).toString();
         stderrStr = out.value(QString::fromLatin1(ProcessConnector::kOutStderr)).toString();
     }

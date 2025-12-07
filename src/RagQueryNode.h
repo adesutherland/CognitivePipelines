@@ -47,10 +47,10 @@ public:
     explicit RagQueryNode(QObject* parent = nullptr);
     ~RagQueryNode() override = default;
 
-    // IToolConnector interface
-    NodeDescriptor GetDescriptor() const override;
+    // IToolConnector interface (V3 tokens API)
+    NodeDescriptor getDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
-    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    TokenList execute(const TokenList& incomingTokens) override;
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 
@@ -71,6 +71,11 @@ public slots:
     void setQueryText(const QString& text);
 
 private:
+    // Legacy async helper preserved to reuse existing QtConcurrent-based
+    // implementation. The public execute(TokenList&) wrapper calls this
+    // and adapts the result to the V3 token API.
+    QFuture<DataPacket> Execute(const DataPacket& inputs);
+
     int m_maxResults {5};
     double m_minRelevance {0.5};
     QString m_databasePath;

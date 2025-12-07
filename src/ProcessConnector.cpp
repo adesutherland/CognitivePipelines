@@ -30,7 +30,7 @@
 
 #include <QProcess>
 
-NodeDescriptor ProcessConnector::GetDescriptor() const
+NodeDescriptor ProcessConnector::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("process-connector");
@@ -77,13 +77,21 @@ QWidget* ProcessConnector::createConfigurationWidget(QWidget* parent)
     return propertiesWidget;
 }
 
-QFuture<DataPacket> ProcessConnector::Execute(const DataPacket& inputs)
+TokenList ProcessConnector::execute(const TokenList& incomingTokens)
 {
+    // Merge incoming tokens into a single DataPacket
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
     // Gather stdin from inputs (optional)
     const QString stdinText = inputs.value(QString::fromLatin1(kInStdin)).toString();
     const QString command = m_command.trimmed();
 
-    return QtConcurrent::run([stdinText, command]() -> DataPacket {
+    QFuture<DataPacket> fut = QtConcurrent::run([stdinText, command]() -> DataPacket {
         DataPacket packet;
         const QString outKey = QString::fromLatin1(kOutStdout);
         const QString errKey = QString::fromLatin1(kOutStderr);
@@ -150,6 +158,15 @@ QFuture<DataPacket> ProcessConnector::Execute(const DataPacket& inputs)
         packet.insert(errKey, stderrStr);
         return packet;
     });
+
+    const DataPacket out = fut.result();
+
+    ExecutionToken token;
+    token.data = out;
+
+    TokenList result;
+    result.push_back(std::move(token));
+    return result;
 }
 
 QJsonObject ProcessConnector::saveState() const

@@ -81,15 +81,20 @@ TEST_F(RagIndexerNodeTest, IndexesSingleTextFile) {
     indexer.setProviderId(QStringLiteral("openai"));
     indexer.setModelId(QStringLiteral("text-embedding-3-small"));
 
-    // Execute the indexer
+    // Execute the indexer via V3 token API
     DataPacket inputs;
     inputs.insert(QString::fromLatin1(RagIndexerNode::kInputDirectoryPath), tempDir.path());
     inputs.insert(QString::fromLatin1(RagIndexerNode::kInputDatabasePath), dbPath);
     inputs.insert(QString::fromLatin1(RagIndexerNode::kInputMetadata), QStringLiteral("{\"status\": \"test\"}"));
 
-    QFuture<DataPacket> future = indexer.Execute(inputs);
-    future.waitForFinished();
-    DataPacket output = future.result();
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = indexer.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket output = outTokens.front().data;
 
     // Verify outputs
     ASSERT_TRUE(output.contains(QString::fromLatin1(RagIndexerNode::kOutputDatabasePath)));
@@ -183,9 +188,14 @@ TEST_F(RagIndexerNodeTest, HandlesEmptyDirectory) {
     indexer.setProviderId(QStringLiteral("openai"));  // Won't be used since directory is empty
 
     DataPacket inputs;
-    QFuture<DataPacket> future = indexer.Execute(inputs);
-    future.waitForFinished();
-    DataPacket output = future.result();
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = indexer.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket output = outTokens.front().data;
 
     ASSERT_TRUE(output.contains(QString::fromLatin1(RagIndexerNode::kOutputCount)));
     int chunkCount = output[QString::fromLatin1(RagIndexerNode::kOutputCount)].toInt();
@@ -259,11 +269,16 @@ TEST_F(RagIndexerNodeTest, FileFilterExcludesNonMatchingFiles) {
     indexer.setProviderId(QStringLiteral("openai"));
     indexer.setModelId(QStringLiteral("text-embedding-3-small"));
 
-    // Execute the indexer
+    // Execute the indexer via V3 token API
     DataPacket inputs;
-    QFuture<DataPacket> future = indexer.Execute(inputs);
-    future.waitForFinished();
-    DataPacket output = future.result();
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = indexer.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket output = outTokens.front().data;
 
     // Verify outputs
     ASSERT_TRUE(output.contains(QString::fromLatin1(RagIndexerNode::kOutputCount)));

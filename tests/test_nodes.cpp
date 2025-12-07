@@ -83,10 +83,16 @@ TEST(TextInputNodeTest, EmitsConfiguredTextViaExecute)
     // Process queued signals to propagate widget->node updates
     QApplication::processEvents();
 
-    // Execute and verify output packet
-    QFuture<DataPacket> fut = node.Execute({});
-    fut.waitForFinished();
-    const DataPacket out = fut.result();
+    // Execute and verify output packet using V3 token API
+    DataPacket in;
+    ExecutionToken token;
+    token.data = in;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    const DataPacket& out = outTokens.front().data;
 
     ASSERT_TRUE(out.contains(QString::fromLatin1(TextInputNode::kOutputId)));
     EXPECT_EQ(out.value(QString::fromLatin1(TextInputNode::kOutputId)).toString(), kText);
@@ -110,14 +116,18 @@ TEST(PromptBuilderNodeTest, FormatsTemplateWithInput)
     props->setTemplateText(kTpl);
     QApplication::processEvents();
 
-    // Build input packet and execute
+    // Build input packet and execute via V3 token API
     DataPacket in;
     in.insert(QString::fromLatin1(PromptBuilderNode::kInputId), QStringLiteral("Alice"));
 
-    QFuture<DataPacket> fut = node.Execute(in);
-    fut.waitForFinished();
+    ExecutionToken token;
+    token.data = in;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
 
-    const DataPacket out = fut.result();
+    const TokenList outTokens = node.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    const DataPacket& out = outTokens.front().data;
     ASSERT_TRUE(out.contains(QString::fromLatin1(PromptBuilderNode::kOutputId)));
     EXPECT_EQ(out.value(QString::fromLatin1(PromptBuilderNode::kOutputId)).toString(),
               QStringLiteral("Hi Alice! This is Alice."));
@@ -141,9 +151,13 @@ TEST(TextOutputNodeTest, UpdatesWidgetOnExecute)
     DataPacket in;
     in.insert(QString::fromLatin1(TextOutputNode::kInputId), kText);
 
-    // Execute: this posts a queued call to the widget's onSetText
-    QFuture<DataPacket> fut = node.Execute(in);
-    fut.waitForFinished(); // immediately finished, but keeps symmetry with other tests
+    // Execute via V3 token API: this posts a queued call to the widget's onSetText
+    ExecutionToken token;
+    token.data = in;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    (void)node.execute(tokens);
 
     // Allow the event loop to process the queued UI update
     QTest::qWait(100);
@@ -194,10 +208,15 @@ TEST(PythonScriptConnectorTest, ExecutesScriptAndHandlesIO)
     DataPacket in;
     in.insert(QStringLiteral("stdin"), kStdin);
 
-    // Execute the script
-    QFuture<DataPacket> fut = node.Execute(in);
-    fut.waitForFinished();
-    DataPacket out = fut.result();
+    // Execute the script via V3 token API
+    ExecutionToken token;
+    token.data = in;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    TokenList outTokens = node.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket out = outTokens.front().data;
 
     // If python3 isn't available on the system, try python as a fallback
     QString stdoutStr = out.value(QStringLiteral("stdout")).toString();
@@ -210,9 +229,15 @@ TEST(PythonScriptConnectorTest, ExecutesScriptAndHandlesIO)
     if (maybeNoPython3 || (stdoutStr.isEmpty() && stderrStr.contains(QStringLiteral("python3"), Qt::CaseInsensitive))) {
         exeEdit->setText(QStringLiteral("python -u"));
         QApplication::processEvents();
-        QFuture<DataPacket> fut2 = node.Execute(in);
-        fut2.waitForFinished();
-        out = fut2.result();
+
+        ExecutionToken token2;
+        token2.data = in;
+        TokenList tokens2;
+        tokens2.push_back(std::move(token2));
+
+        TokenList outTokens2 = node.execute(tokens2);
+        ASSERT_FALSE(outTokens2.empty());
+        out = outTokens2.front().data;
         stdoutStr = out.value(QStringLiteral("stdout")).toString();
         stderrStr = out.value(QStringLiteral("stderr")).toString();
     }
@@ -254,9 +279,15 @@ TEST(DatabaseConnectorTest, ExecutesQueries)
     {
         DataPacket in;
         in.insert(QStringLiteral("sql"), QStringLiteral("CREATE TABLE test (id INT, name TEXT);"));
-        QFuture<DataPacket> fut = node.Execute(in);
-        fut.waitForFinished();
-        const DataPacket out = fut.result();
+
+        ExecutionToken token;
+        token.data = in;
+        TokenList tokens;
+        tokens.push_back(std::move(token));
+
+        const TokenList outTokens = node.execute(tokens);
+        ASSERT_FALSE(outTokens.empty());
+        const DataPacket& out = outTokens.front().data;
         const QString stderrStr = out.value(QStringLiteral("stderr")).toString();
         EXPECT_TRUE(stderrStr.isEmpty()) << stderrStr.toStdString();
     }
@@ -265,9 +296,15 @@ TEST(DatabaseConnectorTest, ExecutesQueries)
     {
         DataPacket in;
         in.insert(QStringLiteral("sql"), QStringLiteral("INSERT INTO test VALUES (1, 'Hello');"));
-        QFuture<DataPacket> fut = node.Execute(in);
-        fut.waitForFinished();
-        const DataPacket out = fut.result();
+
+        ExecutionToken token;
+        token.data = in;
+        TokenList tokens;
+        tokens.push_back(std::move(token));
+
+        const TokenList outTokens = node.execute(tokens);
+        ASSERT_FALSE(outTokens.empty());
+        const DataPacket& out = outTokens.front().data;
         const QString stderrStr = out.value(QStringLiteral("stderr")).toString();
         EXPECT_TRUE(stderrStr.isEmpty()) << stderrStr.toStdString();
     }
@@ -276,9 +313,15 @@ TEST(DatabaseConnectorTest, ExecutesQueries)
     {
         DataPacket in;
         in.insert(QStringLiteral("sql"), QStringLiteral("SELECT * FROM test;"));
-        QFuture<DataPacket> fut = node.Execute(in);
-        fut.waitForFinished();
-        const DataPacket out = fut.result();
+
+        ExecutionToken token;
+        token.data = in;
+        TokenList tokens;
+        tokens.push_back(std::move(token));
+
+        const TokenList outTokens = node.execute(tokens);
+        ASSERT_FALSE(outTokens.empty());
+        const DataPacket& out = outTokens.front().data;
         const QString stderrStr = out.value(QStringLiteral("stderr")).toString();
         const QString stdoutStr = out.value(QStringLiteral("stdout")).toString();
         EXPECT_TRUE(stderrStr.isEmpty()) << stderrStr.toStdString();

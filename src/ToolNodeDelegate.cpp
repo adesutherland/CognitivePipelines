@@ -23,7 +23,6 @@
 //
 #include "ToolNodeDelegate.h"
 
-#include <QtConcurrent/QtConcurrent>
 #include <QtNodes/Definitions>
 #include <QtNodes/NodeDelegateModelRegistry>
 
@@ -46,7 +45,7 @@ ToolNodeDelegate::ToolNodeDelegate(std::shared_ptr<IToolConnector> connector)
 
     // Initialize default dynamic inputs for known dynamic models (e.g., PromptBuilder)
     if (_connector) {
-        const auto id = _connector->GetDescriptor().id;
+        const auto id = _connector->getDescriptor().id;
         if (id == QStringLiteral("prompt-builder")) {
             onConnectorInputPinsUpdateRequested(QStringList{ QStringLiteral("input") });
         }
@@ -111,9 +110,6 @@ void ToolNodeDelegate::setInData(std::shared_ptr<NodeData> nodeData, PortIndex c
 
     const QString pinId = inputPinIdForIndex(portIndex);
     _inputs[pinId] = v;
-
-    // Trigger execution when any input is set (simple strategy)
-    triggerExecutionIfReady();
 }
 
 std::shared_ptr<NodeData> ToolNodeDelegate::outData(PortIndex const port)
@@ -220,7 +216,7 @@ void ToolNodeDelegate::setDescription(const QString& desc)
 void ToolNodeDelegate::ensureDescriptorCached() const
 {
     if (_descriptorCached || !_connector) return;
-    _descriptor = _connector->GetDescriptor();
+    _descriptor = _connector->getDescriptor();
 
     _inputOrder.clear();
     _outputOrder.clear();
@@ -256,41 +252,6 @@ QString ToolNodeDelegate::pinIdForIndex(PortType portType, PortIndex idx) const
     if (portType == PortType::In) return inputPinIdForIndex(idx);
     if (portType == PortType::Out) return outputPinIdForIndex(idx);
     return QString();
-}
-
-void ToolNodeDelegate::triggerExecutionIfReady()
-{
-    if (!_connector) return;
-
-    // For now, we execute regardless of whether all inputs are set.
-    // In future, enforce required inputs.
-    auto future = _connector->Execute(_inputs);
-
-    // When computation starts/finishes
-    emit computingStarted();
-
-    // Use watcher to know when finished
-    auto watcher = new QFutureWatcher<DataPacket>(this);
-    connect(watcher, &QFutureWatcher<DataPacket>::finished, this, [this, watcher]() {
-        try {
-            const DataPacket result = watcher->result();
-            // Update outputs
-            for (const auto &key : result.keys()) {
-                _outputs[key] = result.value(key);
-            }
-            // Notify downstream for each output port
-            for (PortIndex i = 0; i < _outputOrder.size(); ++i) {
-                emit dataUpdated(i);
-            }
-        } catch (const std::exception &e) {
-            qWarning() << "ToolNodeDelegate execution threw exception:" << e.what();
-        } catch (...) {
-            qWarning() << "ToolNodeDelegate execution threw unknown exception";
-        }
-        emit computingFinished();
-        watcher->deleteLater();
-    });
-    watcher->setFuture(future);
 }
 
 

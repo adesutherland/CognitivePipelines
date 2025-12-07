@@ -41,9 +41,9 @@ public:
     ~HumanInputNode() override = default;
 
     // IToolConnector interface
-    NodeDescriptor GetDescriptor() const override;
+    NodeDescriptor getDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
-    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    TokenList execute(const TokenList& incomingTokens) override;
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 

@@ -87,10 +87,15 @@ TEST(UniversalLLMNodeTest, OpenAIIntegration)
     DataPacket inputs;
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What is the capital of France?"));
 
-    // Execute
-    QFuture<DataPacket> future = node->Execute(inputs);
-    future.waitForFinished();
-    const DataPacket output = future.result();
+    // Execute via V3 token API
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node->execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    const DataPacket output = outTokens.front().data;
 
     // Verify response
     const QString response = output.value(QStringLiteral("response")).toString();
@@ -141,10 +146,15 @@ TEST(UniversalLLMNodeTest, GoogleIntegration)
     DataPacket inputs;
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What is the capital of France?"));
 
-    // Execute
-    QFuture<DataPacket> future = node->Execute(inputs);
-    future.waitForFinished();
-    const DataPacket output = future.result();
+    // Execute via V3 token API
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node->execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    const DataPacket output = outTokens.front().data;
 
     // Verify response
     const QString responseRaw = output.value(QStringLiteral("response")).toString();
@@ -210,10 +220,15 @@ TEST(UniversalLLMNodeTest, OpenAIVisionIntegration)
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
     inputs.insert(QStringLiteral("image"), imagePath);
 
-    // Execute
-    QFuture<DataPacket> future = node->Execute(inputs);
-    future.waitForFinished();
-    const DataPacket output = future.result();
+    // Execute via V3 token API
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node->execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    const DataPacket output = outTokens.front().data;
 
     // Clean up the temporary image file
     QFile::remove(imagePath);
@@ -273,10 +288,15 @@ TEST(UniversalLLMNodeTest, GoogleVisionIntegration)
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
     inputs.insert(QStringLiteral("image"), imagePath);
 
-    // Execute
-    QFuture<DataPacket> future = node->Execute(inputs);
-    future.waitForFinished();
-    const DataPacket output = future.result();
+    // Execute via V3 token API
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node->execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    const DataPacket output = outTokens.front().data;
 
     // Clean up the temporary image file
     QFile::remove(imagePath);
@@ -336,10 +356,15 @@ TEST(UniversalLLMNodeTest, MissingImageFileError)
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
     inputs.insert(QStringLiteral("image"), nonExistentPath);
 
-    // Execute
-    QFuture<DataPacket> future = node->Execute(inputs);
-    future.waitForFinished();
-    const DataPacket output = future.result();
+    // Execute via V3 token API
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node->execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    const DataPacket output = outTokens.front().data;
 
     // Verify that an error was reported
     ASSERT_TRUE(output.contains(QStringLiteral("__error"))) 

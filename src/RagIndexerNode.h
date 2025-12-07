@@ -52,10 +52,10 @@ public:
     explicit RagIndexerNode(QObject* parent = nullptr);
     ~RagIndexerNode() override = default;
 
-    // IToolConnector interface
-    NodeDescriptor GetDescriptor() const override;
+    // IToolConnector interface (V3 tokens API)
+    NodeDescriptor getDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
-    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    TokenList execute(const TokenList& incomingTokens) override;
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 
@@ -108,6 +108,11 @@ signals:
     void progressUpdated(const DataPacket& packet);
 
 private:
+    // Legacy async helper preserved to reuse the existing QtConcurrent-based
+    // implementation. The public execute(TokenList&) wrapper calls this and
+    // adapts the result to the V3 token API.
+    QFuture<DataPacket> Execute(const DataPacket& inputs);
+
     // Configuration properties
     QString m_directoryPath;
     QString m_databasePath;

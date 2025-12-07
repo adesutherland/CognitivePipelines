@@ -24,7 +24,6 @@
 #include "TextInputNode.h"
 #include "TextInputPropertiesWidget.h"
 
-#include <QtConcurrent/QtConcurrent>
 #include <QJsonObject>
 
 TextInputNode::TextInputNode(QObject* parent)
@@ -39,7 +38,7 @@ void TextInputNode::setText(const QString& text)
     emit textChanged(m_text);
 }
 
-NodeDescriptor TextInputNode::GetDescriptor() const
+NodeDescriptor TextInputNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("text-input");
@@ -76,14 +75,19 @@ QWidget* TextInputNode::createConfigurationWidget(QWidget* parent)
     return w;
 }
 
-QFuture<DataPacket> TextInputNode::Execute(const DataPacket& /*inputs*/)
+TokenList TextInputNode::execute(const TokenList& /*incomingTokens*/)
 {
-    const QString value = m_text;
-    return QtConcurrent::run([value]() -> DataPacket {
-        DataPacket output;
-        output.insert(QString::fromLatin1(kOutputId), value);
-        return output;
-    });
+    // This is a source node: it ignores incoming tokens and simply emits its
+    // current text value on the output pin.
+    DataPacket output;
+    output.insert(QString::fromLatin1(kOutputId), m_text);
+
+    ExecutionToken token;
+    token.data = output;
+
+    TokenList result;
+    result.push_back(std::move(token));
+    return result;
 }
 
 

@@ -39,7 +39,7 @@ PythonScriptConnector::PythonScriptConnector(QObject* parent)
     m_executable = QStringLiteral("python3 -u");
 }
 
-NodeDescriptor PythonScriptConnector::GetDescriptor() const
+NodeDescriptor PythonScriptConnector::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("python-script");
@@ -108,27 +108,31 @@ QWidget* PythonScriptConnector::createConfigurationWidget(QWidget* parent)
     return widget;
 }
 
-QFuture<DataPacket> PythonScriptConnector::Execute(const DataPacket& inputs)
+TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
 {
+    // Merge incoming tokens into a single DataPacket
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
     // Gather stdin from inputs and capture current config
     const QString stdinText = inputs.value(QStringLiteral("stdin")).toString();
     const QString executable = m_executable.trimmed();
     const QString scriptContent = m_scriptContent; // may be empty; we'll still attempt to run
 
-    return QtConcurrent::run([stdinText, executable, scriptContent]() -> DataPacket {
-        DataPacket packet;
-        const QString outKey = QStringLiteral("stdout");
-        const QString errKey = QStringLiteral("stderr");
+    DataPacket packet;
+    const QString outKey = QStringLiteral("stdout");
+    const QString errKey = QStringLiteral("stderr");
 
-
-        if (executable.isEmpty()) {
-            const QString msg = QStringLiteral("ERROR: Python executable/command is empty.");
-            packet.insert(outKey, QString());
-            packet.insert(errKey, msg);
-            qWarning() << "PythonScriptConnector:" << msg;
-            return packet;
-        }
-
+    if (executable.isEmpty()) {
+        const QString msg = QStringLiteral("ERROR: Python executable/command is empty.");
+        packet.insert(outKey, QString());
+        packet.insert(errKey, msg);
+        qWarning() << "PythonScriptConnector:" << msg;
+    } else {
         // Create a temporary file for the script content
         QTemporaryFile tempFile;
         if (!tempFile.open()) {
@@ -136,82 +140,83 @@ QFuture<DataPacket> PythonScriptConnector::Execute(const DataPacket& inputs)
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
             qWarning() << "PythonScriptConnector:" << msg;
-            return packet;
-        }
-
-        // Write script content to temp file
-        {
+        } else {
+            // Write script content to temp file
             const QByteArray scriptBytes = scriptContent.toUtf8();
             if (tempFile.write(scriptBytes) != scriptBytes.size()) {
                 const QString msg = QStringLiteral("Failed to write script to temporary file: ") + tempFile.errorString();
                 packet.insert(outKey, QString());
                 packet.insert(errKey, msg);
                 qWarning() << "PythonScriptConnector:" << msg;
-                return packet;
+            } else {
+                tempFile.flush();
+                tempFile.close();
+
+                const QString scriptPath = tempFile.fileName();
+
+                // Prepare process
+                QProcess proc;
+                proc.setProcessChannelMode(QProcess::SeparateChannels);
+
+                // Build command by splitting the executable into program + args and appending the script path as its own arg.
+                // Avoid shell wrappers (cmd/sh) to prevent quoting issues across platforms.
+                QStringList tokens = QProcess::splitCommand(executable);
+                if (tokens.isEmpty()) {
+                    const QString msg = QStringLiteral("ERROR: Invalid Python executable/command: '") + executable + QStringLiteral("'");
+                    packet.insert(outKey, QString());
+                    packet.insert(errKey, msg);
+                    qWarning() << "PythonScriptConnector:" << msg;
+                } else {
+                    const QString program = tokens.takeFirst();
+                    QStringList args = tokens;
+                    args << scriptPath;
+                    proc.setProgram(program);
+                    proc.setArguments(args);
+
+                    // Start the process
+                    proc.start();
+                    const bool started = proc.waitForStarted(10000); // 10s to start
+                    if (!started) {
+                        const QString err = QStringLiteral("Failed to start process: ") + proc.errorString();
+                        qWarning() << "PythonScriptConnector:" << err
+                                   << ", qprocess error =" << static_cast<int>(proc.error())
+                                   << ", state =" << static_cast<int>(proc.state());
+                        packet.insert(outKey, QString());
+                        packet.insert(errKey, err);
+                    } else {
+                        // Write stdin and close
+                        if (!stdinText.isEmpty()) {
+                            const QByteArray bytes = stdinText.toUtf8();
+                            proc.write(bytes);
+                        }
+                        proc.closeWriteChannel();
+
+                        // Wait for finish with timeout (60s)
+                        if (!proc.waitForFinished(60000)) {
+                            qWarning() << "PythonScriptConnector: process timeout, killing...";
+                            proc.kill();
+                            proc.waitForFinished();
+                            packet.insert(outKey, QString());
+                            packet.insert(errKey, QStringLiteral("Process timed out"));
+                        } else {
+                            const QString stdoutStr = QString::fromUtf8(proc.readAllStandardOutput());
+                            const QString stderrStr = QString::fromUtf8(proc.readAllStandardError());
+
+                            packet.insert(outKey, stdoutStr);
+                            packet.insert(errKey, stderrStr);
+                        }
+                    }
+                }
             }
-            tempFile.flush();
-            tempFile.close();
         }
+    }
 
-        const QString scriptPath = tempFile.fileName();
+    ExecutionToken token;
+    token.data = packet;
 
-        // Prepare process
-        QProcess proc;
-        proc.setProcessChannelMode(QProcess::SeparateChannels);
-
-        // Build command by splitting the executable into program + args and appending the script path as its own arg.
-        // Avoid shell wrappers (cmd/sh) to prevent quoting issues across platforms.
-        QStringList tokens = QProcess::splitCommand(executable);
-        if (tokens.isEmpty()) {
-            const QString msg = QStringLiteral("ERROR: Invalid Python executable/command: '") + executable + QStringLiteral("'");
-            packet.insert(outKey, QString());
-            packet.insert(errKey, msg);
-            qWarning() << "PythonScriptConnector:" << msg;
-            return packet;
-        }
-        const QString program = tokens.takeFirst();
-        QStringList args = tokens;
-        args << scriptPath;
-        proc.setProgram(program);
-        proc.setArguments(args);
-
-        // Start the process
-        proc.start();
-        const bool started = proc.waitForStarted(10000); // 10s to start
-        if (!started) {
-            const QString err = QStringLiteral("Failed to start process: ") + proc.errorString();
-            qWarning() << "PythonScriptConnector:" << err
-                       << ", qprocess error =" << static_cast<int>(proc.error())
-                       << ", state =" << static_cast<int>(proc.state());
-            packet.insert(outKey, QString());
-            packet.insert(errKey, err);
-            return packet;
-        }
-
-        // Write stdin and close
-        if (!stdinText.isEmpty()) {
-            const QByteArray bytes = stdinText.toUtf8();
-            proc.write(bytes);
-        }
-        proc.closeWriteChannel();
-
-        // Wait for finish with timeout (60s)
-        if (!proc.waitForFinished(60000)) {
-            qWarning() << "PythonScriptConnector: process timeout, killing...";
-            proc.kill();
-            proc.waitForFinished();
-            packet.insert(outKey, QString());
-            packet.insert(errKey, QStringLiteral("Process timed out"));
-            return packet;
-        }
-
-        const QString stdoutStr = QString::fromUtf8(proc.readAllStandardOutput());
-        const QString stderrStr = QString::fromUtf8(proc.readAllStandardError());
-
-        packet.insert(outKey, stdoutStr);
-        packet.insert(errKey, stderrStr);
-        return packet;
-    });
+    TokenList result;
+    result.push_back(std::move(token));
+    return result;
 }
 
 QJsonObject PythonScriptConnector::saveState() const

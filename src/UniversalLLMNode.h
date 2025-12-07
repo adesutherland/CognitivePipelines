@@ -25,7 +25,6 @@
 
 #include <QObject>
 #include <QWidget>
-#include <QFuture>
 #include <QString>
 
 #include "IToolConnector.h"
@@ -46,10 +45,10 @@ public:
     explicit UniversalLLMNode(QObject* parent = nullptr);
     ~UniversalLLMNode() override = default;
 
-    // IToolConnector interface
-    NodeDescriptor GetDescriptor() const override;
+    // IToolConnector interface (V3 tokens API)
+    NodeDescriptor getDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
-    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    TokenList execute(const TokenList& incomingTokens) override;
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 

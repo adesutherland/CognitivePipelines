@@ -25,8 +25,6 @@
 #include "ExecutionEngine.h"
 
 #include <QDebug>
-#include <QFuture>
-#include <QFutureWatcher>
 #include <QtConcurrent/QtConcurrent>
 #include <QThread>
 
@@ -35,11 +33,32 @@
 
 #include "NodeGraphModel.h"
 #include "ToolNodeDelegate.h"
-#include "IToolConnector.h"
 #include "RagIndexerNode.h"
 
 #include <unordered_set>
-#include <queue>
+
+namespace {
+
+// Stable namespaces used to derive deterministic UUIDs for nodes/connections.
+const QUuid kNodeNamespace("{6ba7b810-9dad-11d1-80b4-00c04fd430c8}");
+const QUuid kConnectionNamespace("{6ba7b811-9dad-11d1-80b4-00c04fd430c8}");
+
+QUuid nodeUuidForId(QtNodes::NodeId nodeId)
+{
+    QByteArray key = QByteArray::number(static_cast<qulonglong>(nodeId));
+    return QUuid::createUuidV5(kNodeNamespace, key);
+}
+
+QUuid connectionUuidForId(const QtNodes::ConnectionId& c)
+{
+    QByteArray key = QByteArray::number(static_cast<qulonglong>(c.outNodeId)) + '/' +
+                     QByteArray::number(static_cast<qulonglong>(c.outPortIndex)) + '>' +
+                     QByteArray::number(static_cast<qulonglong>(c.inNodeId)) + '/' +
+                     QByteArray::number(static_cast<qulonglong>(c.inPortIndex));
+    return QUuid::createUuidV5(kConnectionNamespace, key);
+}
+
+} // namespace
 
 ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
     : QObject(parent)
@@ -49,338 +68,513 @@ ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
 
 void ExecutionEngine::run()
 {
-    // Clear any previous graph representation and outputs
-    _dag.clear();
-    _nodeOutputs.clear();
+    runPipeline();
+}
 
+void ExecutionEngine::runPipeline()
+{
     if (!_graphModel) {
         qWarning() << "ExecutionEngine: No graph model available.";
         return;
     }
 
-    // Deterministic UUID helpers for nodes and connections (used for UI status updates)
-    const QUuid nodeNs("{6ba7b810-9dad-11d1-80b4-00c04fd430c8}"); // DNS namespace as a stable base
-    const QUuid connNs("{6ba7b811-9dad-11d1-80b4-00c04fd430c8}"); // another stable base
-    auto nodeUuid = [nodeNs](QtNodes::NodeId n) {
-        QByteArray key = QByteArray::number(static_cast<qulonglong>(n));
-        return QUuid::createUuidV5(nodeNs, key);
-    };
-    auto connectionUuid = [connNs](const QtNodes::ConnectionId& c) {
-        QByteArray key = QByteArray::number(static_cast<qulonglong>(c.outNodeId)) + '/' +
-                         QByteArray::number(static_cast<qulonglong>(c.outPortIndex)) + '>' +
-                         QByteArray::number(static_cast<qulonglong>(c.inNodeId)) + '/' +
-                         QByteArray::number(static_cast<qulonglong>(c.inPortIndex));
-        return QUuid::createUuidV5(connNs, key);
-    };
-
-    // Reset canvas to Idle on main thread before launching worker
+    // Clear global engine state
     {
-        const auto resetNodeIds = _graphModel->allNodeIds();
+        QMutexLocker locker(&m_stateMutex);
+        m_dataLake.clear();
+        m_pendingTokens.clear();
+        m_nodesRunning.clear();
+    }
+
+    // Reset canvas to Idle before starting execution
+    const auto nodeIds = _graphModel->allNodeIds();
+    {
         // Nodes to Idle
-        for (auto n : resetNodeIds) {
-            emit nodeStatusChanged(nodeUuid(n), static_cast<int>(ExecutionState::Idle));
+        for (auto nodeId : nodeIds) {
+            emit nodeStatusChanged(nodeUuidForId(nodeId), static_cast<int>(ExecutionState::Idle));
         }
+
         // Connections to Idle
         std::unordered_set<QtNodes::ConnectionId> resetConnections;
-        for (auto n : resetNodeIds) {
-            auto conns = _graphModel->allConnectionIds(n);
+        for (auto nodeId : nodeIds) {
+            const auto conns = _graphModel->allConnectionIds(nodeId);
             resetConnections.insert(conns.begin(), conns.end());
         }
-        for (const auto &cid : resetConnections) {
-            emit connectionStatusChanged(connectionUuid(cid), static_cast<int>(ExecutionState::Idle));
+        for (const auto& cid : resetConnections) {
+            emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Idle));
         }
     }
 
-    // Ensure all nodes exist in the adjacency map (even if they have no outgoing edges)
-    const auto nodeIds = _graphModel->allNodeIds();
-    for (auto nodeId : nodeIds) {
-        if (!_dag.contains(nodeId)) {
-            _dag.insert(nodeId, {});
-        }
-    }
+    // Initialize pending tokens: each node starts with the set of input pins
+    // that still require tokens based on the current graph wiring.
+    {
+        QMutexLocker locker(&m_stateMutex);
 
-    // Collect all unique connections across the graph
-    std::unordered_set<QtNodes::ConnectionId> allConnections;
-    for (auto nodeId : nodeIds) {
-        auto conns = _graphModel->allConnectionIds(nodeId);
-        allConnections.insert(conns.begin(), conns.end());
-    }
+        for (auto nodeId : nodeIds) {
+            const QUuid nodeUuid = nodeUuidForId(nodeId);
 
-    // Build adjacency list: from outNodeId -> inNodeId
-    for (const auto &conn : allConnections) {
-        // Add edge only if both nodes are valid
-        if (conn.outNodeId != QtNodes::InvalidNodeId && conn.inNodeId != QtNodes::InvalidNodeId) {
-            // Ensure keys exist
-            if (!_dag.contains(conn.outNodeId)) _dag.insert(conn.outNodeId, {});
-            if (!_dag.contains(conn.inNodeId)) _dag.insert(conn.inNodeId, {});
+            // Ensure every node has an entry, even if it has no inputs.
+            QSet<PinId> pendingPins;
 
-            auto &neighbors = _dag[conn.outNodeId];
-            neighbors.insert(conn.inNodeId);
-        }
-    }
-
-    // Compute in-degree for Kahn's algorithm and collect roots
-    QMap<QtNodes::NodeId, int> indegree;
-    for (auto it = _dag.cbegin(); it != _dag.cend(); ++it) {
-        const auto from = it.key();
-        if (!indegree.contains(from)) indegree[from] = 0;
-        for (auto toIt = it.value().cbegin(); toIt != it.value().cend(); ++toIt) {
-            indegree[*toIt] = indegree.value(*toIt, 0) + 1;
-        }
-    }
-
-    QList<QtNodes::NodeId> roots;
-    for (auto it = indegree.cbegin(); it != indegree.cend(); ++it) {
-        if (it.value() == 0) roots.append(it.key());
-    }
-    std::sort(roots.begin(), roots.end());
-
-    // Kahn's topological sort producing a linear order
-    QList<QtNodes::NodeId> topoOrder;
-    std::queue<QtNodes::NodeId> q;
-    for (auto id : roots) q.push(id);
-
-    auto localIndegree = indegree; // copy
-    while (!q.empty()) {
-        auto u = q.front(); q.pop();
-        topoOrder.append(u);
-        const auto neighbors = _dag.value(u);
-        for (const auto &v : neighbors) {
-            localIndegree[v] = localIndegree.value(v, 0) - 1;
-            if (localIndegree[v] == 0) {
-                q.push(v);
-            }
-        }
-    }
-
-    if (topoOrder.size() != indegree.size()) {
-        qWarning() << "ExecutionEngine: Cycle detected in graph or disconnected nodes not accounted for. Aborting execution.";
-        return;
-    }
-
-    if (topoOrder.isEmpty()) {
-        qWarning() << "ExecutionEngine: Graph is empty. Nothing to execute.";
-        return;
-    }
-
-    // Helper to translate port index to our pin id using the delegate's dynamic mapping
-    auto pinIdForIndex = [](ToolNodeDelegate* del, QtNodes::PortType portType, QtNodes::PortIndex idx) -> QString {
-        if (!del) return {};
-        return del->pinIdForIndex(portType, idx);
-    };
-
-    // Run the pipeline in a worker thread and emit status signals from there
-    auto order = topoOrder;
-    QPointer<NodeGraphModel> graphModel = _graphModel;
-
-    [[maybe_unused]] QFuture<void> __execFuture = QtConcurrent::run([this, order, graphModel, pinIdForIndex, nodeUuid, connectionUuid]() mutable {
-        if (!graphModel) {
-            qWarning() << "ExecutionEngine: Graph model deleted during execution.";
-            return;
-        }
-
-        bool aborted = false;
-        DataPacket mainPacket;
-        // Ensure the cumulative packet starts clean at the beginning of each run
-        mainPacket.clear();
-
-        // Iterate through nodes in topological order
-        for (int idx = 0; idx < order.size(); ++idx) {
-            if (!graphModel) { aborted = true; break; }
-            const auto nodeId = order.at(idx);
-
-            auto *delegate = graphModel->delegateModel<ToolNodeDelegate>(nodeId);
+            auto* delegate = _graphModel->delegateModel<ToolNodeDelegate>(nodeId);
             if (!delegate) {
-                qWarning() << "ExecutionEngine: No delegate for node" << nodeId << ". Skipping.";
+                // Nodes without a delegate are treated as having no required inputs.
+                m_pendingTokens.insert(nodeUuid, pendingPins);
                 continue;
             }
+
+            const auto attached = _graphModel->allConnectionIds(nodeId);
+            for (const auto& conn : attached) {
+                if (conn.inNodeId != nodeId) {
+                    continue; // consider only incoming edges
+                }
+
+                // Map the inbound port index to the logical PinId.
+                const PinId pinId = delegate->pinIdForIndex(QtNodes::PortType::In, conn.inPortIndex);
+                if (!pinId.isEmpty()) {
+                    pendingPins.insert(pinId);
+                }
+            }
+
+            m_pendingTokens.insert(nodeUuid, pendingPins);
+        }
+    }
+
+    // Kick off the first scheduling pass.
+    processTokens();
+}
+
+void ExecutionEngine::processTokens()
+{
+    if (!_graphModel) {
+        return;
+    }
+
+    // Determine which nodes are currently Ready-to-Run.
+    QVector<std::pair<QtNodes::NodeId, QUuid>> readyNodes;
+
+    {
+        QMutexLocker locker(&m_stateMutex);
+
+        const auto nodeIds = _graphModel->allNodeIds();
+        for (auto nodeId : nodeIds) {
+            const QUuid nodeUuid = nodeUuidForId(nodeId);
+
+            // Nodes that are no longer tracked in m_pendingTokens are
+            // considered finished for this run.
+            if (!m_pendingTokens.contains(nodeUuid)) {
+                continue;
+            }
+
+            const QSet<PinId> pendingPins = m_pendingTokens.value(nodeUuid);
+            if (!pendingPins.isEmpty()) {
+                continue; // still waiting for at least one token
+            }
+
+            if (m_nodesRunning.contains(nodeUuid)) {
+                continue; // already executing
+            }
+
+            // This node has no pending tokens and is not currently running.
+            m_nodesRunning.insert(nodeUuid);
+            m_pendingTokens.remove(nodeUuid);
+            readyNodes.append({nodeId, nodeUuid});
+        }
+    }
+
+    if (readyNodes.isEmpty()) {
+        return; // nothing to schedule right now
+    }
+
+    // Launch each Ready-to-Run node asynchronously on the global QtConcurrent pool.
+    for (const auto& pair : readyNodes) {
+        const QtNodes::NodeId nodeId = pair.first;
+        const QUuid nodeUuid = pair.second;
+
+        QPointer<NodeGraphModel> graphModel(_graphModel);
+
+        // Keep the returned QFuture to satisfy [[nodiscard]] on QtConcurrent::run.
+        // We intentionally don't use it further because completion is observed
+        // via signals and internal engine state.
+        [[maybe_unused]] auto future = QtConcurrent::run([this, graphModel, nodeId, nodeUuid]() {
+            if (!graphModel) {
+                qWarning() << "ExecutionEngine: Graph model deleted during execution.";
+                return;
+            }
+
+            auto* delegate = graphModel->delegateModel<ToolNodeDelegate>(nodeId);
+            if (!delegate) {
+                qWarning() << "ExecutionEngine: No delegate for node" << nodeId << ". Skipping.";
+
+                // Mark as completed in terms of engine state.
+                handleNodeCompleted(nodeId, nodeUuid, TokenList{});
+                return;
+            }
+
             const auto connector = delegate->connector();
             if (!connector) {
                 qWarning() << "ExecutionEngine: No connector for node" << nodeId << ". Skipping.";
-                continue;
+                handleNodeCompleted(nodeId, nodeUuid, TokenList{});
+                return;
             }
 
-            // Emit Running state for the node and its incoming connections
-            emit nodeStatusChanged(nodeUuid(nodeId), static_cast<int>(ExecutionState::Running));
+            const NodeDescriptor descriptor = connector->getDescriptor();
+            const QString nodeName = descriptor.name;
+
+            // Emit Running state for the node and all of its incoming connections.
+            emit nodeStatusChanged(nodeUuid, static_cast<int>(ExecutionState::Running));
             const auto attached = graphModel->allConnectionIds(nodeId);
-            for (const auto &cid : attached) {
+            for (const auto& cid : attached) {
                 if (cid.inNodeId == nodeId) {
-                    emit connectionStatusChanged(connectionUuid(cid), static_cast<int>(ExecutionState::Running));
+                    emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Running));
                 }
             }
 
-            // Build input packet from main (cumulative) packet
-            // New scheme: namespace values by source Node UUID and provide both current and old values.
-            DataPacket inputPacket;
-            for (const auto &connId : attached) {
-                if (connId.inNodeId != nodeId) continue; // only incoming
+            // Build input tokens from the data lake based on the node's incoming
+            // connections. For each input pin, we look up the upstream node and
+            // output pin, fetch the corresponding value from m_dataLake, and
+            // construct an ExecutionToken carrying that payload.
+            TokenList incomingTokens;
 
-                auto *srcDelegate = graphModel->delegateModel<ToolNodeDelegate>(connId.outNodeId);
-                const QString srcPinId = pinIdForIndex(srcDelegate, QtNodes::PortType::Out, connId.outPortIndex);
-                const QString dstPinId = pinIdForIndex(delegate, QtNodes::PortType::In, connId.inPortIndex);
+            // First, collect all inbound connections along with their resolved
+            // source node UUIDs and source pin ids. We keep this step outside
+            // of the engine state mutex since it only touches the graph model.
+            struct InboundEdge
+            {
+                QUuid                 sourceNodeUuid;
+                PinId                 sourcePinId;
+                PinId                 targetPinId;   // logical input pin id on the current node
+                QtNodes::ConnectionId connectionId;
+            };
 
-                // Compute namespaced keys for source node's output pins
-                const QUuid srcNodeUuid = nodeUuid(connId.outNodeId);
-                const QString nsPrefix = srcNodeUuid.toString();
-                const QString currentKey = nsPrefix + QLatin1String(".") + srcPinId;
-                const QString oldKey = nsPrefix + QLatin1String(".old.") + srcPinId;
-
-                // Look up Current and Old values from the cumulative packet
-                QVariant currentVal = mainPacket.value(currentKey);
-                const QVariant oldVal = mainPacket.value(oldKey);
-
-                // Backward compatibility: if namespaced current is missing or empty, fall back to plain key
-                const bool currentMissing = !currentVal.isValid() || (currentVal.metaType().id() == QMetaType::QString && currentVal.toString().isEmpty());
-                if (currentMissing && mainPacket.contains(srcPinId)) {
-                    currentVal = mainPacket.value(srcPinId);
+            QVector<InboundEdge> inboundEdges;
+            const auto inboundConnections = graphModel->allConnectionIds(nodeId);
+            for (const auto& cid : inboundConnections) {
+                if (cid.inNodeId != nodeId) {
+                    continue; // only consider edges that terminate at this node
                 }
 
-                inputPacket.insert(dstPinId, currentVal);
-                inputPacket.insert(dstPinId + QLatin1String(".old"), oldVal);
+                auto* sourceDelegate = graphModel->delegateModel<ToolNodeDelegate>(cid.outNodeId);
+                if (!sourceDelegate) {
+                    continue;
+                }
+
+                const PinId sourcePinId = sourceDelegate->pinIdForIndex(QtNodes::PortType::Out,
+                                                                         cid.outPortIndex);
+                if (sourcePinId.isEmpty()) {
+                    continue;
+                }
+
+                auto* targetDelegate = graphModel->delegateModel<ToolNodeDelegate>(cid.inNodeId);
+                if (!targetDelegate) {
+                    continue;
+                }
+
+                InboundEdge edge;
+                edge.sourceNodeUuid = nodeUuidForId(cid.outNodeId);
+                edge.sourcePinId = sourcePinId;
+                edge.targetPinId = targetDelegate->pinIdForIndex(QtNodes::PortType::In,
+                                                                  cid.inPortIndex);
+                edge.connectionId = cid;
+                inboundEdges.push_back(edge);
             }
 
-            const QString nodeName = connector->GetDescriptor().name;
-            QString inputsStr;
-            for (auto it = inputPacket.cbegin(); it != inputPacket.cend(); ++it) {
-                if (!inputsStr.isEmpty()) inputsStr += ", ";
-                inputsStr += it.key() + QLatin1String("=") + it.value().toString();
+            {
+                // Now, under the engine state mutex, translate the collected
+                // inbound edges into concrete execution tokens using the
+                // values already present in the data lake.
+                QMutexLocker locker(&m_stateMutex);
+
+                for (const auto& edge : inboundEdges) {
+                    auto bucketIt = m_dataLake.constFind(edge.sourceNodeUuid);
+                    if (bucketIt == m_dataLake.cend()) {
+                        continue; // upstream node has not produced data yet
+                    }
+
+                    const QVariant value = bucketIt->value(edge.sourcePinId);
+                    if (!value.isValid()) {
+                        continue; // no value stored for this pin
+                    }
+
+                    ExecutionToken token;
+                    token.sourceNodeId = edge.sourceNodeUuid;
+                    token.connectionId = connectionUuidForId(edge.connectionId);
+                    // IMPORTANT: route payload using the *target* pin id so
+                    // that the receiving node sees values under its own
+                    // logical input pin names (e.g. "input" for
+                    // PromptBuilderNode), restoring the original V2
+                    // semantics expected by the tests.
+                    const QString payloadKey = edge.targetPinId.isEmpty()
+                                              ? edge.sourcePinId
+                                              : edge.targetPinId;
+                    token.data.insert(payloadKey, value);
+
+                    incomingTokens.push_back(std::move(token));
+                }
             }
-            emit nodeLog(QString::fromLatin1("Executing Node: %1 %2 with INPUT: {%3}")
-                             .arg(QString::number(nodeId)).arg(nodeName).arg(inputsStr));
 
-            // Execute and wait for result in this worker thread
-            DataPacket result;
+            emit nodeLog(QString::fromLatin1("Executing Node: %1 %2")
+                             .arg(QString::number(nodeId)).arg(nodeName));
 
-            // For long-running nodes like RagIndexerNode, listen for
-            // mid-run progress updates and surface them via nodeOutput.
+            // For long-running nodes like RagIndexerNode, listen for mid-run progress
+            // updates and surface them via nodeOutputChanged.
             RagIndexerNode* ragIndexer = dynamic_cast<RagIndexerNode*>(connector.get());
             QMetaObject::Connection progressConn;
             if (ragIndexer) {
                 progressConn = QObject::connect(ragIndexer, &RagIndexerNode::progressUpdated,
-                                                this, [this, nodeId](const DataPacket& progressPacket) {
-                    // Update cached node output under mutex, but emit the change notification
-                    // only after releasing the lock to avoid re-entrant QMutex locking when
-                    // MainWindow::refreshStageOutput() calls nodeOutput() in response.
-                    {
-                        QMutexLocker locker(&_outputMutex);
-                        _nodeOutputs[nodeId] = progressPacket;
+                                                this, [this, nodeId, nodeUuid](const DataPacket& progressPacket) {
+                    QVariantMap variantMap;
+                    for (auto it = progressPacket.cbegin(); it != progressPacket.cend(); ++it) {
+                        variantMap.insert(it.key(), it.value());
                     }
+
+                    {
+                        QMutexLocker locker(&m_stateMutex);
+                        m_dataLake[nodeUuid] = variantMap;
+                    }
+
                     emit nodeOutputChanged(nodeId);
                 });
             }
 
+            TokenList outputTokens;
             try {
-                QFuture<DataPacket> future = connector->Execute(inputPacket);
-                result = future.result();
-            } catch (const std::exception &ex) {
+                outputTokens = connector->execute(incomingTokens);
+            } catch (const std::exception& ex) {
                 emit nodeLog(QString::fromLatin1("ExecutionEngine: Exception in node %1 %2: %3")
                                  .arg(QString::number(nodeId)).arg(nodeName).arg(ex.what()));
-                emit nodeStatusChanged(nodeUuid(nodeId), static_cast<int>(ExecutionState::Error));
-                for (const auto &cid : attached) {
+                emit nodeStatusChanged(nodeUuid, static_cast<int>(ExecutionState::Error));
+                for (const auto& cid : attached) {
                     if (cid.inNodeId == nodeId) {
-                        emit connectionStatusChanged(connectionUuid(cid), static_cast<int>(ExecutionState::Error));
+                        emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Error));
                     }
                 }
-                aborted = true;
+
                 if (ragIndexer) {
                     QObject::disconnect(progressConn);
                 }
-                break;
+
+                // Mark node as no longer running in the engine state.
+                handleNodeCompleted(nodeId, nodeUuid, TokenList{});
+                return;
             } catch (...) {
                 emit nodeLog(QString::fromLatin1("ExecutionEngine: Unknown exception in node %1 %2")
                                  .arg(QString::number(nodeId)).arg(nodeName));
-                emit nodeStatusChanged(nodeUuid(nodeId), static_cast<int>(ExecutionState::Error));
-                for (const auto &cid : attached) {
+                emit nodeStatusChanged(nodeUuid, static_cast<int>(ExecutionState::Error));
+                for (const auto& cid : attached) {
                     if (cid.inNodeId == nodeId) {
-                        emit connectionStatusChanged(connectionUuid(cid), static_cast<int>(ExecutionState::Error));
+                        emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Error));
                     }
                 }
-                aborted = true;
+
                 if (ragIndexer) {
                     QObject::disconnect(progressConn);
                 }
-                break;
+
+                handleNodeCompleted(nodeId, nodeUuid, TokenList{});
+                return;
             }
 
             if (ragIndexer) {
                 QObject::disconnect(progressConn);
             }
 
-            {
-                QMutexLocker locker(&_outputMutex);
-                _nodeOutputs[nodeId] = result;
-            }
+            // Success path: mark as Finished and update engine state with produced tokens.
+            emit nodeLog(QString::fromLatin1("Node Finished: %1 %2")
+                             .arg(QString::number(nodeId)).arg(nodeName));
 
-            emit nodeOutputChanged(nodeId);
+            handleNodeCompleted(nodeId, nodeUuid, outputTokens);
 
-            // Merge output into the main (cumulative) packet using namespaced CURRENT/OLD keys per pin
-            const QUuid thisNodeUuid = nodeUuid(nodeId);
-            const QString thisPrefix = thisNodeUuid.toString();
-            for (auto it = result.cbegin(); it != result.cend(); ++it) {
-                const QString &outputKey = it.key();
-                const QVariant &newVal = it.value();
-
-                const QString currentKey = thisPrefix + QLatin1String(".") + outputKey;
-                const QString oldKey = thisPrefix + QLatin1String(".old.") + outputKey;
-
-                // Swap: move existing current to old, then write new to current
-                const QVariant previousVal = mainPacket.value(currentKey);
-                mainPacket.insert(oldKey, previousVal);
-                mainPacket.insert(currentKey, newVal);
-
-                // Maintain non-namespaced key for compatibility with existing nodes/tests
-                mainPacket.insert(outputKey, newVal);
-            }
-
-            // Error handling: check for error _before_ emitting any Finished states
-            const QString errorMsg = result.value(QStringLiteral("__error")).toString();
-            if (!errorMsg.trimmed().isEmpty()) {
-                emit nodeLog(QString::fromLatin1("ExecutionEngine: Error reported by node %1 %2: %3")
-                                 .arg(QString::number(nodeId)).arg(nodeName).arg(errorMsg));
-                // Ensure error flag is visible in main packet as well
-                mainPacket.insert(QStringLiteral("__error"), errorMsg);
-
-                // Mark node and its incoming connections as Error
-                emit nodeStatusChanged(nodeUuid(nodeId), static_cast<int>(ExecutionState::Error));
-                for (const auto &cid : attached) {
-                    if (cid.inNodeId == nodeId) {
-                        emit connectionStatusChanged(connectionUuid(cid), static_cast<int>(ExecutionState::Error));
-                    }
-                }
-
-                aborted = true;
-                break;
-            }
-
-            // Success path: log and mark as Finished
-            QString outputsStr;
-            for (auto it = result.cbegin(); it != result.cend(); ++it) {
-                if (!outputsStr.isEmpty()) outputsStr += ", ";
-                outputsStr += it.key() + QLatin1String("=") + it.value().toString();
-            }
-            emit nodeLog(QString::fromLatin1("Node Finished: %1 %2 with OUTPUT: {%3}")
-                             .arg(QString::number(nodeId)).arg(nodeName).arg(outputsStr));
-
-            // Emit Finished for the node and its incoming connections
-            emit nodeStatusChanged(nodeUuid(nodeId), static_cast<int>(ExecutionState::Finished));
-            for (const auto &cid : attached) {
+            emit nodeStatusChanged(nodeUuid, static_cast<int>(ExecutionState::Finished));
+            for (const auto& cid : attached) {
                 if (cid.inNodeId == nodeId) {
-                    emit connectionStatusChanged(connectionUuid(cid), static_cast<int>(ExecutionState::Finished));
+                    emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Finished));
                 }
             }
 
-            // Execution delay if configured
             if (m_executionDelay > 0) {
                 QThread::msleep(static_cast<unsigned long>(m_executionDelay));
             }
-        }
-
-        // Emit chain finished/pipeline result
-        emit nodeLog(QStringLiteral("ExecutionEngine: Chain finished."));
-        emit pipelineFinished(mainPacket);
-    });
+        });
+    }
 }
 
+void ExecutionEngine::handleNodeCompleted(QtNodes::NodeId nodeId,
+                                          const QUuid& nodeUuid,
+                                          const TokenList& outputTokens)
+{
+    bool shouldFinalize = false;
+
+    // Precompute which downstream pins become unblocked as a result of this
+    // node finishing. We do this before touching the shared engine state so
+    // that we don't hold m_stateMutex while querying the graph model.
+    QVector<QPair<QUuid, PinId>> unlockedPins; // (targetNodeUuid, targetPinId)
+
+    if (_graphModel) {
+        const auto attached = _graphModel->allConnectionIds(nodeId);
+        for (const auto& cid : attached) {
+            if (cid.outNodeId != nodeId) {
+                continue; // only consider edges originating at this node
+            }
+
+            auto* targetDelegate = _graphModel->delegateModel<ToolNodeDelegate>(cid.inNodeId);
+            if (!targetDelegate) {
+                continue;
+            }
+
+            const PinId targetPinId = targetDelegate->pinIdForIndex(QtNodes::PortType::In,
+                                                                     cid.inPortIndex);
+            if (targetPinId.isEmpty()) {
+                continue;
+            }
+
+            const QUuid targetUuid = nodeUuidForId(cid.inNodeId);
+            unlockedPins.append(qMakePair(targetUuid, targetPinId));
+        }
+    }
+
+    {
+        QMutexLocker locker(&m_stateMutex);
+
+        // Mark node as no longer running.
+        m_nodesRunning.remove(nodeUuid);
+
+        // Merge all produced tokens into the global data lake.
+        bool thisNodeReportedError = false;
+        for (const auto& token : outputTokens) {
+            const QUuid producer = token.sourceNodeId.isNull() ? nodeUuid : token.sourceNodeId;
+            QVariantMap& bucket = m_dataLake[producer];
+            for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+                bucket.insert(it.key(), it.value());
+            }
+
+            // Detect a logical error flag emitted by the node. Any non-empty
+            // "__error" field is treated as a hard pipeline error and will
+            // short‑circuit further scheduling.
+            const auto errIt = token.data.constFind(QStringLiteral("__error"));
+            if (errIt != token.data.cend() && !errIt->toString().trimmed().isEmpty()) {
+                thisNodeReportedError = true;
+            }
+        }
+
+        if (thisNodeReportedError) {
+            // Hard error: stop scheduling any further work. We keep the
+            // data lake as‑is so that the final packet can surface the
+            // error payload, but clear all pending tokens and running
+            // nodes to force quiescence.
+            m_pendingTokens.clear();
+            m_nodesRunning.clear();
+            shouldFinalize = true;
+        } else {
+            // Normal success path: unlock downstream dependencies. For each
+            // connection that originates from this node's outputs, mark the
+            // corresponding target pin as having received its token by
+            // removing it from that node's pending set.
+            for (const auto& pair : unlockedPins) {
+                const QUuid& targetUuid = pair.first;
+                const PinId& targetPinId = pair.second;
+
+                auto it = m_pendingTokens.find(targetUuid);
+                if (it == m_pendingTokens.end()) {
+                    continue; // target node is either already running/finished or not tracked
+                }
+
+                it.value().remove(targetPinId);
+            }
+
+            // Quiescence detection: when there are no running nodes and no nodes
+            // still waiting on tokens, the pipeline run is considered finished.
+            if (m_nodesRunning.isEmpty() && m_pendingTokens.isEmpty()) {
+                shouldFinalize = true;
+            }
+        }
+    }
+
+    // Notify UI that this node's output snapshot has changed.
+    emit nodeOutputChanged(nodeId);
+
+    // After updating state, attempt another scheduling pass to pick up any
+    // nodes that became ready-to-run.
+    processTokens();
+
+    if (shouldFinalize) {
+        // Build the final output packet for the whole pipeline.
+        //
+        // Historical behavior (relied upon by the unit and integration
+        // tests) is that the final packet exposes plain pin IDs such as
+        // "text", "prompt" or "response" — NOT the internal
+        // "nodeUuid.pin" form used inside the data lake. Regressing to
+        // namespaced keys broke several tests. To restore the original
+        // contract we flatten the data lake back to pin IDs here.
+        //
+        // If any node reported a logical error (non‑empty "__error"
+        // field), the final packet is built from all node buckets so
+        // that the error payload is always visible. Otherwise we only
+        // aggregate outputs from terminal nodes (those with no outgoing
+        // edges), which naturally surfaces the final stage(s) of the
+        // pipeline.
+
+        DataPacket finalPacket;
+
+        bool hasError = false;
+        {
+            QMutexLocker locker(&m_stateMutex);
+            for (auto it = m_dataLake.cbegin(); it != m_dataLake.cend(); ++it) {
+                const QVariantMap& bucket = it.value();
+                auto errIt = bucket.constFind(QStringLiteral("__error"));
+                if (errIt != bucket.cend() && !errIt->toString().trimmed().isEmpty()) {
+                    hasError = true;
+                    break;
+                }
+            }
+        }
+
+        if (hasError) {
+            // Error case: flatten every node's bucket directly into the
+            // final packet using plain pin IDs.
+            QMutexLocker locker(&m_stateMutex);
+            for (auto it = m_dataLake.cbegin(); it != m_dataLake.cend(); ++it) {
+                const QVariantMap& bucket = it.value();
+                for (auto valIt = bucket.cbegin(); valIt != bucket.cend(); ++valIt) {
+                    finalPacket.insert(valIt.key(), valIt.value());
+                }
+            }
+        } else {
+            // Success case: collect only terminal nodes (no outgoing
+            // connections) and flatten their outputs.
+            if (_graphModel) {
+                const auto allNodes = _graphModel->allNodeIds();
+
+                // Determine which nodes have outgoing edges.
+                QSet<QtNodes::NodeId> hasOutgoing;
+                for (auto nid : allNodes) {
+                    const auto attached = _graphModel->allConnectionIds(nid);
+                    for (const auto& cid : attached) {
+                        if (cid.outNodeId == nid) {
+                            hasOutgoing.insert(nid);
+                        }
+                    }
+                }
+
+                QMutexLocker locker(&m_stateMutex);
+                for (auto nid : allNodes) {
+                    if (hasOutgoing.contains(nid)) {
+                        continue; // not a terminal node
+                    }
+
+                    const QUuid uuid = nodeUuidForId(nid);
+                    const QVariantMap bucket = m_dataLake.value(uuid);
+                    for (auto it = bucket.cbegin(); it != bucket.cend(); ++it) {
+                        finalPacket.insert(it.key(), it.value());
+                    }
+                }
+            }
+        }
+
+        emit nodeLog(QStringLiteral("ExecutionEngine: Chain finished."));
+        emit pipelineFinished(finalPacket);
+    }
+}
 
 void ExecutionEngine::setExecutionDelay(int ms)
 {
@@ -389,6 +583,13 @@ void ExecutionEngine::setExecutionDelay(int ms)
 
 DataPacket ExecutionEngine::nodeOutput(QtNodes::NodeId nodeId) const
 {
-    QMutexLocker locker(&_outputMutex);
-    return _nodeOutputs.value(nodeId);
+    QMutexLocker locker(&m_stateMutex);
+    const QUuid nodeUuid = nodeUuidForId(nodeId);
+
+    const QVariantMap map = m_dataLake.value(nodeUuid);
+    DataPacket result;
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+        result.insert(it.key(), it.value());
+    }
+    return result;
 }

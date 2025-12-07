@@ -125,9 +125,15 @@ TEST(RagQueryNodeTest, PinOverridesProperty)
 
     {
         DataPacket inputs; // empty inputs
-        QFuture<DataPacket> fut = node.Execute(inputs);
-        fut.waitForFinished();
-        const DataPacket out = fut.result();
+
+        ExecutionToken token;
+        token.data = inputs;
+        TokenList tokens;
+        tokens.push_back(std::move(token));
+
+        const TokenList outTokens = node.execute(tokens);
+        ASSERT_FALSE(outTokens.empty());
+        const DataPacket& out = outTokens.front().data;
 
         // Execution should have attempted to use the property path and produced outputs
         EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputContext)));
@@ -142,9 +148,14 @@ TEST(RagQueryNodeTest, PinOverridesProperty)
         inputs.insert(QString::fromLatin1(RagQueryNode::kInputQuery), QStringLiteral("hello world"));
         inputs.insert(QString::fromLatin1(RagQueryNode::kInputDbPath), dbPath);
 
-        QFuture<DataPacket> fut = node.Execute(inputs);
-        fut.waitForFinished();
-        const DataPacket out = fut.result();
+        ExecutionToken token;
+        token.data = inputs;
+        TokenList tokens;
+        tokens.push_back(std::move(token));
+
+        const TokenList outTokens = node.execute(tokens);
+        ASSERT_FALSE(outTokens.empty());
+        const DataPacket& out = outTokens.front().data;
 
         EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputContext)));
         EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputResults)));

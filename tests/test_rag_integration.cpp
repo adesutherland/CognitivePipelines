@@ -90,9 +90,14 @@ TEST(RagIntegrationTest, IndexesMultipleFilesIntoSingleDatabase)
     inputs.insert(QString::fromLatin1(RagIndexerNode::kInputDatabasePath), dbPath);
     inputs.insert(QString::fromLatin1(RagIndexerNode::kInputMetadata), QStringLiteral("{\"status\": \"multi_file_test\"}"));
 
-    QFuture<DataPacket> future = indexer.Execute(inputs);
-    future.waitForFinished();
-    DataPacket output = future.result();
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = indexer.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket output = outTokens.front().data;
 
     ASSERT_TRUE(output.contains(QString::fromLatin1(RagIndexerNode::kOutputCount)));
     const int chunkCount = output.value(QString::fromLatin1(RagIndexerNode::kOutputCount)).toInt();

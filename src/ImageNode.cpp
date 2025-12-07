@@ -39,7 +39,7 @@ void ImageNode::setImagePath(const QString& path)
     emit imagePathChanged(m_imagePath);
 }
 
-NodeDescriptor ImageNode::GetDescriptor() const
+NodeDescriptor ImageNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("image-node");
@@ -87,58 +87,69 @@ QWidget* ImageNode::createConfigurationWidget(QWidget* parent)
     return w;
 }
 
-QFuture<DataPacket> ImageNode::Execute(const DataPacket& inputs)
+TokenList ImageNode::execute(const TokenList& incomingTokens)
 {
+    // Merge incoming tokens into a single DataPacket
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
     const QString internalPath = m_imagePath;
     QPointer<ImagePropertiesWidget> widget = m_widget;
     QPointer<ImageNode> self(this);
-    
-    return QtConcurrent::run([inputs, internalPath, widget, self]() -> DataPacket {
-        DataPacket output;
-        
-        // Step 1: Resolve Path
-        // Check if input pin has data (Viewer Mode)
-        const QString pinId = QString::fromLatin1(kImagePinId);
-        QString resolvedPath;
-        
-        if (inputs.contains(pinId) && inputs.value(pinId).isValid()) {
-            QVariant inputValue = inputs.value(pinId);
-            // Viewer Mode: use input from upstream node
-            if (inputValue.canConvert<QString>()) {
-                resolvedPath = inputValue.toString();
+
+    DataPacket output;
+
+    // Step 1: Resolve Path
+    // Check if input pin has data (Viewer Mode)
+    const QString pinId = QString::fromLatin1(kImagePinId);
+    QString resolvedPath;
+
+    if (inputs.contains(pinId) && inputs.value(pinId).isValid()) {
+        QVariant inputValue = inputs.value(pinId);
+        // Viewer Mode: use input from upstream node
+        if (inputValue.canConvert<QString>()) {
+            resolvedPath = inputValue.toString();
+        }
+    }
+
+    // If no valid input, use internal path (Source Mode)
+    if (resolvedPath.isEmpty()) {
+        resolvedPath = internalPath;
+    }
+
+    // Step 2: Store the resolved path for late widget initialization
+    // If the widget is created AFTER execute runs, it needs to know the last executed path
+    if (self && !resolvedPath.isEmpty()) {
+        QMetaObject::invokeMethod(self, [self, resolvedPath]() {
+            if (self) {
+                self->m_lastExecutedPath = resolvedPath;
             }
-        }
-        
-        // If no valid input, use internal path (Source Mode)
-        if (resolvedPath.isEmpty()) {
-            resolvedPath = internalPath;
-        }
-        
-        // Step 2: Store the resolved path for late widget initialization
-        // If the widget is created AFTER Execute runs, it needs to know the last executed path
-        if (self && !resolvedPath.isEmpty()) {
-            QMetaObject::invokeMethod(self, [self, resolvedPath]() {
-                if (self) {
-                    self->m_lastExecutedPath = resolvedPath;
-                }
-            }, Qt::QueuedConnection);
-        }
-        
-        // Step 3: Update UI (Thread-Safe)
-        // The Execute method runs on a background thread, so we must use
-        // QMetaObject::invokeMethod to call setImagePath on the main thread
-        if (widget && !resolvedPath.isEmpty()) {
-            QMetaObject::invokeMethod(widget, "setImagePath",
-                                     Qt::QueuedConnection,
-                                     Q_ARG(QString, resolvedPath));
-        }
-        
-        // Step 3: Output
-        // Send the resolved path to the output pin
-        output.insert(pinId, resolvedPath);
-        
-        return output;
-    });
+        }, Qt::QueuedConnection);
+    }
+
+    // Step 3: Update UI (Thread-Safe)
+    // execute runs on a background thread in the ExecutionEngine, so we must use
+    // QMetaObject::invokeMethod to call setImagePath on the main thread
+    if (widget && !resolvedPath.isEmpty()) {
+        QMetaObject::invokeMethod(widget, "setImagePath",
+                                 Qt::QueuedConnection,
+                                 Q_ARG(QString, resolvedPath));
+    }
+
+    // Step 3: Output
+    // Send the resolved path to the output pin
+    output.insert(pinId, resolvedPath);
+
+    ExecutionToken token;
+    token.data = output;
+
+    TokenList result;
+    result.push_back(std::move(token));
+    return result;
 }
 
 QJsonObject ImageNode::saveState() const

@@ -39,7 +39,7 @@ HumanInputNode::HumanInputNode(QObject* parent)
 {
 }
 
-NodeDescriptor HumanInputNode::GetDescriptor() const
+NodeDescriptor HumanInputNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("human-input");
@@ -80,11 +80,19 @@ QWidget* HumanInputNode::createConfigurationWidget(QWidget* parent)
     return m_propertiesWidget;
 }
 
-QFuture<DataPacket> HumanInputNode::Execute(const DataPacket& inputs)
+TokenList HumanInputNode::execute(const TokenList& incomingTokens)
 {
+    // Merge incoming tokens into a single DataPacket
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
     // Retrieve text from input pin
     const QString inputPrompt = inputs.value(QString::fromLatin1(kInputId)).toString();
-    
+
     // Determine effective prompt: input pin > default prompt > hardcoded fallback
     QString effectivePrompt;
     if (!inputPrompt.isEmpty()) {
@@ -95,46 +103,48 @@ QFuture<DataPacket> HumanInputNode::Execute(const DataPacket& inputs)
         effectivePrompt = QStringLiteral("Please provide input:");
     }
 
-    // Execute on worker thread, blocking to wait for user input
-    return QtConcurrent::run([effectivePrompt]() -> DataPacket {
-        // Get MainWindow instance
-        MainWindow* mainWindow = nullptr;
-        QWidget* activeWindow = QApplication::activeWindow();
-        if (activeWindow) {
-            mainWindow = qobject_cast<MainWindow*>(activeWindow);
+    // Get MainWindow instance
+    MainWindow* mainWindow = nullptr;
+    QWidget* activeWindow = QApplication::activeWindow();
+    if (activeWindow) {
+        mainWindow = qobject_cast<MainWindow*>(activeWindow);
+    }
+    if (!mainWindow) {
+        // Fallback: search through top-level widgets
+        for (QWidget* widget : QApplication::topLevelWidgets()) {
+            mainWindow = qobject_cast<MainWindow*>(widget);
+            if (mainWindow) break;
         }
-        if (!mainWindow) {
-            // Fallback: search through top-level widgets
-            for (QWidget* widget : QApplication::topLevelWidgets()) {
-                mainWindow = qobject_cast<MainWindow*>(widget);
-                if (mainWindow) break;
-            }
-        }
+    }
 
-        QString returnedText;
-        bool accepted = false;
-        if (mainWindow) {
-            // Call the slot on the main thread using BlockingQueuedConnection
-            QMetaObject::invokeMethod(mainWindow, "requestUserInput",
-                                     Qt::BlockingQueuedConnection,
-                                     Q_RETURN_ARG(bool, accepted),
-                                     Q_ARG(QString, effectivePrompt),
-                                     Q_ARG(QString&, returnedText));
-        }
+    QString returnedText;
+    bool accepted = false;
+    if (mainWindow) {
+        // Call the slot on the main thread using BlockingQueuedConnection
+        QMetaObject::invokeMethod(mainWindow, "requestUserInput",
+                                 Qt::BlockingQueuedConnection,
+                                 Q_RETURN_ARG(bool, accepted),
+                                 Q_ARG(QString, effectivePrompt),
+                                 Q_ARG(QString&, returnedText));
+    }
 
-        // Create output packet
-        DataPacket output;
-        
-        // If user canceled, return error to stop the pipeline
-        if (!accepted) {
-            output.insert(QStringLiteral("__error"), QStringLiteral("User canceled input"));
-        } else {
-            // User accepted: return the text
-            output.insert(QString::fromLatin1(kOutputId), returnedText);
-        }
-        
-        return output;
-    });
+    // Create output packet
+    DataPacket output;
+
+    // If user canceled, return error to stop the pipeline
+    if (!accepted) {
+        output.insert(QStringLiteral("__error"), QStringLiteral("User canceled input"));
+    } else {
+        // User accepted: return the text
+        output.insert(QString::fromLatin1(kOutputId), returnedText);
+    }
+
+    ExecutionToken token;
+    token.data = output;
+
+    TokenList result;
+    result.push_back(std::move(token));
+    return result;
 }
 
 QJsonObject HumanInputNode::saveState() const

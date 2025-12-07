@@ -44,7 +44,7 @@ UniversalLLMNode::UniversalLLMNode(QObject* parent)
     }
 }
 
-NodeDescriptor UniversalLLMNode::GetDescriptor() const
+NodeDescriptor UniversalLLMNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("universal-llm");
@@ -113,14 +113,23 @@ QWidget* UniversalLLMNode::createConfigurationWidget(QWidget* parent)
     return widget;
 }
 
-QFuture<DataPacket> UniversalLLMNode::Execute(const DataPacket& inputs)
+TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
 {
+    // Merge incoming tokens into a single DataPacket to preserve the prior
+    // Execute(DataPacket) contract.
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
     // Retrieve input pins (may override defaults from properties)
     const QString systemInput = inputs.value(QString::fromLatin1(kInputSystemId)).toString();
     const QString promptInput = inputs.value(QString::fromLatin1(kInputPromptId)).toString();
     const QString imageInput = inputs.value(QString::fromLatin1(kInputImageId)).toString();
 
-    // Copy state to use in background thread
+    // Copy state for use during this execution
     const QString providerId = m_providerId;
     const QString modelId = m_modelId;
     const QString systemDefault = m_systemPrompt;
@@ -128,106 +137,112 @@ QFuture<DataPacket> UniversalLLMNode::Execute(const DataPacket& inputs)
     const double temperature = m_temperature;
     const int maxTokens = m_maxTokens;
 
-    return QtConcurrent::run([systemInput, promptInput, imageInput, providerId, modelId,
-                              systemDefault, userDefault, temperature, maxTokens]() -> DataPacket {
-        DataPacket output;
-        // Clear the output pin at the start
-        output.insert(QString::fromLatin1(kOutputResponseId), QVariant());
+    DataPacket output;
+    // Clear the output pin at the start
+    output.insert(QString::fromLatin1(kOutputResponseId), QVariant());
 
-        // Use input pins if provided, otherwise fall back to defaults
-        const QString systemPrompt = systemInput.trimmed().isEmpty() 
-                                     ? systemDefault.trimmed() 
-                                     : systemInput.trimmed();
-        const QString userPrompt = promptInput.trimmed().isEmpty() 
-                                   ? userDefault.trimmed() 
-                                   : promptInput.trimmed();
+    // Use input pins if provided, otherwise fall back to defaults
+    const QString systemPrompt = systemInput.trimmed().isEmpty() 
+                                 ? systemDefault.trimmed() 
+                                 : systemInput.trimmed();
+    const QString userPrompt = promptInput.trimmed().isEmpty() 
+                               ? userDefault.trimmed() 
+                               : promptInput.trimmed();
 
-        // Validate inputs
-        if (systemPrompt.isEmpty() && userPrompt.isEmpty()) {
-            const QString err = QStringLiteral("ERROR: Both system and user prompts are empty.");
-            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
-            output.insert(QStringLiteral("__error"), err);
-            return output;
-        }
+    // Validate inputs
+    if (systemPrompt.isEmpty() && userPrompt.isEmpty()) {
+        const QString err = QStringLiteral("ERROR: Both system and user prompts are empty.");
+        output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+        output.insert(QStringLiteral("__error"), err);
 
-        // Resolve backend using LLMProviderRegistry
-        ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId);
-        if (!backend) {
-            const QString err = QStringLiteral("ERROR: Backend '%1' not found. Please check provider configuration.").arg(providerId);
+        ExecutionToken token; token.data = output; return TokenList{token};
+    }
+
+    // Resolve backend using LLMProviderRegistry
+    ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId);
+    if (!backend) {
+        const QString err = QStringLiteral("ERROR: Backend '%1' not found. Please check provider configuration.").arg(providerId);
+        qWarning() << "UniversalLLMNode:" << err;
+        output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+        output.insert(QStringLiteral("__error"), err);
+
+        ExecutionToken token; token.data = output; return TokenList{token};
+    }
+
+    // Retrieve API key using LLMProviderRegistry
+    const QString apiKey = LLMProviderRegistry::instance().getCredential(providerId);
+    if (apiKey.isEmpty()) {
+        const QString err = QStringLiteral("ERROR: API key not found for provider '%1'. Please configure credentials in accounts.json.").arg(providerId);
+        qWarning() << "UniversalLLMNode:" << err;
+        output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+        output.insert(QStringLiteral("__error"), err);
+
+        ExecutionToken token; token.data = output; return TokenList{token};
+    }
+
+    // Validate model exists for the backend, fallback if mismatch detected
+    QString validatedModelId = modelId;
+    const QStringList availableModels = backend->availableModels();
+    if (!availableModels.contains(modelId)) {
+        if (!availableModels.isEmpty()) {
+            validatedModelId = availableModels.first();
+            qWarning() << "UniversalLLMNode: Warning: Model mismatch detected. Model '" 
+                      << modelId << "' not available for provider '" << providerId 
+                      << "'. Auto-recovering to '" << validatedModelId << "'.";
+        } else {
+            const QString err = QStringLiteral("ERROR: No models available for provider '%1'.").arg(providerId);
             qWarning() << "UniversalLLMNode:" << err;
             output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
             output.insert(QStringLiteral("__error"), err);
-            return output;
-        }
 
-        // Retrieve API key using LLMProviderRegistry
-        const QString apiKey = LLMProviderRegistry::instance().getCredential(providerId);
-        if (apiKey.isEmpty()) {
-            const QString err = QStringLiteral("ERROR: API key not found for provider '%1'. Please configure credentials in accounts.json.").arg(providerId);
-            qWarning() << "UniversalLLMNode:" << err;
-            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
-            output.insert(QStringLiteral("__error"), err);
-            return output;
+            ExecutionToken token; token.data = output; return TokenList{token};
         }
+    }
 
-        // Validate model exists for the backend, fallback if mismatch detected
-        QString validatedModelId = modelId;
-        const QStringList availableModels = backend->availableModels();
-        if (!availableModels.contains(modelId)) {
-            if (!availableModels.isEmpty()) {
-                validatedModelId = availableModels.first();
-                qWarning() << "UniversalLLMNode: Warning: Model mismatch detected. Model '" 
-                          << modelId << "' not available for provider '" << providerId 
-                          << "'. Auto-recovering to '" << validatedModelId << "'.";
-            } else {
-                const QString err = QStringLiteral("ERROR: No models available for provider '%1'.").arg(providerId);
-                qWarning() << "UniversalLLMNode:" << err;
-                output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
-                output.insert(QStringLiteral("__error"), err);
-                return output;
-            }
-        }
+    // Delegate to backend strategy
+    LLMResult result;
+    try {
+        result = backend->sendPrompt(apiKey, validatedModelId, temperature, maxTokens, 
+                                    systemPrompt, userPrompt, imageInput);
+    } catch (const std::exception& e) {
+        const QString err = QStringLiteral("ERROR: Exception during backend call: %1").arg(QString::fromUtf8(e.what()));
+        qWarning() << "UniversalLLMNode:" << err;
+        output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+        output.insert(QStringLiteral("__error"), err);
 
-        // Delegate to backend strategy
-        LLMResult result;
-        try {
-            result = backend->sendPrompt(apiKey, validatedModelId, temperature, maxTokens, 
-                                        systemPrompt, userPrompt, imageInput);
-        } catch (const std::exception& e) {
-            const QString err = QStringLiteral("ERROR: Exception during backend call: %1").arg(QString::fromUtf8(e.what()));
-            qWarning() << "UniversalLLMNode:" << err;
-            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
-            output.insert(QStringLiteral("__error"), err);
-            return output;
-        } catch (...) {
-            const QString err = QStringLiteral("ERROR: Unknown exception during backend call.");
-            qWarning() << "UniversalLLMNode:" << err;
-            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
-            output.insert(QStringLiteral("__error"), err);
-            return output;
-        }
+        ExecutionToken token; token.data = output; return TokenList{token};
+    } catch (...) {
+        const QString err = QStringLiteral("ERROR: Unknown exception during backend call.");
+        qWarning() << "UniversalLLMNode:" << err;
+        output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+        output.insert(QStringLiteral("__error"), err);
 
-        // Handle error case
-        if (result.hasError) {
-            output.insert(QString::fromLatin1(kOutputResponseId), result.content);
-            output.insert(QStringLiteral("__error"), result.errorMsg);
-            // Still include raw response for debugging
-            output.insert(QStringLiteral("_raw_response"), result.rawResponse);
-            return output;
-        }
+        ExecutionToken token; token.data = output; return TokenList{token};
+    }
 
-        // Map result fields to DataPacket
-        // Visible output
+    // Handle error case
+    if (result.hasError) {
         output.insert(QString::fromLatin1(kOutputResponseId), result.content);
-        
-        // Hidden metadata fields (prefixed with underscore)
-        output.insert(QStringLiteral("_usage.input_tokens"), result.usage.inputTokens);
-        output.insert(QStringLiteral("_usage.output_tokens"), result.usage.outputTokens);
-        output.insert(QStringLiteral("_usage.total_tokens"), result.usage.totalTokens);
+        output.insert(QStringLiteral("__error"), result.errorMsg);
+        // Still include raw response for debugging
         output.insert(QStringLiteral("_raw_response"), result.rawResponse);
 
-        return output;
-    });
+        ExecutionToken token; token.data = output; return TokenList{token};
+    }
+
+    // Map result fields to DataPacket
+    // Visible output
+    output.insert(QString::fromLatin1(kOutputResponseId), result.content);
+    
+    // Hidden metadata fields (prefixed with underscore)
+    output.insert(QStringLiteral("_usage.input_tokens"), result.usage.inputTokens);
+    output.insert(QStringLiteral("_usage.output_tokens"), result.usage.outputTokens);
+    output.insert(QStringLiteral("_usage.total_tokens"), result.usage.totalTokens);
+    output.insert(QStringLiteral("_raw_response"), result.rawResponse);
+
+    ExecutionToken token;
+    token.data = output;
+    return TokenList{token};
 }
 
 QJsonObject UniversalLLMNode::saveState() const

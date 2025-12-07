@@ -26,7 +26,6 @@
 
 #include <QObject>
 #include <QWidget>
-#include <QFuture>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
@@ -40,10 +39,10 @@ public:
     explicit PythonScriptConnector(QObject* parent = nullptr);
     ~PythonScriptConnector() override = default;
 
-    // IToolConnector interface (blueprint-aligned)
-    NodeDescriptor GetDescriptor() const override;
+    // IToolConnector interface (blueprint-aligned, V3 tokens API)
+    NodeDescriptor getDescriptor() const override;
     QWidget* createConfigurationWidget(QWidget* parent) override;
-    QFuture<DataPacket> Execute(const DataPacket& inputs) override;
+    TokenList execute(const TokenList& incomingTokens) override;
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 

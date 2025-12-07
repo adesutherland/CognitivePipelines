@@ -26,12 +26,13 @@
 #include <QObject>
 #include <QUuid>
 #include <QPointer>
-#include <QMap>
+#include <QHash>
 #include <QSet>
 #include <QMutex>
 
 #include "CommonDataTypes.h"
 #include "ExecutionState.h"
+#include "IToolConnector.h"
 
 namespace QtNodes { class DataFlowGraphModel; using NodeId = unsigned int; }
 
@@ -67,16 +68,32 @@ public:
     DataPacket nodeOutput(QtNodes::NodeId nodeId) const;
 
 private:
-    // Adjacency list: from nodeId -> set of downstream nodeIds
-    QMap<QtNodes::NodeId, QSet<QtNodes::NodeId>> _dag;
+    // V3 token-based execution engine state -------------------------------
 
-    // Stores the output packet produced by each node after it executes
-    QMap<QtNodes::NodeId, DataPacket> _nodeOutputs;
+    // Global Data Lake: for each node UUID we store a QVariantMap of its
+    // successfully produced outputs, keyed by pin name (and optional
+    // qualifiers such as ".old" where appropriate).
+    QHash<QUuid, QVariantMap> m_dataLake;
 
-    // Protects access to _nodeOutputs (mutable allows locking in const methods)
-    mutable QMutex _outputMutex;
+    // For each node UUID, the set of input PinIds it is still waiting for
+    // before it may execute. When the set for a node becomes empty, that
+    // node is Ready-to-Run.
+    QHash<QUuid, QSet<PinId>> m_pendingTokens;
+
+    // Set of node UUIDs that are currently executing on worker threads.
+    QSet<QUuid> m_nodesRunning;
+
+    // Protects access to the shared engine state above.
+    mutable QMutex m_stateMutex;
 
     NodeGraphModel* _graphModel {nullptr};
 
     int m_executionDelay = 0;
+
+    // Internal helpers for the token-based scheduler
+    void runPipeline();
+    void processTokens();
+    void handleNodeCompleted(QtNodes::NodeId nodeId,
+                             const QUuid& nodeUuid,
+                             const TokenList& outputTokens);
 };

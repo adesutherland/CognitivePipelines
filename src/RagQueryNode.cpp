@@ -34,7 +34,6 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QFileInfo>
-#include <QDebug>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
@@ -45,7 +44,7 @@ RagQueryNode::RagQueryNode(QObject* parent)
 {
 }
 
-NodeDescriptor RagQueryNode::GetDescriptor() const
+NodeDescriptor RagQueryNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("rag-query");
@@ -88,6 +87,28 @@ QWidget* RagQueryNode::createConfigurationWidget(QWidget* parent)
     QObject::connect(widget, &RagQueryPropertiesWidget::queryTextChanged,
                      this, &RagQueryNode::setQueryText);
     return widget;
+}
+
+TokenList RagQueryNode::execute(const TokenList& incomingTokens)
+{
+    // Merge incoming tokens into a single DataPacket to preserve the
+    // previous Execute(DataPacket) contract.
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
+    QFuture<DataPacket> fut = Execute(inputs);
+    const DataPacket out = fut.result();
+
+    ExecutionToken token;
+    token.data = out;
+
+    TokenList result;
+    result.push_back(std::move(token));
+    return result;
 }
 
 QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
@@ -146,11 +167,6 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
             qWarning() << "RagQueryNode: Backend not found for provider:" << indexCfg.providerId;
             return output;
         }
-
-        qDebug() << "RagQueryNode: Using provider" << indexCfg.providerId
-                 << "model" << indexCfg.modelId
-                 << "limit" << m_maxResults
-                 << "minRelevance" << m_minRelevance;
 
         // Vectorization
         EmbeddingResult embResult = backend->getEmbedding(apiKey, indexCfg.modelId, queryText);

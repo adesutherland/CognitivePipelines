@@ -61,11 +61,16 @@ TEST(PdfToImageNodeTest, SourceModeExecution_MissingFile)
     state.insert(QStringLiteral("pdf_path"), nonExistentPath);
     node.loadState(state);
 
-    // Execute with empty input (Source Mode)
+    // Execute with empty input (Source Mode) via V3 token API
     DataPacket emptyInput;
-    QFuture<DataPacket> future = node.Execute(emptyInput);
-    future.waitForFinished();
-    DataPacket output = future.result();
+    ExecutionToken token;
+    token.data = emptyInput;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket output = outTokens.front().data;
 
     // Verify the output is empty (graceful error handling)
     // When the PDF file doesn't exist or can't be loaded, the node should return an empty packet

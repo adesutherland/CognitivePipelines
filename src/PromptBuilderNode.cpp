@@ -71,7 +71,7 @@ void PromptBuilderNode::onTemplateChanged(const QString& newTemplate, const QStr
     emit templateTextChanged(m_template);
 }
 
-NodeDescriptor PromptBuilderNode::GetDescriptor() const
+NodeDescriptor PromptBuilderNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("prompt-builder");
@@ -105,23 +105,35 @@ QWidget* PromptBuilderNode::createConfigurationWidget(QWidget* parent)
     return w;
 }
 
-QFuture<DataPacket> PromptBuilderNode::Execute(const DataPacket& inputs)
+TokenList PromptBuilderNode::execute(const TokenList& incomingTokens)
 {
-    // Capture state for background execution
+    // Merge incoming tokens into a single DataPacket
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
+    // Capture state for execution
     const QString tpl = m_template;
     const QStringList vars = m_variables;
 
-    return QtConcurrent::run([tpl, vars, inputs]() -> DataPacket {
-        DataPacket output;
-        QString result = tpl;
-        for (const QString& var : vars) {
-            const QString key = QStringLiteral("{") + var + QStringLiteral("}");
-            const QString value = inputs.value(var).toString();
-            result.replace(key, value);
-        }
-        output.insert(QString::fromLatin1(kOutputId), result);
-        return output;
-    });
+    DataPacket output;
+    QString result = tpl;
+    for (const QString& var : vars) {
+        const QString key = QStringLiteral("{") + var + QStringLiteral("}");
+        const QString value = inputs.value(var).toString();
+        result.replace(key, value);
+    }
+    output.insert(QString::fromLatin1(kOutputId), result);
+
+    ExecutionToken token;
+    token.data = output;
+
+    TokenList resultTokens;
+    resultTokens.push_back(std::move(token));
+    return resultTokens;
 }
 
 

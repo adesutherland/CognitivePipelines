@@ -45,7 +45,7 @@ RagIndexerNode::RagIndexerNode(QObject* parent)
 {
 }
 
-NodeDescriptor RagIndexerNode::GetDescriptor() const
+NodeDescriptor RagIndexerNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("rag_indexer");
@@ -135,6 +135,28 @@ QWidget* RagIndexerNode::createConfigurationWidget(QWidget* parent)
                      widget, &RagIndexerPropertiesWidget::setClearDatabase);
 
     return widget;
+}
+
+TokenList RagIndexerNode::execute(const TokenList& incomingTokens)
+{
+    // Merge incoming tokens into a single DataPacket to preserve the
+    // existing Execute(DataPacket) implementation.
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
+    QFuture<DataPacket> fut = Execute(inputs);
+    const DataPacket out = fut.result();
+
+    ExecutionToken token;
+    token.data = out;
+
+    TokenList result;
+    result.push_back(std::move(token));
+    return result;
 }
 
 QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)

@@ -40,7 +40,7 @@ DatabaseConnector::DatabaseConnector(QObject* parent)
 {
 }
 
-NodeDescriptor DatabaseConnector::GetDescriptor() const
+NodeDescriptor DatabaseConnector::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("database-connector");
@@ -106,21 +106,30 @@ QWidget* DatabaseConnector::createConfigurationWidget(QWidget* parent)
     return propertiesWidget;
 }
 
-QFuture<DataPacket> DatabaseConnector::Execute(const DataPacket& inputs)
+TokenList DatabaseConnector::execute(const TokenList& incomingTokens)
 {
+    // Merge incoming tokens into a single DataPacket, preserving the
+    // last-writer-wins semantics used elsewhere in the engine.
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
     // Check if SQL is provided via input pin, otherwise use internal property
     QString sql = inputs.value(QStringLiteral("sql")).toString();
     if (sql.trimmed().isEmpty()) {
         sql = m_sqlQuery;
     }
-    
+
     // Check if database path is provided via input pin, otherwise use internal property
     QString dbPath = inputs.value(QStringLiteral("database")).toString();
     if (dbPath.trimmed().isEmpty()) {
         dbPath = m_databasePath;
     }
 
-    return QtConcurrent::run([sql, dbPath]() -> DataPacket {
+    auto work = [sql, dbPath]() -> DataPacket {
         DataPacket packet;
         const QString outKey = QStringLiteral("stdout");
         const QString errKey = QStringLiteral("stderr");
@@ -277,7 +286,16 @@ QFuture<DataPacket> DatabaseConnector::Execute(const DataPacket& inputs)
         packet.insert(QStringLiteral("stderr"), stderrText);
         packet.insert(QStringLiteral("database"), dbPath);
         return packet;
-    });
+    };
+
+    const DataPacket packet = work();
+
+    ExecutionToken token;
+    token.data = packet;
+
+    TokenList result;
+    result.push_back(token);
+    return result;
 }
 
 QJsonObject DatabaseConnector::saveState() const

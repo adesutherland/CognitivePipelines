@@ -35,6 +35,7 @@
 #include <QVariant>
 #include <QJsonObject>
 
+#include "ExecutionToken.h"
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
 
@@ -87,7 +88,6 @@ private:
     };
 
     void ensureDescriptorCached() const;
-    void triggerExecutionIfReady();
 
     // Helpers to translate between port index and our pin ids
     QString inputPinIdForIndex(QtNodes::PortIndex idx) const;

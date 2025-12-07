@@ -28,26 +28,33 @@
 #include <QFuture>
 #include <QObject>
 #include <QJsonObject>
+#include <list>
 
 #include "CommonDataTypes.h"
+#include "ExecutionToken.h"
 
 /**
  * @file IToolConnector.h
  * @brief Finalized abstract interface for executable nodes (tools) in the pipeline.
  */
+
+using TokenList = std::list<ExecutionToken>;
+using PinId = QString;
+
 class IToolConnector {
 public:
     virtual ~IToolConnector() = default;
 
     // Blueprint-aligned API
     // Returns the static descriptor for this node/tool.
-    virtual NodeDescriptor GetDescriptor() const = 0;
+    virtual NodeDescriptor getDescriptor() const = 0;
 
     // Creates (or returns) a QWidget used to configure this tool instance.
     virtual QWidget* createConfigurationWidget(QWidget* parent) = 0;
 
-    // Executes the tool asynchronously with given inputs; resolves to output packet.
-    virtual QFuture<DataPacket> Execute(const DataPacket& inputs) = 0;
+    // Executes the tool with the given incoming execution tokens and returns
+    // the list of output tokens produced by this node.
+    virtual TokenList execute(const TokenList& incomingTokens) = 0;
 
     // Serialization of node-specific state (properties).
     virtual QJsonObject saveState() const = 0;

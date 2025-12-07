@@ -24,11 +24,8 @@
 #include "TextOutputNode.h"
 #include "TextOutputPropertiesWidget.h"
 
-#include <QtConcurrent/QtConcurrent>
 #include <QJsonObject>
 #include <QMetaObject>
-#include <QFuture>
-#include <QPromise>
 #include <QTextEdit>
 #include <QThread>
 
@@ -37,7 +34,7 @@ TextOutputNode::TextOutputNode(QObject* parent)
 {
 }
 
-NodeDescriptor TextOutputNode::GetDescriptor() const
+NodeDescriptor TextOutputNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("text-output");
@@ -76,8 +73,17 @@ QWidget* TextOutputNode::createConfigurationWidget(QWidget* parent)
     return m_propertiesWidget;
 }
 
-QFuture<DataPacket> TextOutputNode::Execute(const DataPacket& inputs)
+TokenList TextOutputNode::execute(const TokenList& incomingTokens)
 {
+    // Merge incoming tokens into a single DataPacket, then behave as a sink node
+    // that updates its UI and does not forward data further downstream.
+    DataPacket inputs;
+    for (const auto& token : incomingTokens) {
+        for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
+            inputs.insert(it.key(), it.value());
+        }
+    }
+
     const QString text = inputs.value(QString::fromLatin1(kInputId)).toString();
     // Remember the last text even if the widget is not created yet (fan-out first run case)
     m_lastText = text;
@@ -96,11 +102,14 @@ QFuture<DataPacket> TextOutputNode::Execute(const DataPacket& inputs)
                                   Q_ARG(QString, text));
     }
 
-    // Return an immediately-finished future with empty output packet (sink node)
-    QPromise<DataPacket> promise;
-    promise.addResult(DataPacket{});
-    promise.finish();
-    return promise.future();
+    // Sink node: produce a single empty-result token so downstream nodes
+    // (if any) receive a completion signal but no additional data.
+    ExecutionToken token;
+    token.data = DataPacket{};
+
+    TokenList result;
+    result.push_back(std::move(token));
+    return result;
 }
 
 QJsonObject TextOutputNode::saveState() const

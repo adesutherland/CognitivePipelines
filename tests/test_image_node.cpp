@@ -64,11 +64,16 @@ TEST(ImageNodeTest, SourceModeExecution)
     state.insert(QStringLiteral("imagePath"), imagePath);
     node.loadState(state);
 
-    // Execute with empty input (Source Mode)
+    // Execute with empty input (Source Mode) via V3 token API
     DataPacket emptyInput;
-    QFuture<DataPacket> future = node.Execute(emptyInput);
-    future.waitForFinished();
-    DataPacket output = future.result();
+    ExecutionToken token;
+    token.data = emptyInput;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket output = outTokens.front().data;
 
     // Verify the output contains the correct image path
     const QString pinId = QString::fromLatin1(ImageNode::kImagePinId);
@@ -89,10 +94,15 @@ TEST(ImageNodeTest, PassThroughModeExecution)
     const QString pinId = QString::fromLatin1(ImageNode::kImagePinId);
     input.insert(pinId, upstreamPath);
 
-    // Execute with input (Pass-Through Mode)
-    QFuture<DataPacket> future = node.Execute(input);
-    future.waitForFinished();
-    DataPacket output = future.result();
+    // Execute with input (Pass-Through Mode) via V3 token API
+    ExecutionToken token;
+    token.data = input;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node.execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    DataPacket output = outTokens.front().data;
 
     // Verify the output contains the upstream path (input takes precedence)
     ASSERT_TRUE(output.contains(pinId));
