@@ -290,7 +290,11 @@ void MainWindow::createMenus() {
 
     // Pipeline menu
     QMenu* pipelineMenu = menuBar()->addMenu(tr("&Pipeline"));
-    pipelineMenu->addAction(runAction_);
+    // Build a dynamic Run submenu that lists Entry Points
+    runMenu_ = new QMenu(tr("&Run"), this);
+    // Populate on demand to reflect current graph state
+    connect(runMenu_, &QMenu::aboutToShow, this, &MainWindow::populateRunMenu);
+    pipelineMenu->addMenu(runMenu_);
     pipelineMenu->addSeparator();
     pipelineMenu->addAction(saveOutputAction_);
     pipelineMenu->addAction(enableDebugLoggingAction_);
@@ -474,6 +478,36 @@ void MainWindow::onRunPipeline()
     // Execute the pipeline
     if (execEngine_) {
         execEngine_->run();
+    }
+}
+
+void MainWindow::populateRunMenu()
+{
+    if (!runMenu_) return;
+    runMenu_->clear();
+
+    // Run All action (default)
+    if (runAction_) {
+        runMenu_->addAction(runAction_);
+    } else {
+        QAction* runAll = runMenu_->addAction(tr("Run All"));
+        connect(runAll, &QAction::triggered, this, &MainWindow::onRunPipeline);
+    }
+    runMenu_->addSeparator();
+
+    if (!_graphModel || !execEngine_) return;
+
+    const auto entries = _graphModel->getEntryPoints();
+    for (const auto& pair : entries) {
+        const QUuid uuid = pair.first;
+        const QString label = pair.second;
+        QAction* act = runMenu_->addAction(tr("Run: %1").arg(label));
+        connect(act, &QAction::triggered, this, [this, uuid]() {
+            // clear stage output and text output nodes before run
+            if (stageOutputText_) stageOutputText_->clear();
+            clearAllTextOutputNodes();
+            if (execEngine_) execEngine_->runPipeline({ uuid });
+        });
     }
 }
 

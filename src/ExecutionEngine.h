@@ -65,6 +65,9 @@ signals:
 
 public slots:
     void run();
+    // Run the pipeline starting from specific entry point node UUIDs. If the list is empty,
+    // the engine discovers all source nodes (no incoming connections) and schedules them.
+    void runPipeline(const QList<QUuid>& specificEntryPoints = {});
     void setExecutionDelay(int ms);
 
 public:
@@ -107,7 +110,7 @@ private:
     bool m_hardError = false;
 
     // Internal helpers for the token-based scheduler
-    void runPipeline();
+    // deprecated internal; replaced by the public runPipeline overload above
 
     // Dispatch helpers
     void dispatchTask(const ExecutionTask& task);

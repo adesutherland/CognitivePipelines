@@ -39,6 +39,7 @@ class QVBoxLayout;
 class QLabel;
 class QTextEdit;
 class QPlainTextEdit;
+class QMenu;
 class QSpinBox; // legacy; not used after Slow Motion refactor
 class NodeGraphModel;
 
@@ -92,6 +93,7 @@ private:
     void createActions();
     void createMenus();
     void createStatusBar();
+    void populateRunMenu();
 
     void setPropertiesWidget(QWidget* w);
     void refreshStageOutput();
@@ -110,6 +112,7 @@ private:
     QAction* editCredentialsAction_ {nullptr};
     QAction* clearCanvasAction_ {nullptr};
     QAction* deleteAction {nullptr};
+    QMenu*   runMenu_ {nullptr};
     ExecutionEngine* execEngine_ {nullptr};
 
     NodeGraphModel* _graphModel {nullptr};

@@ -82,10 +82,10 @@ ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
 
 void ExecutionEngine::run()
 {
-    runPipeline();
+    runPipeline({});
 }
 
-void ExecutionEngine::runPipeline()
+void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
 {
     if (!_graphModel) {
         qWarning() << "ExecutionEngine: No graph model available.";
@@ -135,18 +135,33 @@ void ExecutionEngine::runPipeline()
         }
     }
 
-    // Seed with all source nodes (nodes with no incoming edges)
-    for (auto nodeId : nodeIds) {
-        bool hasIncoming = false;
-        const auto attached = _graphModel->allConnectionIds(nodeId);
-        for (const auto& cid : attached) {
-            if (cid.inNodeId == nodeId) { hasIncoming = true; break; }
+    // Seed initial tasks
+    if (specificEntryPoints.isEmpty()) {
+        // Seed with all source nodes (nodes with no incoming edges)
+        for (auto nodeId : nodeIds) {
+            bool hasIncoming = false;
+            const auto attached = _graphModel->allConnectionIds(nodeId);
+            for (const auto& cid : attached) {
+                if (cid.inNodeId == nodeId) { hasIncoming = true; break; }
+            }
+            if (!hasIncoming) {
+                ExecutionTask task;
+                task.nodeId = nodeId;
+                task.nodeUuid = nodeUuidForId(nodeId);
+                // Empty inputs are acceptable for source nodes
+                dispatchTask(task);
+            }
         }
-        if (!hasIncoming) {
+    } else {
+        // Seed only the specified entry point nodes
+        QSet<QUuid> wanted;
+        for (const auto& u : specificEntryPoints) wanted.insert(u);
+        for (auto nodeId : nodeIds) {
+            const QUuid uuid = nodeUuidForId(nodeId);
+            if (!wanted.contains(uuid)) continue;
             ExecutionTask task;
             task.nodeId = nodeId;
-            task.nodeUuid = nodeUuidForId(nodeId);
-            // Empty inputs are acceptable for source nodes
+            task.nodeUuid = uuid;
             dispatchTask(task);
         }
     }

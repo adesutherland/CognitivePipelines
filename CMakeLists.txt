@@ -303,6 +303,7 @@ if(ENABLE_TESTING)
             tests/test_router_execution.cpp
             tests/test_loop_node.cpp
             tests/test_loop_integration.cpp
+            tests/test_execution_control.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h

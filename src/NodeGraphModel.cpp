@@ -39,6 +39,7 @@
 #include "RagQueryNode.h"
 #include "ConditionalRouterNode.h"
 #include "LoopNode.h"
+#include "ExecutionIdUtils.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -147,6 +148,40 @@ void NodeGraphModel::clear()
     for (auto id : ids) {
         deleteNode(id);
     }
+}
+
+QList<QPair<QUuid, QString>> NodeGraphModel::getEntryPoints() const
+{
+    QList<QPair<QUuid, QString>> result;
+    const auto idsSet = allNodeIds();
+    for (auto nodeId : idsSet) {
+        bool hasIncoming = false;
+        const auto conns = allConnectionIds(nodeId);
+        for (const auto& cid : conns) {
+            if (cid.inNodeId == nodeId) { hasIncoming = true; break; }
+        }
+        if (hasIncoming) continue;
+
+        // Resolve label
+        QString label;
+        if (auto* del = const_cast<NodeGraphModel*>(this)->delegateModel<ToolNodeDelegate>(nodeId)) {
+            const QString desc = del->description();
+            if (!desc.isEmpty()) {
+                label = desc;
+            } else {
+                if (auto conn = del->connector()) {
+                    const NodeDescriptor d = conn->getDescriptor();
+                    label = d.name;
+                }
+            }
+        }
+        if (label.isEmpty()) {
+            label = QStringLiteral("Node %1").arg(QString::number(nodeId));
+        }
+
+        result.append(qMakePair(ExecIds::nodeUuid(nodeId), label));
+    }
+    return result;
 }
 
 QtNodes::NodeId NodeGraphModel::addNode(QString const nodeType)

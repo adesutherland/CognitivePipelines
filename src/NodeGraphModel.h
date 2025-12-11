@@ -27,6 +27,9 @@
 
 #include <QObject>
 #include <QVariant>
+#include <QList>
+#include <QPair>
+#include <QUuid>
 
 class NodeGraphModel : public QtNodes::DataFlowGraphModel
 {
@@ -50,6 +53,11 @@ public:
                      QtNodes::PortIndex portIndex,
                      QVariant const &value,
                      QtNodes::PortRole role = QtNodes::PortRole::Data) override;
+
+    // Discover entry points (nodes with no incoming connections).
+    // Returns a list of pairs: {NodeUUID, Label}
+    // Label resolution: ToolNodeDelegate::description() if non-empty, otherwise node type name from descriptor.
+    QList<QPair<QUuid, QString>> getEntryPoints() const;
 
 public Q_SLOTS:
     // Slots to handle port changes and trigger geometry recalculation
