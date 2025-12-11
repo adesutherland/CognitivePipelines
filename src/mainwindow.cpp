@@ -37,6 +37,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QStatusBar>
+#include <QFont>
 #include <QToolBar>
 #include <QWidget>
 #include <QKeySequence>
@@ -54,6 +55,8 @@
 #include <QGraphicsView>
 #include <QTextEdit>
 #include <QPlainTextEdit>
+#include <QSpinBox>
+#include <QWidgetAction>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -157,6 +160,24 @@ MainWindow::MainWindow(QWidget* parent)
     connect(execEngine_, &ExecutionEngine::nodeLog,
             this, &MainWindow::onNodeLog);
 
+    // Global running status indicator wiring
+    connect(execEngine_, &ExecutionEngine::executionStarted, this, [this]() {
+        if (!m_statusLabel) return;
+        m_statusLabel->setText(tr("Status: RUNNING"));
+        QFont f = m_statusLabel->font();
+        f.setBold(true);
+        m_statusLabel->setFont(f);
+        m_statusLabel->setStyleSheet("color: #1b8f22;"); // green
+    });
+    connect(execEngine_, &ExecutionEngine::executionFinished, this, [this]() {
+        if (!m_statusLabel) return;
+        m_statusLabel->setText(tr("Status: Idle"));
+        QFont f = m_statusLabel->font();
+        f.setBold(false);
+        m_statusLabel->setFont(f);
+        m_statusLabel->setStyleSheet("");
+    });
+
     // Refresh Stage Output whenever a node's output packet changes (including
     // mid-run progress updates from long-running nodes such as RagIndexerNode).
     connect(execEngine_, &ExecutionEngine::nodeOutputChanged,
@@ -232,6 +253,11 @@ void MainWindow::createActions() {
     enableDebugLoggingAction_->setCheckable(true);
     enableDebugLoggingAction_->setChecked(false);
 
+    // Slow Motion Mode toggle
+    slowMotionAction_ = new QAction(tr("Slow Motion Mode"), this);
+    slowMotionAction_->setCheckable(true);
+    slowMotionAction_->setChecked(false);
+
     // Modern signal-slot connections using function pointers / lambdas
 
     connect(exitAction, &QAction::triggered, this, [this]() {
@@ -269,6 +295,16 @@ void MainWindow::createMenus() {
     pipelineMenu->addAction(saveOutputAction_);
     pipelineMenu->addAction(enableDebugLoggingAction_);
 
+    // Slow Motion toggle (500 ms delay when enabled)
+    pipelineMenu->addSeparator();
+    pipelineMenu->addAction(slowMotionAction_);
+    if (execEngine_) {
+        connect(slowMotionAction_, &QAction::toggled, this, [this](bool enabled){
+            if (!execEngine_) return;
+            execEngine_->setExecutionDelay(enabled ? 500 : 0);
+        });
+    }
+
     // Help menu
     QMenu* helpMenu = menuBar()->addMenu(tr("&Help"));
     helpMenu->addAction(aboutAction);
@@ -277,6 +313,10 @@ void MainWindow::createMenus() {
 
 void MainWindow::createStatusBar() {
     statusBar()->showMessage(tr("Ready"));
+    if (!m_statusLabel) {
+        m_statusLabel = new QLabel(tr("Status: Idle"), this);
+    }
+    statusBar()->addPermanentWidget(m_statusLabel, 0);
 }
 
 void MainWindow::setPropertiesWidget(QWidget* w)

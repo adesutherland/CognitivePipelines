@@ -162,6 +162,14 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/RagIndexerNode.h
     ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
     ${SRC_DIR}/RagIndexerPropertiesWidget.h
+    ${SRC_DIR}/ConditionalRouterNode.cpp
+    ${SRC_DIR}/ConditionalRouterNode.h
+    ${SRC_DIR}/ConditionalRouterPropertiesWidget.cpp
+    ${SRC_DIR}/ConditionalRouterPropertiesWidget.h
+    ${SRC_DIR}/LoopNode.cpp
+    ${SRC_DIR}/LoopNode.h
+    ${SRC_DIR}/LoopPropertiesWidget.cpp
+    ${SRC_DIR}/LoopPropertiesWidget.h
     ${SRC_DIR}/NodeGraphModel.cpp
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp
@@ -291,6 +299,10 @@ if(ENABLE_TESTING)
             tests/test_rag_integration.cpp
             tests/test_sql_edge_cases.cpp
             tests/test_ziggy_repro.cpp
+            tests/test_conditional_router.cpp
+            tests/test_router_execution.cpp
+            tests/test_loop_node.cpp
+            tests/test_loop_integration.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
@@ -350,6 +362,14 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/RagIndexerNode.h
             ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
             ${SRC_DIR}/RagIndexerPropertiesWidget.h
+            ${SRC_DIR}/ConditionalRouterNode.cpp
+            ${SRC_DIR}/ConditionalRouterNode.h
+            ${SRC_DIR}/ConditionalRouterPropertiesWidget.cpp
+            ${SRC_DIR}/ConditionalRouterPropertiesWidget.h
+            ${SRC_DIR}/LoopNode.cpp
+            ${SRC_DIR}/LoopNode.h
+            ${SRC_DIR}/LoopPropertiesWidget.cpp
+            ${SRC_DIR}/LoopPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             ${SRC_DIR}/UniversalLLMNode.cpp
@@ -492,6 +512,14 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/RagQueryNode.h
             ${SRC_DIR}/RagQueryPropertiesWidget.cpp
             ${SRC_DIR}/RagQueryPropertiesWidget.h
+            ${SRC_DIR}/ConditionalRouterNode.cpp
+            ${SRC_DIR}/ConditionalRouterNode.h
+            ${SRC_DIR}/ConditionalRouterPropertiesWidget.cpp
+            ${SRC_DIR}/ConditionalRouterPropertiesWidget.h
+            ${SRC_DIR}/LoopNode.cpp
+            ${SRC_DIR}/LoopNode.h
+            ${SRC_DIR}/LoopPropertiesWidget.cpp
+            ${SRC_DIR}/LoopPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>

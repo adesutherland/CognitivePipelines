@@ -39,6 +39,7 @@ class QVBoxLayout;
 class QLabel;
 class QTextEdit;
 class QPlainTextEdit;
+class QSpinBox; // legacy; not used after Slow Motion refactor
 class NodeGraphModel;
 
 namespace QtNodes {
@@ -105,6 +106,7 @@ private:
     QAction* saveOutputAction_ {nullptr};
     QAction* showDebugLogAction_ {nullptr};
     QAction* enableDebugLoggingAction_ {nullptr};
+    QAction* slowMotionAction_ {nullptr};
     QAction* editCredentialsAction_ {nullptr};
     QAction* clearCanvasAction_ {nullptr};
     QAction* deleteAction {nullptr};
@@ -129,6 +131,11 @@ private:
     QDockWidget* debugLogDock_ {nullptr};
     QTextEdit* debugLogText_ {nullptr};
 
+    // Execution delay control removed in favor of a simple menu toggle
+
     // Live execution highlighting
     std::shared_ptr<ExecutionStateModel> execStateModel_;
+
+    // Global running status indicator in the status bar
+    QLabel* m_statusLabel {nullptr};
 };

@@ -37,6 +37,8 @@
 #include "PdfToImageNode.h"
 #include "RagIndexerNode.h"
 #include "RagQueryNode.h"
+#include "ConditionalRouterNode.h"
+#include "LoopNode.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
@@ -121,6 +123,18 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto tool = std::make_shared<HumanInputNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Input / Output"));
+
+    // Register ConditionalRouterNode under the "Control Flow" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<ConditionalRouterNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Control Flow"));
+
+    // Register LoopNode under the "Control Flow" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<LoopNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Control Flow"));
 }
 
 void NodeGraphModel::clear()

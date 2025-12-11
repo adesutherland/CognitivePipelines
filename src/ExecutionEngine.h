@@ -29,6 +29,9 @@
 #include <QHash>
 #include <QSet>
 #include <QMutex>
+#include <QList>
+#include <QReadWriteLock>
+#include <QQueue>
 
 #include "CommonDataTypes.h"
 #include "ExecutionState.h"
@@ -37,6 +40,7 @@
 namespace QtNodes { class DataFlowGraphModel; using NodeId = unsigned int; }
 
 class NodeGraphModel;
+class QTimer;
 
 class ExecutionEngine : public QObject {
     Q_OBJECT
@@ -68,32 +72,75 @@ public:
     DataPacket nodeOutput(QtNodes::NodeId nodeId) const;
 
 private:
-    // V3 token-based execution engine state -------------------------------
+    // V3.1 task-queue based execution engine state ------------------------
+
+    // A single unit of scheduled work for a node.
+    struct ExecutionTask {
+        QtNodes::NodeId nodeId {0};
+        QUuid            nodeUuid;
+        TokenList        inputs;   // snapshot of ready-to-use input packets
+        QUuid            runId;    // run identifier for safety across restarts
+    };
 
     // Global Data Lake: for each node UUID we store a QVariantMap of its
-    // successfully produced outputs, keyed by pin name (and optional
-    // qualifiers such as ".old" where appropriate).
+    // successfully produced outputs, keyed by pin name
     QHash<QUuid, QVariantMap> m_dataLake;
 
-    // For each node UUID, the set of input PinIds it is still waiting for
-    // before it may execute. When the set for a node becomes empty, that
-    // node is Ready-to-Run.
-    QHash<QUuid, QSet<PinId>> m_pendingTokens;
+    // For deduplicating repeated executions with identical inputs (e.g., when
+    // multiple upstream pins trigger separately but resolve to the same full
+    // input set). Keyed by target node UUID.
+    QHash<QUuid, QByteArray> m_lastInputSignature;
 
-    // Set of node UUIDs that are currently executing on worker threads.
-    QSet<QUuid> m_nodesRunning;
+    // Simple task queue mutex used for counters and guarding concurrent scheduling
+    mutable QMutex       m_queueMutex;
+    int                  m_activeTasks {0};
+    bool                 m_finalized {false};
 
-    // Protects access to the shared engine state above.
-    mutable QMutex m_stateMutex;
+    // Protects access to the data lake (readers/writers)
+    mutable QReadWriteLock m_dataLock;
 
     NodeGraphModel* _graphModel {nullptr};
 
     int m_executionDelay = 0;
 
+    // Hard error flag to stop further scheduling when a node reports an error
+    bool m_hardError = false;
+
     // Internal helpers for the token-based scheduler
     void runPipeline();
-    void processTokens();
-    void handleNodeCompleted(QtNodes::NodeId nodeId,
+
+    // Dispatch helpers
+    void dispatchTask(const ExecutionTask& task);
+    void launchTask(const ExecutionTask& task);
+    void tryFinalize();
+    void handleTaskCompleted(QtNodes::NodeId nodeId,
                              const QUuid& nodeUuid,
-                             const TokenList& outputTokens);
+                             const TokenList& outputTokens,
+                             const QUuid& runId);
+    bool isSourceNode(QtNodes::NodeId nodeId) const;
+
+signals:
+    // Global execution lifecycle
+    void executionStarted();
+    void executionFinished();
+
+private slots:
+    void onThrottleTimeout();
+    void onFinalizeTimeout();
+
+private:
+    // Run identity used to guard against zombie threads from previous runs
+    QUuid m_currentRunId;
+
+    // Dispatcher throttling: main-thread timer launching tasks at a fixed cadence
+    QQueue<ExecutionTask> m_dispatchQueue;
+    QTimer* m_throttler {nullptr};
+
+    // Per-node serialization to preserve in-order execution for the same target
+    QHash<QUuid, int> m_nodeInFlight; // 0 or 1 per nodeUuid
+    QHash<QUuid, QQueue<ExecutionTask>> m_perNodeQueues;
+
+    // Finalization delay to satisfy slow-motion elapsed timing semantics
+    QTimer* m_finalizeTimer {nullptr};
+    qint64  m_lastActivityMs {0};
 };
