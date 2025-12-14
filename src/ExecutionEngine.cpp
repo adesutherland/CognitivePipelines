@@ -64,6 +64,22 @@ QUuid connectionUuidForId(const QtNodes::ConnectionId& c)
 
 } // namespace
 
+// Thread-local execution context to expose current node id/uuid to node implementations for logging
+// Defined here and referenced as 'extern' in control-flow node translation units.
+thread_local QtNodes::NodeId g_CurrentNodeId = QtNodes::InvalidNodeId;
+thread_local QUuid g_CurrentNodeUuid = QUuid();
+
+// Helper to stringify QVariant for logging, truncating long strings and escaping newlines
+static QString truncateAndEscape(const QVariant& v)
+{
+    QString s = v.toString();
+    s.replace('\n', QStringLiteral("\\n"));
+    if (s.size() > 100) {
+        s = s.left(100) + QStringLiteral("…(truncated)");
+    }
+    return s;
+}
+
 ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
     : QObject(parent)
     , _graphModel(model)
@@ -194,9 +210,8 @@ void ExecutionEngine::dispatchTask(const ExecutionTask& task)
         const bool isFirst = (m_dispatchQueue.size() == 1);
         locker.unlock();
         if (isFirst) {
-            // Fire the first item immediately for responsiveness, then start the timer
-            // to pace subsequent items.
-            QMetaObject::invokeMethod(this, "onThrottleTimeout", Qt::QueuedConnection);
+            // Start pacing timer; first dispatch will occur on the first tick to
+            // honor slow-motion for the initial emission as well.
             QMetaObject::invokeMethod(m_throttler, "start", Qt::QueuedConnection,
                                       Q_ARG(int, std::max(1, m_executionDelay)));
         }
@@ -224,8 +239,8 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
     }
 
     QPointer<NodeGraphModel> graphModel(_graphModel);
-    // Launch concurrently
-    QtConcurrent::run([this, task, graphModel]() {
+    // Launch concurrently (discard the QFuture as we don't need to track it)
+    (void)QtConcurrent::run([this, task, graphModel]() {
         // Update last activity time when a task actually begins its work
         m_lastActivityMs = QDateTime::currentMSecsSinceEpoch();
         // Worker Guard: if runId is stale, abandon work immediately
@@ -272,8 +287,23 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
             }
         }
 
+        // Attempt to retrieve user-defined description/caption for better identification
+        QString userCaption;
+        if (delegate) {
+            userCaption = delegate->description();
+            if (userCaption.trimmed().isEmpty()) {
+                userCaption = delegate->caption();
+            }
+        }
+
+        emit nodeLog(QString::fromLatin1("Node Started: id=%1, type=%2, caption=\"%3\"")
+                         .arg(QString::number(task.nodeId))
+                         .arg(nodeName)
+                         .arg(userCaption));
+        // Backward-compatibility for existing tests/tools expecting this legacy prefix
         emit nodeLog(QString::fromLatin1("Executing Node: %1 %2")
-                         .arg(QString::number(task.nodeId)).arg(nodeName));
+                         .arg(QString::number(task.nodeId))
+                         .arg(nodeName));
 
         // For long-running nodes like RagIndexerNode, forward progress updates
         RagIndexerNode* ragIndexer = dynamic_cast<RagIndexerNode*>(connector.get());
@@ -301,6 +331,9 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
 
         TokenList outputTokens;
         try {
+            // Set thread-local context for node-level logging
+            g_CurrentNodeId = task.nodeId;
+            g_CurrentNodeUuid = task.nodeUuid;
             outputTokens = connector->execute(task.inputs);
         } catch (const std::exception& ex) {
             if (task.runId != m_currentRunId) {
@@ -318,6 +351,9 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
                     emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Error));
                 }
             }
+            // Clear thread-local context
+            g_CurrentNodeId = QtNodes::InvalidNodeId;
+            g_CurrentNodeUuid = QUuid();
             if (ragIndexer) QObject::disconnect(progressConn);
             handleTaskCompleted(task.nodeId, task.nodeUuid, TokenList{}, task.runId);
             QMutexLocker locker(&m_queueMutex);
@@ -340,6 +376,9 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
                     emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Error));
                 }
             }
+            // Clear thread-local context
+            g_CurrentNodeId = QtNodes::InvalidNodeId;
+            g_CurrentNodeUuid = QUuid();
             if (ragIndexer) QObject::disconnect(progressConn);
             handleTaskCompleted(task.nodeId, task.nodeUuid, TokenList{}, task.runId);
             QMutexLocker locker(&m_queueMutex);
@@ -357,11 +396,29 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
             return;
         }
 
-        emit nodeLog(QString::fromLatin1("Node Finished: %1 %2")
+        // Log completion and dump output DataPacket key/value pairs
+        emit nodeLog(QString::fromLatin1("Node Finished: id=%1, type=%2")
                          .arg(QString::number(task.nodeId)).arg(nodeName));
+        // Dump each key/value from produced tokens in a normalized, single-line format
+        int tokenIndex = 0;
+        for (const auto& tok : outputTokens) {
+            for (auto it = tok.data.cbegin(); it != tok.data.cend(); ++it) {
+                const QString key = it.key();
+                const QString val = truncateAndEscape(it.value());
+                emit nodeLog(QString::fromLatin1("  Output[%1] %2 = \"%3\"")
+                                 .arg(QString::number(tokenIndex))
+                                 .arg(key)
+                                 .arg(val));
+            }
+            ++tokenIndex;
+        }
 
         // Mark finished and propagate
         handleTaskCompleted(task.nodeId, task.nodeUuid, outputTokens, task.runId);
+
+        // Clear thread-local context after successful execution
+        g_CurrentNodeId = QtNodes::InvalidNodeId;
+        g_CurrentNodeUuid = QUuid();
 
         emit nodeStatusChanged(task.nodeUuid, static_cast<int>(ExecutionState::Finished));
         for (const auto& cid : attached) {
@@ -457,6 +514,13 @@ void ExecutionEngine::tryFinalize()
     emit executionFinished();
 }
 
+QByteArray ExecutionEngine::computeInputSignature(const QVariantMap& inputPayload) const
+{
+    QJsonObject jobj = QJsonObject::fromVariantMap(inputPayload);
+    const QByteArray json = QJsonDocument(jobj).toJson(QJsonDocument::Compact);
+    return QCryptographicHash::hash(json, QCryptographicHash::Sha256);
+}
+
 void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
                                           const QUuid& nodeUuid,
                                           const TokenList& outputTokens,
@@ -464,6 +528,12 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
 {
     // Data Guard: if this completion belongs to a stale run, ignore
     if (runId != m_currentRunId) return;
+
+    if (outputTokens.empty()) {
+        QMutexLocker ql(&m_queueMutex);
+        m_lastInputSignature.remove(nodeUuid);
+        return;
+    }
 
     // Update data lake snapshot for this node (merge all produced tokens)
     bool thisNodeReportedError = false;
@@ -518,6 +588,7 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
     // build a full input payload for the target node using the triggering token
     // for that target pin and the latest values in the data lake for other pins.
     for (const auto& tok : outputTokens) {
+        const QUuid triggerTokenId = tok.tokenId.isNull() ? QUuid::createUuid() : tok.tokenId;
         for (const auto& e : edges) {
             const auto it = tok.data.constFind(e.sourcePinId);
             if (it == tok.data.cend()) continue; // token didn't fire this pin
@@ -555,23 +626,22 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
                 }
             }
 
-            // Verify completeness: all inbound pins should be present
-            bool missing = false;
-            for (const auto& ie : inEdges) {
-                if (!inputPayload.contains(ie.targetPin)) { missing = true; break; }
+            // Node-negotiated readiness: ask target connector if inputs are sufficient
+            auto* targetDel = _graphModel->delegateModel<ToolNodeDelegate>(targetNodeId);
+            if (!targetDel) {
+                continue;
             }
-            if (missing) {
-                // Not all inputs ready; skip scheduling for now
+            auto targetConnector = targetDel->connector();
+            if (!targetConnector) {
+                continue;
+            }
+            if (!targetConnector->isReady(inputPayload, inEdges.size())) {
+                // Inputs not sufficient per node policy; skip scheduling for now
                 continue;
             }
 
             // Deduplicate: compute signature of inputs and avoid duplicate executions
-            QByteArray signature;
-            {
-                QJsonObject jobj = QJsonObject::fromVariantMap(inputPayload);
-                const QByteArray json = QJsonDocument(jobj).toJson(QJsonDocument::Compact);
-                signature = QCryptographicHash::hash(json, QCryptographicHash::Sha256);
-            }
+            const QByteArray signature = computeInputSignature(inputPayload);
             {
                 QMutexLocker ql(&m_queueMutex);
                 const QByteArray last = m_lastInputSignature.value(targetUuid);
@@ -583,7 +653,12 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
 
             // Create the snapshot TokenList for the target node
             TokenList snap;
-            ExecutionToken t; t.sourceNodeId = nodeUuid; t.connectionId = connectionUuidForId(e.cid); t.data = inputPayload;
+            ExecutionToken t;
+            t.tokenId = triggerTokenId;  // Preserve triggering token identity
+            t.sourceNodeId = nodeUuid;
+            t.connectionId = connectionUuidForId(e.cid);
+            t.triggeringPinId = e.targetPinId;  // The pin that received a fresh value
+            t.data = inputPayload;
             snap.push_back(std::move(t));
 
             ExecutionTask next;

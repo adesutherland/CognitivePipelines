@@ -42,6 +42,8 @@ namespace QtNodes { class DataFlowGraphModel; using NodeId = unsigned int; }
 class NodeGraphModel;
 class QTimer;
 
+class ExecutionEngineSignatureFriend;
+
 class ExecutionEngine : public QObject {
     Q_OBJECT
 public:
@@ -132,6 +134,8 @@ private slots:
     void onFinalizeTimeout();
 
 private:
+    friend class ExecutionEngineSignatureFriend; // test helper
+
     // Run identity used to guard against zombie threads from previous runs
     QUuid m_currentRunId;
 
@@ -146,4 +150,7 @@ private:
     // Finalization delay to satisfy slow-motion elapsed timing semantics
     QTimer* m_finalizeTimer {nullptr};
     qint64  m_lastActivityMs {0};
+
+    // Deduplication helper: produces a signature for a target node's input snapshot
+    QByteArray computeInputSignature(const QVariantMap& inputPayload) const;
 };

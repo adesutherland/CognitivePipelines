@@ -27,6 +27,7 @@
 #include <QObject>
 #include <QWidget>
 #include <QString>
+#include <QVariant>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
@@ -57,16 +58,28 @@ public:
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 
+    // Scheduling predicate: ready when main Data input is present; condition is optional.
+    bool isReady(const QVariantMap& inputs, int incomingConnectionsCount) const override;
+
     // Pin identifiers (text-only data flow)
     static constexpr const char* kInputDataId = "in";
     static constexpr const char* kInputConditionId = "condition";
     static constexpr const char* kOutputTrueId = "true";
     static constexpr const char* kOutputFalseId = "false";
 
-    // Accessor for default condition used when the condition input pin is empty
-    QString defaultCondition() const { return m_defaultCondition; }
+    // Accessor exposes the current router mode as a string token for the UI: "false"/"true"/"wait"
+    QString defaultCondition() const {
+        switch (m_routerMode) {
+        case 1: return QStringLiteral("true");
+        case 2: return QStringLiteral("wait");
+        case 0:
+        default:
+            return QStringLiteral("false");
+        }
+    }
 
 public slots:
+    // UI slot mapping dropdown selection to internal router mode (0=false, 1=true, 2=wait)
     void setDefaultCondition(const QString& condition);
 
 signals:
@@ -76,5 +89,9 @@ private:
     // Helper to check whether a given condition string is considered "true".
     static bool isConditionTrue(const QString& value);
 
-    QString m_defaultCondition { QStringLiteral("false") };
+    // Router behavior mode:
+    // 0: Default to False (Immediate execution)
+    // 1: Default to True (Immediate execution)
+    // 2: Wait for Signal (Synchronized execution)
+    int m_routerMode { 0 };
 };

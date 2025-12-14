@@ -39,11 +39,12 @@ ConditionalRouterPropertiesWidget::ConditionalRouterPropertiesWidget(QWidget* pa
     layout->addWidget(label);
 
     m_combo = new QComboBox(this);
-    // Display labels
-    m_combo->addItem(tr("True"), QStringLiteral("true"));
-    m_combo->addItem(tr("False"), QStringLiteral("false"));
-    // Default to "false" to match node's initial storage
-    m_combo->setCurrentIndex(1);
+    // Display labels (map to internal tokens used by the node)
+    m_combo->addItem(tr("False (Default)"), QStringLiteral("false")); // index 0
+    m_combo->addItem(tr("True (Default)"), QStringLiteral("true"));   // index 1
+    m_combo->addItem(tr("Wait for Signal"), QStringLiteral("wait"));  // index 2
+    // Default to index 0 (false) to match node's initial mode
+    m_combo->setCurrentIndex(0);
     layout->addWidget(m_combo);
 
     layout->addStretch();
@@ -63,7 +64,7 @@ void ConditionalRouterPropertiesWidget::setDefaultCondition(const QString& condi
         return;
     }
 
-    // Try to find matching item by stored value ("true" / "false").
+    // Try to find matching item by stored value ("false" / "true" / "wait").
     const int idx = m_combo->findData(condition.trimmed().toLower());
     if (idx >= 0 && idx != m_combo->currentIndex()) {
         m_combo->setCurrentIndex(idx);

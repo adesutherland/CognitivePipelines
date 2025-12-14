@@ -170,6 +170,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/LoopNode.h
     ${SRC_DIR}/LoopPropertiesWidget.cpp
     ${SRC_DIR}/LoopPropertiesWidget.h
+    ${SRC_DIR}/LoopUntilNode.cpp
+    ${SRC_DIR}/LoopUntilNode.h
+    ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
+    ${SRC_DIR}/LoopUntilPropertiesWidget.h
     ${SRC_DIR}/NodeGraphModel.cpp
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp
@@ -304,6 +308,7 @@ if(ENABLE_TESTING)
             tests/test_loop_node.cpp
             tests/test_loop_integration.cpp
             tests/test_execution_control.cpp
+            tests/test_loop_until.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
@@ -371,6 +376,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/LoopNode.h
             ${SRC_DIR}/LoopPropertiesWidget.cpp
             ${SRC_DIR}/LoopPropertiesWidget.h
+            ${SRC_DIR}/LoopUntilNode.cpp
+            ${SRC_DIR}/LoopUntilNode.h
+            ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
+            ${SRC_DIR}/LoopUntilPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             ${SRC_DIR}/UniversalLLMNode.cpp
@@ -521,6 +530,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/LoopNode.h
             ${SRC_DIR}/LoopPropertiesWidget.cpp
             ${SRC_DIR}/LoopPropertiesWidget.h
+            ${SRC_DIR}/LoopUntilNode.cpp
+            ${SRC_DIR}/LoopUntilNode.h
+            ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
+            ${SRC_DIR}/LoopUntilPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>

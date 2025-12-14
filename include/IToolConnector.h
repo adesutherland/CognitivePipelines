@@ -28,6 +28,7 @@
 #include <QFuture>
 #include <QObject>
 #include <QJsonObject>
+#include <QVariant>
 #include <list>
 
 #include "CommonDataTypes.h"
@@ -59,6 +60,15 @@ public:
     // Serialization of node-specific state (properties).
     virtual QJsonObject saveState() const = 0;
     virtual void loadState(const QJsonObject& data) = 0;
+
+    // Scheduling predicate: by default, requires all inbound pins to be present (strict AND).
+    // Node implementations may override to relax readiness (e.g., OR semantics for partial inputs).
+    // Default keeps backward compatibility with existing nodes.
+    virtual bool isReady(const QVariantMap& inputs, int incomingConnectionsCount) const {
+        Q_UNUSED(incomingConnectionsCount);
+        // Default AND logic: ready when the number of provided inputs equals the number of inbound connections
+        return static_cast<int>(inputs.size()) == incomingConnectionsCount;
+    }
 };
 
 // Declare the Qt interface IID for IToolConnector so Q_INTERFACES can resolve it

@@ -39,6 +39,7 @@
 #include "RagQueryNode.h"
 #include "ConditionalRouterNode.h"
 #include "LoopNode.h"
+#include "LoopUntilNode.h"
 #include "ExecutionIdUtils.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
@@ -134,6 +135,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // Register LoopNode under the "Control Flow" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto tool = std::make_shared<LoopNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Control Flow"));
+
+    // Register LoopUntilNode under the "Control Flow" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<LoopUntilNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Control Flow"));
 }

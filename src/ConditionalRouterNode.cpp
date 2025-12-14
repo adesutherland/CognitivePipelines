@@ -26,19 +26,15 @@
 #include "ConditionalRouterPropertiesWidget.h"
 
 #include <QJsonObject>
+#include <QDebug>
+#include <QtNodes/internal/Definitions.hpp>
+
+// Thread-local execution context provided by ExecutionEngine
+extern thread_local QtNodes::NodeId g_CurrentNodeId;
 
 ConditionalRouterNode::ConditionalRouterNode(QObject* parent)
     : QObject(parent)
 {
-}
-
-void ConditionalRouterNode::setDefaultCondition(const QString& condition)
-{
-    if (m_defaultCondition == condition) {
-        return;
-    }
-    m_defaultCondition = condition;
-    emit defaultConditionChanged(m_defaultCondition);
 }
 
 NodeDescriptor ConditionalRouterNode::getDescriptor() const
@@ -88,7 +84,7 @@ QWidget* ConditionalRouterNode::createConfigurationWidget(QWidget* parent)
     auto* widget = new ConditionalRouterPropertiesWidget(parent);
 
     // Initialize from current state
-    widget->setDefaultCondition(m_defaultCondition);
+    widget->setDefaultCondition(defaultCondition());
 
     // UI -> Node
     QObject::connect(widget, &ConditionalRouterPropertiesWidget::defaultConditionChanged,
@@ -101,6 +97,19 @@ QWidget* ConditionalRouterNode::createConfigurationWidget(QWidget* parent)
     return widget;
 }
 
+bool ConditionalRouterNode::isReady(const QVariantMap& inputs, int incomingConnectionsCount) const
+{
+    Q_UNUSED(incomingConnectionsCount);
+    const bool hasData = inputs.contains(QString::fromLatin1(kInputDataId));
+    if (!hasData) return false;
+    if (m_routerMode == 2) {
+        // Wait for Signal mode: require both data and condition before scheduling
+        return inputs.contains(QString::fromLatin1(kInputConditionId));
+    }
+    // Immediate execution modes: only data required
+    return true;
+}
+
 TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
 {
     // Merge incoming tokens into a single DataPacket
@@ -111,13 +120,44 @@ TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
         }
     }
 
-    // Extract condition string from input pin (if provided)
-    QString condition = inputs.value(QString::fromLatin1(kInputConditionId)).toString();
-    if (condition.trimmed().isEmpty()) {
-        condition = m_defaultCondition;
+    // Determine which branch to route
+    bool routeTrue = false;
+    const QString condKey = QString::fromLatin1(kInputConditionId);
+    if (inputs.contains(condKey)) {
+        // Use provided condition value
+        const QString condition = inputs.value(condKey).toString();
+        routeTrue = isConditionTrue(condition);
+        // Control-flow decision trace
+        {
+            QString raw = condition;
+            raw.replace('\n', QStringLiteral("\\n"));
+            const QString msg = QStringLiteral("[ControlFlow] Node %1 Input Value: \"%2\" -> Evaluated as: %3")
+                                .arg(QString::number(g_CurrentNodeId))
+                                .arg(raw)
+                                .arg(routeTrue ? QStringLiteral("TRUE") : QStringLiteral("FALSE"));
+            qDebug().noquote() << msg;
+        }
+    } else {
+        // No condition provided
+        if (m_routerMode == 0) {
+            routeTrue = false;
+        } else if (m_routerMode == 1) {
+            routeTrue = true;
+        } else {
+            // m_routerMode == 2 (Wait for Signal) should have been gated by isReady
+            qWarning() << "ConditionalRouterNode: execute called without condition in Wait-for-Signal mode; skipping output";
+            return TokenList{};
+        }
+        // Control-flow decision trace when using default mode
+        {
+            const QString raw = QStringLiteral("<default:%1>").arg(QString::number(m_routerMode));
+            const QString msg = QStringLiteral("[ControlFlow] Node %1 Input Value: \"%2\" -> Evaluated as: %3")
+                                .arg(QString::number(g_CurrentNodeId))
+                                .arg(raw)
+                                .arg(routeTrue ? QStringLiteral("TRUE") : QStringLiteral("FALSE"));
+            qDebug().noquote() << msg;
+        }
     }
-
-    const bool isTrue = isConditionTrue(condition);
 
     // Build output payload: prefer text key, fall back to legacy data key, then pin id
     const QString inputPinKey = QString::fromLatin1(kInputDataId);
@@ -130,7 +170,7 @@ TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
         dataPayload = inputs.value(inputPinKey);
     }
 
-    const QString activeOutputId = isTrue
+    const QString activeOutputId = routeTrue
         ? QString::fromLatin1(kOutputTrueId)
         : QString::fromLatin1(kOutputFalseId);
 
@@ -151,13 +191,21 @@ TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
 QJsonObject ConditionalRouterNode::saveState() const
 {
     QJsonObject obj;
-    obj.insert(QStringLiteral("defaultCondition"), m_defaultCondition);
+    // Persist integer router mode; keep legacy key for backward compatibility
+    obj.insert(QStringLiteral("routerMode"), m_routerMode);
+    obj.insert(QStringLiteral("defaultCondition"), defaultCondition());
     return obj;
 }
 
 void ConditionalRouterNode::loadState(const QJsonObject& data)
 {
-    if (data.contains(QStringLiteral("defaultCondition"))) {
+    if (data.contains(QStringLiteral("routerMode")) && data.value(QStringLiteral("routerMode")).isDouble()) {
+        int mode = data.value(QStringLiteral("routerMode")).toInt();
+        if (mode < 0 || mode > 2) mode = 0;
+        // Use the same slot used by UI to keep signal emission consistent
+        setDefaultCondition(mode == 2 ? QStringLiteral("wait") : (mode == 1 ? QStringLiteral("true") : QStringLiteral("false")));
+    } else if (data.contains(QStringLiteral("defaultCondition"))) {
+        // Backward compatibility: map stored string to mode
         setDefaultCondition(data.value(QStringLiteral("defaultCondition")).toString());
     }
 }
@@ -170,4 +218,21 @@ bool ConditionalRouterNode::isConditionTrue(const QString& value)
             v == QStringLiteral("yes") ||
             v == QStringLiteral("pass") ||
             v == QStringLiteral("ok"));
+}
+
+void ConditionalRouterNode::setDefaultCondition(const QString& condition)
+{
+    const QString c = condition.trimmed().toLower();
+    int newMode = m_routerMode;
+    if (c == QStringLiteral("true")) newMode = 1;
+    else if (c == QStringLiteral("wait")) newMode = 2;
+    else newMode = 0; // treat anything else as false
+
+    if (newMode == m_routerMode) {
+        // Still emit normalized string so UI can sync if needed
+        emit defaultConditionChanged(defaultCondition());
+        return;
+    }
+    m_routerMode = newMode;
+    emit defaultConditionChanged(defaultCondition());
 }
