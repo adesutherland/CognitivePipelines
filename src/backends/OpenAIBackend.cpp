@@ -23,6 +23,8 @@
 //
 #include "OpenAIBackend.h"
 
+#include "core/LLMProviderRegistry.h"
+
 #include <cpr/cpr.h>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -30,6 +32,10 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QDebug>
+#include <QDir>
+#include <QStandardPaths>
+#include <QtConcurrent>
+#include <QUuid>
 
 QString OpenAIBackend::id() const {
     return QStringLiteral("openai");
@@ -398,4 +404,168 @@ EmbeddingResult OpenAIBackend::getEmbedding(
     }
     
     return result;
+}
+
+QFuture<QString> OpenAIBackend::generateImage(
+    const QString& prompt,
+    const QString& model,
+    const QString& size,
+    const QString& quality,
+    const QString& style
+) {
+    return QtConcurrent::run([prompt, model, size, quality, style]() -> QString {
+        const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
+        if (apiKey.trimmed().isEmpty()) {
+            const QString msg = QStringLiteral("Missing OpenAI API key");
+            qWarning() << "OpenAIBackend::generateImage" << msg;
+            return msg;
+        }
+
+        const std::string url = "https://api.openai.com/v1/images/generations";
+
+        QJsonObject root;
+        root.insert(QStringLiteral("model"), model);
+        root.insert(QStringLiteral("prompt"), prompt);
+        root.insert(QStringLiteral("n"), 1);
+        if (!size.trimmed().isEmpty()) {
+            root.insert(QStringLiteral("size"), size);
+        }
+        if (!quality.trimmed().isEmpty()) {
+            root.insert(QStringLiteral("quality"), quality);
+        }
+        if (!style.trimmed().isEmpty()) {
+            root.insert(QStringLiteral("style"), style);
+        }
+        root.insert(QStringLiteral("response_format"), QStringLiteral("b64_json"));
+
+        const QByteArray jsonBytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+
+        cpr::Header headers{
+            {"Authorization", std::string("Bearer ") + apiKey.toStdString()},
+            {"Content-Type", "application/json"}
+        };
+
+        auto response = cpr::Post(
+            cpr::Url{url},
+            headers,
+            cpr::Body{jsonBytes.constData()},
+            cpr::ConnectTimeout{10000},
+            cpr::Timeout{60000}
+        );
+
+        if (response.error) {
+            QString errorMsg;
+
+            if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
+                errorMsg = QStringLiteral("OpenAI API Timeout");
+                qWarning() << "OpenAIBackend::generateImage timeout:" << QString::fromStdString(response.error.message);
+            } else {
+                errorMsg = QString::fromStdString(response.error.message);
+                qWarning() << "OpenAIBackend::generateImage network error:" << errorMsg;
+                errorMsg = QStringLiteral("OpenAI network error: %1").arg(errorMsg);
+            }
+
+            return errorMsg;
+        }
+
+        const QString rawResponse = QString::fromStdString(response.text);
+
+        if (response.status_code != 200) {
+            QString errorMsg;
+
+            qWarning() << "OpenAIBackend::generateImage HTTP error" << response.status_code
+                       << "body:" << rawResponse;
+
+            QJsonParseError parseError;
+            QJsonDocument doc = QJsonDocument::fromJson(response.text.c_str(), &parseError);
+            if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                QJsonObject obj = doc.object();
+                if (obj.contains(QStringLiteral("error")) && obj[QStringLiteral("error")].isObject()) {
+                    QJsonObject errorObj = obj[QStringLiteral("error")].toObject();
+                    errorMsg = errorObj[QStringLiteral("message")].toString(
+                        QStringLiteral("HTTP %1").arg(response.status_code));
+                }
+            }
+
+            if (errorMsg.isEmpty()) {
+                errorMsg = QStringLiteral("HTTP %1").arg(response.status_code);
+            }
+
+            return errorMsg;
+        }
+
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(response.text.c_str(), &parseError);
+
+        if (parseError.error != QJsonParseError::NoError) {
+            return QStringLiteral("JSON parse error: %1").arg(parseError.errorString());
+        }
+
+        if (!doc.isObject()) {
+            return QStringLiteral("Invalid JSON: root is not an object");
+        }
+
+        QJsonObject rootObj = doc.object();
+
+        if (rootObj.contains(QStringLiteral("error"))) {
+            if (rootObj[QStringLiteral("error")].isObject()) {
+                QJsonObject errorObj = rootObj[QStringLiteral("error")].toObject();
+                return errorObj[QStringLiteral("message")].toString(QStringLiteral("Unknown error"));
+            }
+
+            return QStringLiteral("Unknown error");
+        }
+
+        QString b64Image;
+        if (rootObj.contains(QStringLiteral("data")) && rootObj[QStringLiteral("data")].isArray()) {
+            QJsonArray dataArray = rootObj[QStringLiteral("data")].toArray();
+            if (!dataArray.isEmpty() && dataArray[0].isObject()) {
+                QJsonObject dataObj = dataArray[0].toObject();
+                b64Image = dataObj[QStringLiteral("b64_json")].toString();
+            }
+        }
+
+        if (b64Image.isEmpty()) {
+            qWarning() << "OpenAIBackend::generateImage missing b64_json field" << rawResponse;
+            return QStringLiteral("OpenAI image response missing data");
+        }
+
+        const QByteArray imageData = QByteArray::fromBase64(b64Image.toUtf8());
+        if (imageData.isEmpty()) {
+            return QStringLiteral("Failed to decode image data");
+        }
+
+        QString cacheBase = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (cacheBase.isEmpty()) {
+            cacheBase = QDir::tempPath();
+        }
+
+        QDir cacheDir(cacheBase);
+        if (!cacheDir.mkpath(QStringLiteral("generated_images"))) {
+            qWarning() << "OpenAIBackend::generateImage failed to create cache dir" << cacheBase;
+            return QStringLiteral("Failed to create cache directory");
+        }
+
+        QDir imagesDir(cacheDir.filePath(QStringLiteral("generated_images")));
+        const QString fileName = QStringLiteral("img_%1.png").arg(
+            QUuid::createUuid().toString(QUuid::WithoutBraces));
+        const QString filePath = imagesDir.filePath(fileName);
+
+        QFile outFile(filePath);
+        if (!outFile.open(QIODevice::WriteOnly)) {
+            qWarning() << "OpenAIBackend::generateImage failed to open file" << filePath
+                       << "error" << outFile.errorString();
+            return QStringLiteral("Failed to write generated image");
+        }
+
+        const qint64 bytesWritten = outFile.write(imageData);
+        outFile.close();
+
+        if (bytesWritten != imageData.size()) {
+            qWarning() << "OpenAIBackend::generateImage incomplete write" << filePath;
+            return QStringLiteral("Failed to save generated image");
+        }
+
+        return filePath;
+    });
 }

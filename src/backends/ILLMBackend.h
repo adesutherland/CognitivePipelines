@@ -23,6 +23,7 @@
 //
 #pragma once
 
+#include <QFuture>
 #include <QString>
 #include <QStringList>
 #include <vector>
@@ -137,5 +138,27 @@ public:
         const QString& apiKey,
         const QString& modelName,
         const QString& text
+    ) = 0;
+
+    /**
+     * @brief Generates an image using the provided text prompt and model.
+     *
+     * Implementations should perform the network request off the UI thread
+     * (e.g., via QtConcurrent::run) and return the absolute file path of the
+     * generated image on disk wrapped in a QFuture.
+     *
+     * @param prompt The text prompt to guide image generation.
+     * @param model The image generation model to use (e.g., "dall-e-3").
+     * @param size The desired image size (e.g., "1024x1024").
+     * @param quality The desired quality setting (e.g., "standard").
+     * @param style The desired style setting (e.g., "vivid").
+     * @return QFuture resolving to the absolute file path of the generated image.
+     */
+    virtual QFuture<QString> generateImage(
+        const QString& prompt,
+        const QString& model,
+        const QString& size,
+        const QString& quality,
+        const QString& style
     ) = 0;
 };

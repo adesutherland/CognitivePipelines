@@ -56,4 +56,12 @@ public:
         const QString& modelName,
         const QString& text
     ) override;
+
+    QFuture<QString> generateImage(
+        const QString& prompt,
+        const QString& model,
+        const QString& size,
+        const QString& quality,
+        const QString& style
+    ) override;
 };

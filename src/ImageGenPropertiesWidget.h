@@ -23,45 +23,38 @@
 //
 #pragma once
 
-#include "ILLMBackend.h"
+#include <QWidget>
 
-/**
- * @brief Google Gemini backend implementation using the Generative Language API.
- *
- * This backend communicates with Google's Gemini API endpoints and supports
- * various Gemini model versions.
- */
-class GoogleBackend : public ILLMBackend {
+class QComboBox;
+
+// Properties widget for configuring ImageGenNode
+class ImageGenPropertiesWidget : public QWidget {
+    Q_OBJECT
 public:
-    GoogleBackend() = default;
-    ~GoogleBackend() override = default;
+    explicit ImageGenPropertiesWidget(QWidget* parent = nullptr);
+    ~ImageGenPropertiesWidget() override = default;
 
-    QString id() const override;
-    QString name() const override;
-    QStringList availableModels() const override;
-    QStringList availableEmbeddingModels() const override;
+    QString provider() const;
+    QString model() const;
+    QString size() const;
+    QString quality() const;
+    QString style() const;
 
-    LLMResult sendPrompt(
-        const QString& apiKey,
-        const QString& modelName,
-        double temperature,
-        int maxTokens,
-        const QString& systemPrompt,
-        const QString& userPrompt,
-        const QString& imagePath = QString()
-    ) override;
+    void setProvider(const QString& providerName);
+    void setModel(const QString& modelName);
+    void setSize(const QString& sizeValue);
+    void setQuality(const QString& qualityValue);
+    void setStyle(const QString& styleValue);
 
-    EmbeddingResult getEmbedding(
-        const QString& apiKey,
-        const QString& modelName,
-        const QString& text
-    ) override;
+signals:
+    void configChanged();
 
-    QFuture<QString> generateImage(
-        const QString& prompt,
-        const QString& model,
-        const QString& size,
-        const QString& quality,
-        const QString& style
-    ) override;
+private:
+    int setComboValue(QComboBox* combo, const QString& value);
+
+    QComboBox* m_providerCombo {nullptr};
+    QComboBox* m_modelCombo {nullptr};
+    QComboBox* m_sizeCombo {nullptr};
+    QComboBox* m_qualityCombo {nullptr};
+    QComboBox* m_styleCombo {nullptr};
 };

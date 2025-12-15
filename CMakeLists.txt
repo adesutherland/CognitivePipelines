@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.6.1 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.7.1 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -100,6 +100,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/UniversalLLMPropertiesWidget.h
     ${SRC_DIR}/UniversalLLMNode.cpp
     ${SRC_DIR}/UniversalLLMNode.h
+    ${SRC_DIR}/ImageGenPropertiesWidget.cpp
+    ${SRC_DIR}/ImageGenPropertiesWidget.h
+    ${SRC_DIR}/ImageGenNode.cpp
+    ${SRC_DIR}/ImageGenNode.h
     ${SRC_DIR}/backends/ILLMBackend.h
     ${SRC_DIR}/backends/OpenAIBackend.cpp
     ${SRC_DIR}/backends/OpenAIBackend.h
@@ -386,6 +390,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/UniversalLLMNode.h
             ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
             ${SRC_DIR}/UniversalLLMPropertiesWidget.h
+            ${SRC_DIR}/ImageGenNode.cpp
+            ${SRC_DIR}/ImageGenNode.h
+            ${SRC_DIR}/ImageGenPropertiesWidget.cpp
+            ${SRC_DIR}/ImageGenPropertiesWidget.h
             ${SRC_DIR}/core/LLMProviderRegistry.cpp
             ${SRC_DIR}/core/LLMProviderRegistry.h
             ${SRC_DIR}/core/DocumentLoader.cpp
@@ -452,6 +460,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/UniversalLLMNode.h
             ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
             ${SRC_DIR}/UniversalLLMPropertiesWidget.h
+            ${SRC_DIR}/ImageGenNode.cpp
+            ${SRC_DIR}/ImageGenNode.h
+            ${SRC_DIR}/ImageGenPropertiesWidget.cpp
+            ${SRC_DIR}/ImageGenPropertiesWidget.h
             ${SRC_DIR}/core/LLMProviderRegistry.cpp
             ${SRC_DIR}/core/LLMProviderRegistry.h
             ${SRC_DIR}/backends/ILLMBackend.h

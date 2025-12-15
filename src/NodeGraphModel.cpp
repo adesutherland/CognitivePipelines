@@ -30,6 +30,7 @@
 #include "ImageNode.h"
 #include "ProcessConnector.h"
 #include "UniversalLLMNode.h"
+#include "ImageGenNode.h"
 #include "PythonScriptConnector.h"
 #include "DatabaseConnector.h"
 #include "TextOutputNode.h"
@@ -94,6 +95,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     registry->registerModel([this]() {
         auto connector = std::make_shared<UniversalLLMNode>();
         return std::make_unique<ToolNodeDelegate>(connector);
+    }, QStringLiteral("AI Services"));
+
+    // Register ImageGenNode under the "AI Services" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<ImageGenNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("AI Services"));
 
     // Register PythonScriptConnector under the "External Tools" category via ToolNodeDelegate

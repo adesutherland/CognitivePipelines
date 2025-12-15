@@ -29,6 +29,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QDebug>
+#include <QtConcurrent>
 
 QString GoogleBackend::id() const {
     return QStringLiteral("google");
@@ -356,4 +357,22 @@ EmbeddingResult GoogleBackend::getEmbedding(
     result.hasError = true;
     result.errorMsg = QStringLiteral("Google embeddings not yet implemented");
     return result;
+}
+
+QFuture<QString> GoogleBackend::generateImage(
+    const QString& prompt,
+    const QString& model,
+    const QString& size,
+    const QString& quality,
+    const QString& style
+) {
+    Q_UNUSED(prompt)
+    Q_UNUSED(model)
+    Q_UNUSED(size)
+    Q_UNUSED(quality)
+    Q_UNUSED(style)
+
+    return QtConcurrent::run([]() -> QString {
+        return QStringLiteral("Google image generation not implemented");
+    });
 }

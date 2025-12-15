@@ -23,45 +23,42 @@
 //
 #pragma once
 
-#include "ILLMBackend.h"
+#include <QObject>
+#include <QPointer>
+#include <QString>
 
-/**
- * @brief Google Gemini backend implementation using the Generative Language API.
- *
- * This backend communicates with Google's Gemini API endpoints and supports
- * various Gemini model versions.
- */
-class GoogleBackend : public ILLMBackend {
+#include "IToolConnector.h"
+#include "CommonDataTypes.h"
+
+class ImageGenPropertiesWidget;
+
+class ImageGenNode : public QObject, public IToolConnector {
+    Q_OBJECT
+    Q_INTERFACES(IToolConnector)
 public:
-    GoogleBackend() = default;
-    ~GoogleBackend() override = default;
+    explicit ImageGenNode(QObject* parent = nullptr);
+    ~ImageGenNode() override = default;
 
-    QString id() const override;
-    QString name() const override;
-    QStringList availableModels() const override;
-    QStringList availableEmbeddingModels() const override;
+    NodeDescriptor getDescriptor() const override;
+    QWidget* createConfigurationWidget(QWidget* parent) override;
+    TokenList execute(const TokenList& incomingTokens) override;
+    QJsonObject saveState() const override;
+    void loadState(const QJsonObject& data) override;
 
-    LLMResult sendPrompt(
-        const QString& apiKey,
-        const QString& modelName,
-        double temperature,
-        int maxTokens,
-        const QString& systemPrompt,
-        const QString& userPrompt,
-        const QString& imagePath = QString()
-    ) override;
+public:
+    static constexpr const char* kInputPromptPinId = "prompt";
+    static constexpr const char* kOutputImagePathPinId = "image_path";
+    static constexpr const char* kProviderOpenAI = "openai";
 
-    EmbeddingResult getEmbedding(
-        const QString& apiKey,
-        const QString& modelName,
-        const QString& text
-    ) override;
+private slots:
+    void handleConfigChanged();
 
-    QFuture<QString> generateImage(
-        const QString& prompt,
-        const QString& model,
-        const QString& size,
-        const QString& quality,
-        const QString& style
-    ) override;
+private:
+    QString m_providerId;
+    QString m_model;
+    QString m_size;
+    QString m_quality;
+    QString m_style;
+
+    QPointer<ImageGenPropertiesWidget> m_widget;
 };
