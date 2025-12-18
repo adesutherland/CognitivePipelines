@@ -28,6 +28,7 @@
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
 #include "ImageNode.h"
+#include "MermaidNode.h"
 #include "ProcessConnector.h"
 #include "UniversalLLMNode.h"
 #include "ImageGenNode.h"
@@ -72,6 +73,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto tool = std::make_shared<ImageNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Input / Output"));
+
+    // Register MermaidNode under the "Visualization" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<MermaidNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Visualization"));
 
     // Register PdfToImageNode under the "Input / Output" category via ToolNodeDelegate
     registry->registerModel([this]() {

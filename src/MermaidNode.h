@@ -21,32 +21,39 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
+#pragma once
 
-#include <QApplication>
-#include <QCoreApplication>
-#include <QIcon>
-#include "mainwindow.h"
+#include <QObject>
+#include <QPointer>
 
-int main(int argc, char* argv[]) {
-    QCoreApplication::setOrganizationName(QStringLiteral("CognitivePipelines"));
-    QCoreApplication::setOrganizationDomain(QStringLiteral("cognitivepipelines.com"));
-    QCoreApplication::setApplicationName(QStringLiteral("CognitivePipelines"));
+#include "IToolConnector.h"
+#include "CommonDataTypes.h"
 
-    QApplication app(argc, argv);
+class MermaidPropertiesWidget;
 
-    // Set application icon (cross-platform)
-    // Note: Using PNG for macOS to avoid "skipping unknown tag type" warnings
-    // from Qt's ICNS plugin when parsing complex .icns files with JPEG2000 compression.
-    // The .icns file is still used by macOS for the app bundle icon via Info.plist.
-#ifdef Q_OS_WIN
-    app.setWindowIcon(QIcon(":/packaging/windows/CognitivePipelines.ico"));
-#else
-    // macOS, Linux, and other platforms - use PNG
-    app.setWindowIcon(QIcon(":/packaging/linux/CognitivePipelines.png"));
-#endif
+class MermaidNode : public QObject, public IToolConnector {
+    Q_OBJECT
+    Q_INTERFACES(IToolConnector)
+public:
+    explicit MermaidNode(QObject* parent = nullptr);
+    ~MermaidNode() override = default;
 
-    MainWindow w;
-    w.show();
+    // IToolConnector interface
+    NodeDescriptor getDescriptor() const override;
+    QWidget* createConfigurationWidget(QWidget* parent) override;
+    TokenList execute(const TokenList& incomingTokens) override;
+    QJsonObject saveState() const override;
+    void loadState(const QJsonObject& data) override;
 
-    return app.exec();
-}
+public:
+    static constexpr const char* kInputCode = "code";
+    static constexpr const char* kOutputImage = "image";
+
+private:
+    void updatePropertiesWidget(const QString& code);
+
+private:
+    QPointer<MermaidPropertiesWidget> m_propertiesWidget;
+    QString m_lastCode;
+    double m_scaleFactor {1.0};
+};

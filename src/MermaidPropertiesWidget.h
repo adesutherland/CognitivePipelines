@@ -21,32 +21,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
+#pragma once
 
-#include <QApplication>
-#include <QCoreApplication>
-#include <QIcon>
-#include "mainwindow.h"
+#include <QWidget>
 
-int main(int argc, char* argv[]) {
-    QCoreApplication::setOrganizationName(QStringLiteral("CognitivePipelines"));
-    QCoreApplication::setOrganizationDomain(QStringLiteral("cognitivepipelines.com"));
-    QCoreApplication::setApplicationName(QStringLiteral("CognitivePipelines"));
+class QTextEdit;
+class QDoubleSpinBox;
 
-    QApplication app(argc, argv);
+class MermaidPropertiesWidget : public QWidget {
+    Q_OBJECT
+public:
+    explicit MermaidPropertiesWidget(QWidget* parent = nullptr);
+    ~MermaidPropertiesWidget() override = default;
 
-    // Set application icon (cross-platform)
-    // Note: Using PNG for macOS to avoid "skipping unknown tag type" warnings
-    // from Qt's ICNS plugin when parsing complex .icns files with JPEG2000 compression.
-    // The .icns file is still used by macOS for the app bundle icon via Info.plist.
-#ifdef Q_OS_WIN
-    app.setWindowIcon(QIcon(":/packaging/windows/CognitivePipelines.ico"));
-#else
-    // macOS, Linux, and other platforms - use PNG
-    app.setWindowIcon(QIcon(":/packaging/linux/CognitivePipelines.png"));
-#endif
+    void setCode(const QString& code);
+    double scale() const;
+    void setScale(double value);
 
-    MainWindow w;
-    w.show();
+signals:
+    void scaleChanged(double value);
 
-    return app.exec();
-}
+private:
+    QTextEdit* m_codeEdit {nullptr};
+    QDoubleSpinBox* m_scaleSpin {nullptr};
+};

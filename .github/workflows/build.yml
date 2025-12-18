@@ -56,7 +56,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt-version }}
-          modules: 'qtpdf'
+          modules: 'qtpdf qtwebengine'
           cache: true
 
       - name: Set macOS architecture variables
@@ -88,6 +88,12 @@ jobs:
             xvfb libxcb-cursor0 libxcb-cursor-dev '^libxcb.*-dev' libx11-xcb-dev \
             libfontconfig1-dev libfreetype6-dev libegl1-mesa-dev libgbm-dev \
             libgl1-mesa-dev libgles2-mesa-dev libxi-dev libdbus-1-dev
+
+      - name: Install Qt WebEngine runtime dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0 libpulse-mainloop-glib0 libnss3 libasound2
 
       - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'

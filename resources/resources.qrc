@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/mermaid">
+        <file alias="template.html">mermaid/template.html</file>
+        <file alias="mermaid.min.js">mermaid/mermaid.min.js</file>
+    </qresource>
+</RCC>

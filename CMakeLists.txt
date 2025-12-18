@@ -25,7 +25,9 @@ if(APPLE)
     set(MACOSX_ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.icns)
     get_filename_component(MACOSX_ICON_NAME "${MACOSX_ICON_FILE}" NAME)
     set(MACOSX_ENTITLEMENTS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.entitlements)
+    set(MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/QtWebEngineProcess.entitlements)
     set(MACOSX_INFO_PLIST_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in)
+    set(MACOSX_QTWEBENGINE_CODESIGNER ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/codesign_qtwebengine_helpers.cmake)
 endif()
 
 # --- Standardize Output Directories ---
@@ -65,7 +67,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # Dependencies resolved from the system (no FetchContent)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql Pdf)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql Pdf WebEngineWidgets)
 find_package(Boost 1.70 REQUIRED)
 find_package(cpr REQUIRED)
 find_package(GTest REQUIRED)
@@ -144,6 +146,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ImagePropertiesWidget.h
     ${SRC_DIR}/ImagePopupDialog.cpp
     ${SRC_DIR}/ImagePopupDialog.h
+    ${SRC_DIR}/MermaidNode.cpp
+    ${SRC_DIR}/MermaidNode.h
+    ${SRC_DIR}/MermaidPropertiesWidget.cpp
+    ${SRC_DIR}/MermaidPropertiesWidget.h
     ${SRC_DIR}/PdfToImageNode.cpp
     ${SRC_DIR}/PdfToImageNode.h
     ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
@@ -186,8 +192,11 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/NodeInfoWidget.h
     ${SRC_DIR}/ExecutionEngine.cpp
     ${SRC_DIR}/ExecutionEngine.h
+    ${SRC_DIR}/MermaidRenderService.cpp
+    ${SRC_DIR}/MermaidRenderService.h
     ${SRC_DIR}/CredentialsEditorDialog.cpp
     ${SRC_DIR}/CredentialsEditorDialog.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
     ${qtnodes_SOURCE_DIR}/resources/resources.qrc
     $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
@@ -209,6 +218,7 @@ target_link_libraries(CognitivePipelines PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::WebEngineWidgets
     Qt6::Network
     Qt6::Concurrent
     Qt6::Sql
@@ -297,6 +307,7 @@ if(ENABLE_TESTING)
             tests/test_universal_llm.cpp
             tests/test_logging.cpp
             tests/test_image_node.cpp
+            tests/test_mermaid_node.cpp
             tests/test_pdf_node.cpp
             tests/test_rag_foundation.cpp
             tests/test_document_loader.cpp
@@ -340,6 +351,13 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ImagePropertiesWidget.h
             ${SRC_DIR}/ImagePopupDialog.cpp
             ${SRC_DIR}/ImagePopupDialog.h
+            ${SRC_DIR}/MermaidNode.cpp
+            ${SRC_DIR}/MermaidNode.h
+            ${SRC_DIR}/MermaidPropertiesWidget.cpp
+            ${SRC_DIR}/MermaidPropertiesWidget.h
+            ${SRC_DIR}/MermaidRenderService.cpp
+            ${SRC_DIR}/MermaidRenderService.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
             ${SRC_DIR}/PdfToImageNode.cpp
             ${SRC_DIR}/PdfToImageNode.h
             ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
@@ -428,6 +446,7 @@ if(ENABLE_TESTING)
             Qt6::Concurrent
             Qt6::Sql
             Qt6::Pdf
+            Qt6::WebEngineWidgets
             QtNodes::QtNodes
             Boost::boost
     )
@@ -500,6 +519,13 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ImagePropertiesWidget.h
             ${SRC_DIR}/ImagePopupDialog.cpp
             ${SRC_DIR}/ImagePopupDialog.h
+            ${SRC_DIR}/MermaidNode.cpp
+            ${SRC_DIR}/MermaidNode.h
+            ${SRC_DIR}/MermaidPropertiesWidget.cpp
+            ${SRC_DIR}/MermaidPropertiesWidget.h
+            ${SRC_DIR}/MermaidRenderService.cpp
+            ${SRC_DIR}/MermaidRenderService.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
             ${SRC_DIR}/PdfToImageNode.cpp
             ${SRC_DIR}/PdfToImageNode.h
             ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
@@ -561,6 +587,7 @@ if(ENABLE_TESTING)
             Qt6::Concurrent
             Qt6::Sql
             Qt6::Pdf
+            Qt6::WebEngineWidgets
             QtNodes::QtNodes
             Boost::boost
             cpr::cpr
@@ -647,12 +674,107 @@ if(APPLE)
     if(NOT XCODE)
         find_program(CODESIGN_EXECUTABLE codesign)
         if(CODESIGN_EXECUTABLE)
+            set(IS_DEBUG_BUILD FALSE)
+            if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+                set(IS_DEBUG_BUILD TRUE)
+            endif()
+
+            if(IS_DEBUG_BUILD)
+                get_target_property(_qt_qmake_location Qt6::qmake IMPORTED_LOCATION)
+                if(NOT QT_INSTALL_LIBEXECS AND _qt_qmake_location)
+                    execute_process(
+                        COMMAND "${_qt_qmake_location}" -query QT_INSTALL_LIBEXECS
+                        OUTPUT_VARIABLE QT_INSTALL_LIBEXECS
+                        OUTPUT_STRIP_TRAILING_WHITESPACE
+                    )
+                endif()
+
+                if(NOT QT_INSTALL_LIBEXECS)
+                    find_program(QMAKE_EXECUTABLE NAMES qmake6 qmake-qt6 qmake
+                        HINTS
+                            $ENV{HOMEBREW_PREFIX}/opt/qt/bin
+                            /usr/local/opt/qt/bin
+                            /opt/homebrew/opt/qt/bin
+                            /usr/local/opt/qt6/bin
+                            /opt/homebrew/opt/qt6/bin
+                            /usr/local/opt/qt@6/bin
+                            /opt/homebrew/opt/qt@6/bin)
+                    if(QMAKE_EXECUTABLE)
+                        execute_process(
+                            COMMAND "${QMAKE_EXECUTABLE}" -query QT_INSTALL_LIBEXECS
+                            OUTPUT_VARIABLE QT_INSTALL_LIBEXECS
+                            OUTPUT_STRIP_TRAILING_WHITESPACE
+                        )
+                    endif()
+                endif()
+
+                if(NOT QT_PLUGINS_DIR AND _qt_qmake_location)
+                    execute_process(
+                        COMMAND "${_qt_qmake_location}" -query QT_INSTALL_PLUGINS
+                        OUTPUT_VARIABLE QT_PLUGINS_DIR
+                        OUTPUT_STRIP_TRAILING_WHITESPACE
+                    )
+                endif()
+
+                if(NOT QT_PLUGINS_DIR AND QMAKE_EXECUTABLE)
+                    execute_process(
+                        COMMAND "${QMAKE_EXECUTABLE}" -query QT_INSTALL_PLUGINS
+                        OUTPUT_VARIABLE QT_PLUGINS_DIR
+                        OUTPUT_STRIP_TRAILING_WHITESPACE
+                    )
+                endif()
+
+                if(NOT QT_PLUGINS_DIR)
+                    find_program(QTPATHS_EXECUTABLE NAMES qtpaths6 qtpaths-qt6 qtpaths)
+                    if(QTPATHS_EXECUTABLE)
+                        execute_process(
+                            COMMAND "${QTPATHS_EXECUTABLE}" --plugin-dir
+                            OUTPUT_VARIABLE QT_PLUGINS_DIR
+                            OUTPUT_STRIP_TRAILING_WHITESPACE
+                        )
+                    endif()
+                endif()
+
+                set(_qt_libexec_candidates "")
+                if(QT_INSTALL_LIBEXECS)
+                    list(APPEND _qt_libexec_candidates "${QT_INSTALL_LIBEXECS}")
+                endif()
+                if(DEFINED Qt6_DIR)
+                    get_filename_component(_qt_cmake_dir "${Qt6_DIR}" DIRECTORY)
+                    get_filename_component(_qt_prefix_lib "${_qt_cmake_dir}" DIRECTORY)
+                    get_filename_component(_qt_prefix "${_qt_prefix_lib}" DIRECTORY)
+                    list(APPEND _qt_libexec_candidates "${_qt_prefix}/libexec")
+                endif()
+                get_target_property(_qt_webenginecore_location Qt6::WebEngineCore LOCATION)
+                get_target_property(_qt_webenginewidgets_location Qt6::WebEngineWidgets LOCATION)
+                if(_qt_webenginecore_location)
+                    get_filename_component(_qt_webenginecore_framework_dir "${_qt_webenginecore_location}" DIRECTORY)
+                    list(APPEND _qt_libexec_candidates "${_qt_webenginecore_framework_dir}/Helpers")
+                endif()
+                list(APPEND _qt_libexec_candidates
+                    "$ENV{HOMEBREW_PREFIX}/opt/qt/libexec"
+                    "/usr/local/opt/qt/libexec"
+                    "/opt/homebrew/opt/qt/libexec"
+                    "/usr/local/libexec"
+                    "/opt/homebrew/libexec"
+                    "/usr/local/share/qt/libexec")
+
+                foreach(_libexec_path IN LISTS _qt_libexec_candidates)
+                    if(_libexec_path AND EXISTS "${_libexec_path}/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess")
+                        set(QT_INSTALL_LIBEXECS "${_libexec_path}")
+                        break()
+                    endif()
+                endforeach()
+            endif()
+
             foreach(tgt IN ITEMS CognitivePipelines unit_tests integration_tests)
                 if(TARGET ${tgt})
                     # Deploy Qt frameworks into the app bundle so it runs outside the build machine
                     # Only run macdeployqt for Release/RelWithDebInfo builds to avoid duplicate framework warnings
                     # in Debug builds when using Homebrew Qt (system frameworks are used via rpath)
-                    if(CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
+                    if(IS_DEBUG_BUILD)
+                        message(STATUS "Fast Debug: skipping macdeployqt for ${tgt}; using system Qt frameworks")
+                    elseif(CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
                         find_program(MACDEPLOYQT_EXECUTABLE NAMES macdeployqt
                                         HINTS
                                             $ENV{HOMEBREW_PREFIX}/opt/qt/bin
@@ -674,13 +796,151 @@ if(APPLE)
                         message(STATUS "Skipping macdeployqt for ${tgt} in ${CMAKE_BUILD_TYPE} build (using system Qt frameworks)")
                     endif()
 
-                    # Ad-hoc sign the resulting bundle so embedded frameworks have a valid cdhash
-                    add_custom_command(TARGET ${tgt} POST_BUILD
-                        COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
-                                --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                                --sign "${APPLE_SIGN_IDENTITY}" "$<TARGET_BUNDLE_DIR:${tgt}>"
-                        COMMENT "Ad-hoc codesigning ${tgt}.app with entitlements"
-                        VERBATIM)
+                    if(IS_DEBUG_BUILD)
+                        # Ensure stale bundled Qt frameworks/plugins from prior deploys are removed to avoid
+                        # double-loading system Qt alongside bundled copies.
+                        add_custom_command(TARGET ${tgt} POST_BUILD
+                            COMMAND /bin/sh -c "bundle=\"$1\"; for fw in \"$bundle\"/Contents/Frameworks/Qt*.framework; do case \"$fw\" in *QtWebEngineCore.framework|*QtWebEngineWidgets.framework) :;; *) rm -rf \"$fw\";; esac; done; rm -rf \"$bundle\"/Contents/PlugIns" _ "$<TARGET_BUNDLE_DIR:${tgt}>"
+                            COMMENT "Fast Debug: removing bundled Qt frameworks/plugins (keeping QtWebEngineCore/QtWebEngineWidgets) to prefer system Qt"
+                            VERBATIM)
+
+                        if(_qt_webenginecore_location)
+                            get_filename_component(_qt_webenginecore_framework_dir "${_qt_webenginecore_location}" DIRECTORY)
+                            get_filename_component(_qt_webenginecore_framework_versions "${_qt_webenginecore_framework_dir}" DIRECTORY)
+                            get_filename_component(_qt_webenginecore_framework_root "${_qt_webenginecore_framework_versions}" DIRECTORY)
+
+                            add_custom_command(TARGET ${tgt} POST_BUILD
+                                COMMAND /usr/bin/rsync -a --delete "${_qt_webenginecore_framework_root}/" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/"
+                                COMMENT "Fast Debug: ensuring QtWebEngineCore.framework is present in ${tgt}.app"
+                                VERBATIM)
+                        endif()
+
+                        if(_qt_webenginewidgets_location)
+                            get_filename_component(_qt_webenginewidgets_framework_dir "${_qt_webenginewidgets_location}" DIRECTORY)
+                            get_filename_component(_qt_webenginewidgets_framework_versions "${_qt_webenginewidgets_framework_dir}" DIRECTORY)
+                            get_filename_component(_qt_webenginewidgets_framework_root "${_qt_webenginewidgets_framework_versions}" DIRECTORY)
+
+                            add_custom_command(TARGET ${tgt} POST_BUILD
+                                COMMAND /usr/bin/rsync -a --delete "${_qt_webenginewidgets_framework_root}/" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineWidgets.framework/"
+                                COMMENT "Fast Debug: ensuring QtWebEngineWidgets.framework is present in ${tgt}.app"
+                                VERBATIM)
+                        endif()
+
+                        if(QT_INSTALL_LIBEXECS AND EXISTS "${QT_INSTALL_LIBEXECS}/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess")
+                            set(_qtwebengine_helper_src_app "${QT_INSTALL_LIBEXECS}/QtWebEngineProcess.app")
+                            set(_qtwebengine_helper_dst_app "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app")
+                            set(_qtwebengine_helper_dst_bin "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess")
+
+                            add_custom_command(TARGET ${tgt} POST_BUILD
+                                COMMAND ${CMAKE_COMMAND} -E make_directory "${_qtwebengine_helper_dst_app}"
+                                COMMAND ${CMAKE_COMMAND} -E copy_directory "${_qtwebengine_helper_src_app}" "${_qtwebengine_helper_dst_app}"
+                                COMMAND ${CODESIGN_EXECUTABLE} --force --options runtime
+                                        --entitlements "${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}"
+                                        --sign "-" "${_qtwebengine_helper_dst_bin}"
+                                COMMAND ${CODESIGN_EXECUTABLE} --force --options runtime --sign "-" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework"
+                                COMMAND ${CODESIGN_EXECUTABLE} --force --options runtime --sign "-" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineWidgets.framework"
+                                COMMENT "Fast Debug: copying and signing QtWebEngineProcess for ${tgt}.app"
+                                VERBATIM)
+                        else()
+                            message(WARNING "Fast Debug: QtWebEngineProcess not found at ${QT_INSTALL_LIBEXECS}/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess; skipping copy for ${tgt}")
+                        endif()
+
+                        set(_qt_platform_plugin_candidates "")
+                        if(QT_PLUGINS_DIR)
+                            list(APPEND _qt_platform_plugin_candidates "${QT_PLUGINS_DIR}/platforms/libqcocoa.dylib")
+                        endif()
+                        list(APPEND _qt_platform_plugin_candidates
+                            "$ENV{HOMEBREW_PREFIX}/share/qt/plugins/platforms/libqcocoa.dylib"
+                            "/usr/local/share/qt/plugins/platforms/libqcocoa.dylib"
+                            "/opt/homebrew/share/qt/plugins/platforms/libqcocoa.dylib")
+
+                        set(_qt_platform_plugin_src "")
+                        foreach(_candidate IN LISTS _qt_platform_plugin_candidates)
+                            if(_candidate AND EXISTS "${_candidate}")
+                                set(_qt_platform_plugin_src "${_candidate}")
+                                break()
+                            endif()
+                        endforeach()
+
+                        if(_qt_platform_plugin_src)
+                            set(_qt_platform_plugin_dst_dir "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/PlugIns/platforms")
+                            set(_qt_platform_plugin_dst "${_qt_platform_plugin_dst_dir}/libqcocoa.dylib")
+
+                            add_custom_command(TARGET ${tgt} POST_BUILD
+                                COMMAND ${CMAKE_COMMAND} -E make_directory "${_qt_platform_plugin_dst_dir}"
+                                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_qt_platform_plugin_src}" "${_qt_platform_plugin_dst}"
+                                COMMAND ${CODESIGN_EXECUTABLE} --force --sign - "${_qt_platform_plugin_dst}"
+                                COMMENT "Fast Debug: copying cocoa platform plugin for ${tgt}.app"
+                                VERBATIM)
+                        else()
+                            message(WARNING "Fast Debug: Qt cocoa platform plugin not found; cocoa plugin will rely on system lookup")
+                        endif()
+
+                        set(_qt_sqlite_plugin_candidates "")
+                        if(QT_PLUGINS_DIR)
+                            list(APPEND _qt_sqlite_plugin_candidates "${QT_PLUGINS_DIR}/sqldrivers/libqsqlite.dylib")
+                        endif()
+                        list(APPEND _qt_sqlite_plugin_candidates
+                            "$ENV{HOMEBREW_PREFIX}/share/qt/plugins/sqldrivers/libqsqlite.dylib"
+                            "/usr/local/share/qt/plugins/sqldrivers/libqsqlite.dylib"
+                            "/opt/homebrew/share/qt/plugins/sqldrivers/libqsqlite.dylib")
+
+                        set(_qt_sqlite_plugin_src "")
+                        foreach(_candidate IN LISTS _qt_sqlite_plugin_candidates)
+                            if(_candidate AND EXISTS "${_candidate}")
+                                set(_qt_sqlite_plugin_src "${_candidate}")
+                                break()
+                            endif()
+                        endforeach()
+
+                        if(_qt_sqlite_plugin_src)
+                            set(_qt_sqlite_plugin_dst_dir "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/PlugIns/sqldrivers")
+                            set(_qt_sqlite_plugin_dst "${_qt_sqlite_plugin_dst_dir}/libqsqlite.dylib")
+
+                            add_custom_command(TARGET ${tgt} POST_BUILD
+                                COMMAND ${CMAKE_COMMAND} -E make_directory "${_qt_sqlite_plugin_dst_dir}"
+                                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_qt_sqlite_plugin_src}" "${_qt_sqlite_plugin_dst}"
+                                COMMAND ${CODESIGN_EXECUTABLE} --force --sign - "${_qt_sqlite_plugin_dst}"
+                                COMMENT "Fast Debug: copying sqlite driver plugin for ${tgt}.app"
+                                VERBATIM)
+                        else()
+                            message(WARNING "Fast Debug: Qt sqlite driver plugin not found; database features may be unavailable in ${tgt}.app")
+                        endif()
+                    else()
+                        add_custom_command(TARGET ${tgt} POST_BUILD
+                            COMMAND ${CMAKE_COMMAND}
+                                -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:${tgt}>
+                                -DCODESIGN_EXECUTABLE=${CODESIGN_EXECUTABLE}
+                                -DENTITLEMENTS=${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}
+                                -DSIGN_IDENTITY=${APPLE_SIGN_IDENTITY}
+                                -P ${MACOSX_QTWEBENGINE_CODESIGNER}
+                            COMMENT "Codesigning QtWebEngine helpers for ${tgt}.app"
+                            VERBATIM)
+                    endif()
+
+                    if(IS_DEBUG_BUILD)
+                        add_custom_command(TARGET ${tgt} POST_BUILD
+                            COMMAND /bin/sh -c "bundle=\"$1\"; fwdir=\"$bundle/Contents/Frameworks\"; if [ -d \"$fwdir\" ]; then for f in \"$fwdir\"/*.dylib; do [ -e \"$f\" ] || continue; ${CODESIGN_EXECUTABLE} --force --sign - \"$f\"; done; fi" _ "$<TARGET_BUNDLE_DIR:${tgt}>"
+                            COMMENT "Fast Debug: signing bundled dylibs in ${tgt}.app"
+                            VERBATIM)
+                    endif()
+
+                    # Ad-hoc sign the resulting bundle; avoid --deep in Debug to preserve helper entitlements
+                    if(IS_DEBUG_BUILD)
+                        add_custom_command(TARGET ${tgt} POST_BUILD
+                            COMMAND ${CODESIGN_EXECUTABLE} --force --preserve-metadata=entitlements
+                                    --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                                    --sign "${APPLE_SIGN_IDENTITY}" "$<TARGET_BUNDLE_DIR:${tgt}>"
+                            COMMENT "Ad-hoc codesigning ${tgt}.app with entitlements (Fast Debug)"
+                            VERBATIM)
+                    else()
+                        add_custom_command(TARGET ${tgt} POST_BUILD
+                            COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime --preserve-metadata=entitlements
+                                    --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                                    --sign "${APPLE_SIGN_IDENTITY}" "$<TARGET_BUNDLE_DIR:${tgt}>"
+                            COMMENT "Ad-hoc codesigning ${tgt}.app with entitlements"
+                            VERBATIM)
+                    endif()
                 endif()
             endforeach()
         else()
@@ -704,6 +964,12 @@ if(APPLE AND NOT XCODE)
             /opt/homebrew/opt/qt@6/bin)
     find_program(CODESIGN_EXECUTABLE codesign)
     if(CODESIGN_EXECUTABLE)
+        if(NOT DEFINED IS_DEBUG_BUILD)
+            set(IS_DEBUG_BUILD FALSE)
+            if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+                set(IS_DEBUG_BUILD TRUE)
+            endif()
+        endif()
         add_custom_target(macos_deploy_all)
         if(TARGET CognitivePipelines)
             add_dependencies(macos_deploy_all CognitivePipelines)
@@ -714,11 +980,29 @@ if(APPLE AND NOT XCODE)
                     VERBATIM)
             endif()
             add_custom_command(TARGET macos_deploy_all POST_BUILD
-                COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
-                        --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                        --sign - "$<TARGET_BUNDLE_DIR:CognitivePipelines>"
-                COMMENT "Ad-hoc codesigning CognitivePipelines.app with entitlements"
+                COMMAND ${CMAKE_COMMAND}
+                    -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:CognitivePipelines>
+                    -DCODESIGN_EXECUTABLE=${CODESIGN_EXECUTABLE}
+                    -DENTITLEMENTS=${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}
+                    -DSIGN_IDENTITY=${APPLE_SIGN_IDENTITY}
+                    -P ${MACOSX_QTWEBENGINE_CODESIGNER}
+                COMMENT "Codesigning QtWebEngine helpers for CognitivePipelines.app"
                 VERBATIM)
+            if(IS_DEBUG_BUILD)
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND ${CODESIGN_EXECUTABLE} --force --preserve-metadata=entitlements
+                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                            --sign - "$<TARGET_BUNDLE_DIR:CognitivePipelines>"
+                    COMMENT "Ad-hoc codesigning CognitivePipelines.app with entitlements (Fast Debug macos_deploy_all)"
+                    VERBATIM)
+            else()
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime --preserve-metadata=entitlements
+                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                            --sign - "$<TARGET_BUNDLE_DIR:CognitivePipelines>"
+                    COMMENT "Ad-hoc codesigning CognitivePipelines.app with entitlements"
+                    VERBATIM)
+            endif()
         endif()
         if(TARGET unit_tests)
             add_dependencies(macos_deploy_all unit_tests)
@@ -729,11 +1013,29 @@ if(APPLE AND NOT XCODE)
                     VERBATIM)
             endif()
             add_custom_command(TARGET macos_deploy_all POST_BUILD
-                COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
-                        --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                        --sign - "$<TARGET_BUNDLE_DIR:unit_tests>"
-                COMMENT "Ad-hoc codesigning unit_tests.app with entitlements"
+                COMMAND ${CMAKE_COMMAND}
+                    -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:unit_tests>
+                    -DCODESIGN_EXECUTABLE=${CODESIGN_EXECUTABLE}
+                    -DENTITLEMENTS=${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}
+                    -DSIGN_IDENTITY=${APPLE_SIGN_IDENTITY}
+                    -P ${MACOSX_QTWEBENGINE_CODESIGNER}
+                COMMENT "Codesigning QtWebEngine helpers for unit_tests.app"
                 VERBATIM)
+            if(IS_DEBUG_BUILD)
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND ${CODESIGN_EXECUTABLE} --force --preserve-metadata=entitlements
+                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                            --sign - "$<TARGET_BUNDLE_DIR:unit_tests>"
+                    COMMENT "Ad-hoc codesigning unit_tests.app with entitlements (Fast Debug macos_deploy_all)"
+                    VERBATIM)
+            else()
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime --preserve-metadata=entitlements
+                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                            --sign - "$<TARGET_BUNDLE_DIR:unit_tests>"
+                    COMMENT "Ad-hoc codesigning unit_tests.app with entitlements"
+                    VERBATIM)
+            endif()
         endif()
         if(TARGET integration_tests)
             add_dependencies(macos_deploy_all integration_tests)
@@ -744,11 +1046,29 @@ if(APPLE AND NOT XCODE)
                     VERBATIM)
             endif()
             add_custom_command(TARGET macos_deploy_all POST_BUILD
-                COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
-                        --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                        --sign - "$<TARGET_BUNDLE_DIR:integration_tests>"
-                COMMENT "Ad-hoc codesigning integration_tests.app with entitlements"
+                COMMAND ${CMAKE_COMMAND}
+                    -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:integration_tests>
+                    -DCODESIGN_EXECUTABLE=${CODESIGN_EXECUTABLE}
+                    -DENTITLEMENTS=${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}
+                    -DSIGN_IDENTITY=${APPLE_SIGN_IDENTITY}
+                    -P ${MACOSX_QTWEBENGINE_CODESIGNER}
+                COMMENT "Codesigning QtWebEngine helpers for integration_tests.app"
                 VERBATIM)
+            if(IS_DEBUG_BUILD)
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND ${CODESIGN_EXECUTABLE} --force --preserve-metadata=entitlements
+                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                            --sign - "$<TARGET_BUNDLE_DIR:integration_tests>"
+                    COMMENT "Ad-hoc codesigning integration_tests.app with entitlements (Fast Debug macos_deploy_all)"
+                    VERBATIM)
+            else()
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime --preserve-metadata=entitlements
+                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
+                            --sign - "$<TARGET_BUNDLE_DIR:integration_tests>"
+                    COMMENT "Ad-hoc codesigning integration_tests.app with entitlements"
+                    VERBATIM)
+            endif()
         endif()
     else()
         message(WARNING "codesign tool not found; macOS entitlements will not be applied by macos_deploy_all.")

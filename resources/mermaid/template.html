@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Mermaid Renderer</title>
+    <script src="mermaid.min.js"></script>
+</head>
+<body>
+    <div id="mermaid-container" class="mermaid"></div>
+    <script>
+        // Initialize without auto-run; rendering is triggered explicitly from C++.
+        mermaid.initialize({ startOnLoad: false });
+        window.__mermaidInitialized = true;
+    </script>
+</body>
+</html>
