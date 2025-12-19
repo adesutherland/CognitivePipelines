@@ -44,6 +44,10 @@ public:
         bool ok {false};
         QString error;
         QString detail;
+        bool clamped {false};
+        double requestedScale {1.0};
+        double effectiveScale {1.0};
+        double devicePixelRatio {1.0};
     };
 
     static MermaidRenderService& instance();
@@ -51,6 +55,13 @@ public:
     // Compute the effective scale and viewport size for a render request without
     // invoking WebEngine, to allow preflight checks and testing.
     static RenderSizing planRenderSizing(double svgWidth, double svgHeight, double scaleFactor, double devicePixelRatio = 1.0);
+
+    static QString formatClampDetail(double requestedScale,
+                                     double effectiveScale,
+                                     const QString& reason,
+                                     int viewWidth,
+                                     int viewHeight,
+                                     double devicePixelRatio);
 
     RenderResult renderMermaid(const QString& mermaidCode, const QString& outputPath, double scaleFactor = 1.0);
 

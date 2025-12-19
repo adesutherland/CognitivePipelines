@@ -109,3 +109,31 @@ TEST(MermaidRenderSizingTest, ClampsWithHighDevicePixelRatio)
     EXPECT_GT(sizing.viewWidth, 0);
     EXPECT_LE(sizing.viewWidth, 8192);
 }
+
+TEST(MermaidRenderSizingTest, ClampedDetailMentionsScaleAndDpr)
+{
+    const auto sizing = MermaidRenderService::planRenderSizing(12000.0, 12000.0, 3.5, 2.0);
+    ASSERT_TRUE(sizing.clamped);
+    ASSERT_FALSE(sizing.detail.isEmpty());
+    EXPECT_NE(sizing.detail.indexOf(QStringLiteral("3.50")), -1);
+    EXPECT_NE(sizing.detail.indexOf(QStringLiteral("dpr 2.00")), -1);
+}
+
+TEST(MermaidRenderSizingTest, ClampsWhenTileBudgetExceededWithoutDimensionClamp)
+{
+    // Sized to avoid dimension clamp but exceed tile memory budget at high DPR
+    const auto sizing = MermaidRenderService::planRenderSizing(2600.0, 2600.0, 3.0, 2.0);
+    EXPECT_TRUE(sizing.clamped);
+    EXPECT_TRUE(sizing.error.isEmpty());
+    EXPECT_LT(sizing.effectiveScale, 3.0);
+    EXPECT_GT(sizing.effectiveScale, 0.5);
+}
+
+TEST(MermaidRenderDetailTest, FormatsClampDetailInOrder)
+{
+    const QString msg = MermaidRenderService::formatClampDetail(4.0, 1.77, QStringLiteral("tile memory"), 2408, 3347, 2.0);
+    EXPECT_NE(msg.indexOf(QStringLiteral("Scale 4.00 clamped to 1.77")), -1);
+    EXPECT_NE(msg.indexOf(QStringLiteral("tile memory")), -1);
+    EXPECT_NE(msg.indexOf(QStringLiteral("render size 2408x3347")), -1);
+    EXPECT_NE(msg.indexOf(QStringLiteral("dpr 2.00")), -1);
+}

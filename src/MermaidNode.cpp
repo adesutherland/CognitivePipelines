@@ -28,6 +28,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QDebug>
 #include <QMetaObject>
 #include <QStandardPaths>
 #include <QUuid>
@@ -139,6 +140,12 @@ TokenList MermaidNode::execute(const TokenList& incomingTokens)
         output.insert(QStringLiteral("__error"), err);
     } else {
         output.insert(outputPinId, fileInfo.absoluteFilePath());
+        if (!renderResult.detail.isEmpty()) {
+            output.insert(QStringLiteral("__detail"), renderResult.detail);
+        }
+        if (renderResult.clamped && !renderResult.detail.isEmpty()) {
+            output.insert(QStringLiteral("__warning"), renderResult.detail);
+        }
     }
 
     m_lastCode = code;

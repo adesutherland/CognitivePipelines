@@ -31,17 +31,21 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImageReader>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QMetaObject>
 #include <QPixmap>
 #include <QStandardPaths>
 #include <QThread>
 #include <QTimer>
 #include <QUrl>
+#include <QUrlQuery>
 #include <QVariant>
 #include <QWebEngineLoadingInfo>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
 #include <QWebEngineView>
+#include <QUuid>
 #include <algorithm>
 #include <cmath>
 
@@ -52,6 +56,8 @@ constexpr int kPadding = 32;
 constexpr int kMaxDimension = 16384; // conservative cap to avoid texture/pixmap limits
 constexpr double kMinScale = 0.1;
 constexpr double kMinClampScale = 0.01; // below this, fail fast instead of attempting a huge render
+constexpr int kTileMemoryBudgetMb = 512; // soft tile memory budget to avoid Chromium tile truncation
+constexpr int kTargetAllocationLimitMb = 1024; // raise allocation cap to tolerate large but bounded renders
 
 QString normalizeCachePath(const QString& path) {
     const QFileInfo info(path);
@@ -61,6 +67,22 @@ QString normalizeCachePath(const QString& path) {
         return info.dir().absolutePath();
     }
     return path;
+}
+
+QString formatClampDetail(double requestedScale,
+                          double effectiveScale,
+                          const QString& reason,
+                          int viewWidth,
+                          int viewHeight,
+                          double devicePixelRatio)
+{
+    return QStringLiteral("Scale %1 clamped to %2 for %3 limit; render size %4x%5 (dpr %6)")
+        .arg(requestedScale, 0, 'f', 2)
+        .arg(effectiveScale, 0, 'f', 2)
+        .arg(reason)
+        .arg(viewWidth)
+        .arg(viewHeight)
+        .arg(devicePixelRatio, 0, 'f', 2);
 }
 } // namespace
 
@@ -155,6 +177,7 @@ MermaidRenderService::RenderSizing MermaidRenderService::planRenderSizing(double
 
     const double requestedWidthPixels = requestedWidth * dpr;
     const double requestedHeightPixels = requestedHeight * dpr;
+    const double requestedBytes = requestedWidthPixels * requestedHeightPixels * 4.0; // RGBA
 
     double clampScale = 1.0;
 
@@ -164,11 +187,17 @@ MermaidRenderService::RenderSizing MermaidRenderService::planRenderSizing(double
         clampScale = std::min(clampScale, dimScale);
     }
 
+    // Tile memory budget clamp to avoid Chromium tile manager failures
+    const qint64 tileBudgetBytes = static_cast<qint64>(kTileMemoryBudgetMb) * 1024 * 1024;
+    if (tileBudgetBytes > 0 && requestedBytes > static_cast<double>(tileBudgetBytes)) {
+        const double tileScale = std::sqrt(static_cast<double>(tileBudgetBytes) / requestedBytes);
+        clampScale = std::min(clampScale, tileScale);
+    }
+
     // Memory-based clamp using QImageReader allocation limit (in MB)
     const int allocLimitMb = QImageReader::allocationLimit();
     const qint64 maxBytes = allocLimitMb > 0 ? static_cast<qint64>(allocLimitMb) * 1024 * 1024 : 0;
     if (maxBytes > 0) {
-        const double requestedBytes = requestedWidthPixels * requestedHeightPixels * 4.0; // RGBA
         if (requestedBytes > static_cast<double>(maxBytes)) {
             const double byteScale = std::sqrt(static_cast<double>(maxBytes) / requestedBytes);
             clampScale = std::min(clampScale, byteScale);
@@ -197,7 +226,7 @@ MermaidRenderService::RenderSizing MermaidRenderService::planRenderSizing(double
                      || sizing.viewWidth < static_cast<int>(std::ceil(requestedWidth))
                      || sizing.viewHeight < static_cast<int>(std::ceil(requestedHeight));
     if (sizing.clamped) {
-        sizing.detail = QStringLiteral("Scale %.2f clamped to %.2f; render size %1x%2 (dpr %.2f)")
+        sizing.detail = QStringLiteral("Scale %1 clamped to %2; render size %3x%4 (dpr %5)")
                             .arg(scaleFactor, 0, 'f', 2)
                             .arg(sizing.effectiveScale, 0, 'f', 2)
                             .arg(sizing.viewWidth)
@@ -208,6 +237,16 @@ MermaidRenderService::RenderSizing MermaidRenderService::planRenderSizing(double
     return sizing;
 }
 
+QString MermaidRenderService::formatClampDetail(double requestedScale,
+                                                double effectiveScale,
+                                                const QString& reason,
+                                                int viewWidth,
+                                                int viewHeight,
+                                                double devicePixelRatio)
+{
+    return ::formatClampDetail(requestedScale, effectiveScale, reason, viewWidth, viewHeight, devicePixelRatio);
+}
+
 void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const QString& outputPath, double scaleFactor, RenderResult* result) {
     if (!result) {
         qWarning() << "MermaidRenderService::renderOnMainThread called with null result pointer";
@@ -215,8 +254,20 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     }
 
     *result = RenderResult{};
+    result->requestedScale = scaleFactor;
+    result->effectiveScale = scaleFactor;
     if (scaleFactor < 0.1) {
         scaleFactor = 0.1;
+    }
+
+    // Increase the global image allocation limit so large-but-bounded renders can be read back
+    // (still subject to explicit clamping checks below).
+    static bool allocationLimitRaised = false;
+    if (!allocationLimitRaised) {
+        const int currentLimit = QImageReader::allocationLimit();
+        const int targetLimit = std::max(currentLimit, kTargetAllocationLimitMb);
+        QImageReader::setAllocationLimit(targetLimit);
+        allocationLimitRaised = true;
     }
 
     ensureProfileInitialized();
@@ -267,7 +318,8 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         templateHtml.prepend(inlineScriptTag);
     }
 
-    const QString codePath = outputDir.filePath(QStringLiteral("mermaid_input.mmd"));
+    const QString runNonce = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const QString codePath = outputDir.filePath(QStringLiteral("mermaid_input_%1.mmd").arg(runNonce));
     {
         QFile codeFile(codePath);
         if (codeFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
@@ -283,13 +335,15 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         }
     }
 
-    const QString artifactPath = outputDir.filePath(QStringLiteral("mermaid_debug.html"));
+    const QString artifactPath = outputDir.filePath(QStringLiteral("mermaid_debug_%1.html").arg(runNonce));
 
     QWebEngineView view;
     view.setAttribute(Qt::WA_DontShowOnScreen, true);
     auto* page = view.page();
 
-    const QString inlineInputPath = QUrl::fromLocalFile(codePath).toString(QUrl::FullyEncoded).replace(QStringLiteral("'"), QStringLiteral("\\'"));
+    QUrl inputUrl = QUrl::fromLocalFile(codePath);
+    inputUrl.setQuery(runNonce);
+    const QString inlineInputPath = inputUrl.toString(QUrl::FullyEncoded).replace(QStringLiteral("'"), QStringLiteral("\\'"));
 
     const QString fullHtml = templateHtml + QStringLiteral(R"(
 <!-- Injected by MermaidRenderService -->
@@ -332,7 +386,8 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         loop.quit();
     });
 
-    const QUrl artifactUrl = QUrl::fromLocalFile(artifactPath);
+    QUrl artifactUrl = QUrl::fromLocalFile(artifactPath);
+    artifactUrl.setQuery(runNonce);
     view.load(artifactUrl);
     loop.exec();
 
@@ -363,7 +418,11 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         "      container.innerHTML = renderResult && renderResult.svg ? renderResult.svg : '';"
         "      const svg = container.querySelector('svg');"
         "      const bbox = svg && svg.getBBox ? svg.getBBox() : null;"
-        "      window.__mermaidRenderResult = { ok: !!svg, error: svg ? null : 'no svg generated', width: bbox ? bbox.width : null, height: bbox ? bbox.height : null, svgPresent: !!svg, codeLength: code.length, ...meta };"
+        "      const rect = svg && svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;"
+        "      const width = Math.max(bbox ? bbox.width : 0, rect ? rect.width : 0);"
+        "      const height = Math.max(bbox ? bbox.height : 0, rect ? rect.height : 0);"
+        "      if (!width || !height) { return fail('mermaid produced zero-sized svg'); }"
+        "      window.__mermaidRenderResult = { ok: !!svg, error: svg ? null : 'no svg generated', width: width, height: height, bboxWidth: bbox ? bbox.width : null, bboxHeight: bbox ? bbox.height : null, rectWidth: rect ? rect.width : null, rectHeight: rect ? rect.height : null, svgPresent: !!svg, codeLength: code.length, ...meta };"
         "      return window.__mermaidRenderResult.ok ? 'render-succeeded' : 'render-no-svg';"
         "    } catch (e) { return fail('JS Exception: ' + (e ? (e.message || e.toString()) : 'Unknown error')); }"
         "  };"
@@ -419,18 +478,39 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
 
     const double svgWidth = renderResult.value(QStringLiteral("width")).toDouble();
     const double svgHeight = renderResult.value(QStringLiteral("height")).toDouble();
+    const double bboxWidth = renderResult.value(QStringLiteral("bboxWidth")).toDouble();
+    const double bboxHeight = renderResult.value(QStringLiteral("bboxHeight")).toDouble();
+    const double rectWidth = renderResult.value(QStringLiteral("rectWidth")).toDouble();
+    const double rectHeight = renderResult.value(QStringLiteral("rectHeight")).toDouble();
 
-    const qreal dpr = view.devicePixelRatio();
-    const RenderSizing sizing = planRenderSizing(svgWidth, svgHeight, scaleFactor, dpr);
+    if (svgWidth <= 0.0 || svgHeight <= 0.0) {
+        result->error = QStringLiteral("Mermaid render returned zero size (bbox %1x%2, rect %3x%4)")
+                            .arg(bboxWidth, 0, 'f', 2)
+                            .arg(bboxHeight, 0, 'f', 2)
+                            .arg(rectWidth, 0, 'f', 2)
+                            .arg(rectHeight, 0, 'f', 2);
+        return;
+    }
+
+    const qreal viewDpr = view.devicePixelRatioF();
+    const qreal screenDpr = qApp && qApp->primaryScreen() ? qApp->primaryScreen()->devicePixelRatio() : 1.0;
+    const qreal dpr = std::max(viewDpr, screenDpr);
+    result->devicePixelRatio = dpr;
+
+    RenderSizing sizing = planRenderSizing(svgWidth, svgHeight, scaleFactor, dpr);
     if (!sizing.error.isEmpty()) {
         result->error = sizing.error;
         return;
     }
 
+    result->clamped = sizing.clamped;
+    result->effectiveScale = sizing.effectiveScale;
+
+    QStringList detailParts;
     if (sizing.clamped && sizing.detail.isEmpty()) {
-        result->detail = QStringLiteral("Scale adjusted due to size limits.");
+        detailParts << QStringLiteral("Scale adjusted due to size limits.");
     } else if (sizing.clamped) {
-        result->detail = sizing.detail;
+        detailParts << sizing.detail;
     }
 
     page->setZoomFactor(sizing.effectiveScale);
@@ -442,11 +522,127 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     QTimer::singleShot(waitMs, &waitLoop, &QEventLoop::quit);
     waitLoop.exec();
 
-    const QPixmap shot = view.grab();
+    const auto grabAndEstimate = [&view](QPixmap& pix, qint64& pixelWidth, qint64& pixelHeight, qint64& estimatedBytes, qreal& pixDpr) {
+        pix = view.grab();
+        if (pix.isNull()) return false;
+        pixDpr = pix.devicePixelRatio();
+        pixelWidth = static_cast<qint64>(std::ceil(static_cast<double>(pix.width()) * pixDpr));
+        pixelHeight = static_cast<qint64>(std::ceil(static_cast<double>(pix.height()) * pixDpr));
+        estimatedBytes = pixelWidth * pixelHeight * 4; // RGBA
+        return true;
+    };
+
+    QPixmap shot;
+    qint64 shotPixelWidth = 0;
+    qint64 shotPixelHeight = 0;
+    qint64 estimatedBytes = 0;
+    qreal shotDpr = dpr;
+
+    if (!grabAndEstimate(shot, shotPixelWidth, shotPixelHeight, estimatedBytes, shotDpr)) {
+        result->error = QStringLiteral("Failed to capture Mermaid image (empty pixmap)");
+        return;
+    }
+
+    // If the actual grab DPR is higher than our sizing DPR, recompute sizing before enforcing limits.
+    if (shotDpr > dpr + 1e-3) {
+        sizing = planRenderSizing(svgWidth, svgHeight, sizing.effectiveScale, shotDpr);
+        result->clamped = result->clamped || sizing.clamped;
+        result->effectiveScale = sizing.effectiveScale;
+        page->setZoomFactor(sizing.effectiveScale);
+        view.resize(sizing.viewWidth, sizing.viewHeight);
+
+        QEventLoop retryWait;
+        const int retryWaitMs = (sizing.viewWidth > 8000 || sizing.viewHeight > 8000) ? 400 : 200;
+        QTimer::singleShot(retryWaitMs, &retryWait, &QEventLoop::quit);
+        retryWait.exec();
+
+        if (!grabAndEstimate(shot, shotPixelWidth, shotPixelHeight, estimatedBytes, shotDpr)) {
+            result->error = QStringLiteral("Failed to capture Mermaid image after DPR rescale");
+            return;
+        }
+    }
+
     if (shot.isNull()) {
         result->error = QStringLiteral("Failed to capture Mermaid image (empty pixmap)");
         return;
     }
+
+    const qint64 tileMaxBytes = static_cast<qint64>(kTileMemoryBudgetMb) * 1024 * 1024;
+    const qint64 allocMaxBytes = static_cast<qint64>(QImageReader::allocationLimit()) * 1024 * 1024;
+
+    auto downscaleForLimit = [&](qint64 byteLimit, const QString& label) -> bool {
+        if (byteLimit <= 0 || estimatedBytes <= byteLimit) {
+            return true;
+        }
+
+        const double byteClamp = std::sqrt(static_cast<double>(byteLimit) / static_cast<double>(estimatedBytes));
+        const double targetScale = sizing.effectiveScale * byteClamp * 0.98; // small buffer below limit
+
+        if (targetScale < kMinClampScale) {
+            result->error = QStringLiteral("Render size %1x%2 at dpr %3 exceeds %4 limit (%5 MB); requested scale %6, applied %7")
+                                .arg(shotPixelWidth)
+                                .arg(shotPixelHeight)
+                                .arg(shotDpr, 0, 'f', 2)
+                                .arg(label)
+                                .arg(byteLimit / (1024 * 1024))
+                                .arg(scaleFactor, 0, 'f', 2)
+                                .arg(sizing.effectiveScale, 0, 'f', 2);
+            return false;
+        }
+
+        const RenderSizing retrySizing = planRenderSizing(svgWidth, svgHeight, targetScale, shotDpr);
+        if (!retrySizing.error.isEmpty()) {
+            result->error = retrySizing.error;
+            return false;
+        }
+
+        sizing = retrySizing;
+        result->clamped = true;
+        result->effectiveScale = retrySizing.effectiveScale;
+        detailParts << MermaidRenderService::formatClampDetail(scaleFactor,
+                                                               retrySizing.effectiveScale,
+                                                               label,
+                                                               retrySizing.viewWidth,
+                                                               retrySizing.viewHeight,
+                                                               shotDpr);
+
+        page->setZoomFactor(retrySizing.effectiveScale);
+        view.resize(retrySizing.viewWidth, retrySizing.viewHeight);
+
+        QEventLoop retryLoop;
+        const int retryWaitMs = (retrySizing.viewWidth > 8000 || retrySizing.viewHeight > 8000) ? 400 : 200;
+        QTimer::singleShot(retryWaitMs, &retryLoop, &QEventLoop::quit);
+        retryLoop.exec();
+
+        if (!grabAndEstimate(shot, shotPixelWidth, shotPixelHeight, estimatedBytes, shotDpr)) {
+            result->error = QStringLiteral("Failed to capture Mermaid image after downscaling for %1 limit").arg(label);
+            return false;
+        }
+
+        if (estimatedBytes > byteLimit) {
+            result->error = QStringLiteral("Render size %1x%2 at dpr %3 still exceeds %4 limit (%5 MB) after clamping; requested scale %6, applied %7")
+                                .arg(shotPixelWidth)
+                                .arg(shotPixelHeight)
+                                .arg(shotDpr, 0, 'f', 2)
+                                .arg(label)
+                                .arg(byteLimit / (1024 * 1024))
+                                .arg(scaleFactor, 0, 'f', 2)
+                                .arg(retrySizing.effectiveScale, 0, 'f', 2);
+            return false;
+        }
+
+        return true;
+    };
+
+    if (!downscaleForLimit(tileMaxBytes, QStringLiteral("tile memory"))) {
+        return;
+    }
+
+    if (!downscaleForLimit(allocMaxBytes, QStringLiteral("allocation"))) {
+        return;
+    }
+
+    result->devicePixelRatio = shotDpr;
 
     const bool saved = shot.save(outputPath);
     if (!saved) {
@@ -454,15 +650,15 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         return;
     }
 
-    const QString summary = QStringLiteral("Rendered %1x%2 (zoom %3)")
+    const QString summary = QStringLiteral("Rendered %1x%2 (requested scale %3, applied %4, dpr %5)")
                                 .arg(sizing.viewWidth)
                                 .arg(sizing.viewHeight)
-                                .arg(sizing.effectiveScale, 0, 'f', 2);
-    if (!result->detail.isEmpty()) {
-        result->detail.append(QStringLiteral("; ")).append(summary);
-    } else {
-        result->detail = summary;
-    }
+                                .arg(scaleFactor, 0, 'f', 2)
+                                .arg(result->effectiveScale, 0, 'f', 2)
+                                .arg(result->devicePixelRatio, 0, 'f', 2);
+
+    detailParts << summary;
+    result->detail = detailParts.join(QStringLiteral("; "));
 
     result->ok = true;
 }

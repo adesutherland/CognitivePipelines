@@ -67,7 +67,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # Dependencies resolved from the system (no FetchContent)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql Pdf WebEngineWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql Pdf WebChannel WebEngineWidgets)
 find_package(Boost 1.70 REQUIRED)
 find_package(cpr REQUIRED)
 find_package(GTest REQUIRED)
