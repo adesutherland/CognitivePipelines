@@ -129,6 +129,16 @@ TEST(MermaidRenderSizingTest, ClampsWhenTileBudgetExceededWithoutDimensionClamp)
     EXPECT_GT(sizing.effectiveScale, 0.5);
 }
 
+TEST(MermaidRenderSizingTest, ClampsScaleAboveThreeAtHighDpr)
+{
+    // Regression: large diagrams at high scale should clamp before rendering to avoid tile truncation
+    const auto sizing = MermaidRenderService::planRenderSizing(1400.0, 1200.0, 3.5, 2.0);
+    EXPECT_TRUE(sizing.clamped);
+    EXPECT_TRUE(sizing.error.isEmpty());
+    EXPECT_LT(sizing.effectiveScale, 3.5);
+    EXPECT_GT(sizing.effectiveScale, 0.5);
+}
+
 TEST(MermaidRenderDetailTest, FormatsClampDetailInOrder)
 {
     const QString msg = MermaidRenderService::formatClampDetail(4.0, 1.77, QStringLiteral("tile memory"), 2408, 3347, 2.0);

@@ -56,7 +56,7 @@ constexpr int kPadding = 32;
 constexpr int kMaxDimension = 16384; // conservative cap to avoid texture/pixmap limits
 constexpr double kMinScale = 0.1;
 constexpr double kMinClampScale = 0.01; // below this, fail fast instead of attempting a huge render
-constexpr int kTileMemoryBudgetMb = 512; // soft tile memory budget to avoid Chromium tile truncation
+constexpr int kTileMemoryBudgetMb = 256; // soft tile memory budget to avoid Chromium tile truncation
 constexpr int kTargetAllocationLimitMb = 1024; // raise allocation cap to tolerate large but bounded renders
 
 QString normalizeCachePath(const QString& path) {

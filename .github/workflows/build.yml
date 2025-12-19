@@ -56,7 +56,7 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ matrix.qt-version }}
-          modules: 'qtpdf qtwebengine qtwebchannel'
+          modules: 'qtpdf qtwebengine qtwebchannel qtpositioning'
           cache: true
 
       - name: Set macOS architecture variables
