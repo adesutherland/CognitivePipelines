@@ -142,6 +142,11 @@ AboutDialog::AboutDialog(QWidget* parent)
         "version 3. Under the LGPL, you have the right to use, modify, and distribute\n"
         "this application. The Qt libraries remain under the LGPL, and any modifications\n"
         "to Qt itself must be made available under the same license.\n"
+        "\n"
+        "MermaidJS\n"
+        "Copyright (c) 2014-2025 Knut Sveidqvist\n"
+        "Licensed under the MIT License.\n"
+        "https://mermaid.js.org/\n"
     );
 
     licenseEdit->setPlainText(licenseText);

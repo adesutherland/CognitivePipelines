@@ -92,5 +92,8 @@ Notes:
 - Ninja on Unix; MSVC/Visual Studio on Windows
 - Release build target: CognitivePipelines
 
+## Third-Party Libraries
+- MermaidJS (MIT License): https://github.com/mermaid-js/mermaid
+
 ## License
 MIT License. See LICENSE for details.

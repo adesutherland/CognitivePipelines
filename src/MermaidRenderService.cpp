@@ -32,6 +32,7 @@
 #include <QFileInfo>
 #include <QImageReader>
 #include <QGuiApplication>
+#include <QElapsedTimer>
 #include <QScreen>
 #include <QMetaObject>
 #include <QPixmap>
@@ -318,6 +319,18 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         templateHtml.prepend(inlineScriptTag);
     }
 
+    const QString enforcedCss = QStringLiteral(
+        "<style>"
+        "html, body { margin: 0; padding: 0; overflow: hidden !important; }"
+        "#mermaid-container { display: block; margin: 0; padding: 0; }"
+        "</style>");
+    const QString headCloseTag = QStringLiteral("</head>");
+    if (templateHtml.contains(headCloseTag, Qt::CaseInsensitive)) {
+        templateHtml.replace(headCloseTag, enforcedCss + headCloseTag, Qt::CaseInsensitive);
+    } else {
+        templateHtml.prepend(enforcedCss);
+    }
+
     const QString runNonce = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const QString codePath = outputDir.filePath(QStringLiteral("mermaid_input_%1.mmd").arg(runNonce));
     {
@@ -336,6 +349,7 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     }
 
     const QString artifactPath = outputDir.filePath(QStringLiteral("mermaid_debug_%1.html").arg(runNonce));
+    const QString logPrefix = QStringLiteral("[MermaidRender %1]").arg(runNonce);
 
     QWebEngineView view;
     view.setAttribute(Qt::WA_DontShowOnScreen, true);
@@ -348,6 +362,7 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     const QString fullHtml = templateHtml + QStringLiteral(R"(
 <!-- Injected by MermaidRenderService -->
 <script>window.__mermaidInputPath='%1';</script>
+<!-- Instrumentation note: initial HTML written before render; a post-render snapshot will overwrite this file. -->
 )")
                                          .arg(inlineInputPath);
 
@@ -421,8 +436,25 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         "      const rect = svg && svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;"
         "      const width = Math.max(bbox ? bbox.width : 0, rect ? rect.width : 0);"
         "      const height = Math.max(bbox ? bbox.height : 0, rect ? rect.height : 0);"
+        "      const docEl = document.documentElement;"
+        "      const body = document.body;"
+        "      const bodyStyle = body && window.getComputedStyle ? window.getComputedStyle(body) : null;"
+        "      const metrics = {"
+        "        htmlScrollWidth: docEl ? docEl.scrollWidth : null,"
+        "        htmlScrollHeight: docEl ? docEl.scrollHeight : null,"
+        "        htmlClientWidth: docEl ? docEl.clientWidth : null,"
+        "        htmlClientHeight: docEl ? docEl.clientHeight : null,"
+        "        bodyScrollWidth: body ? body.scrollWidth : null,"
+        "        bodyScrollHeight: body ? body.scrollHeight : null,"
+        "        bodyClientWidth: body ? body.clientWidth : null,"
+        "        bodyClientHeight: body ? body.clientHeight : null,"
+        "        bodyMarginLeft: bodyStyle ? bodyStyle.marginLeft : null,"
+        "        bodyMarginRight: bodyStyle ? bodyStyle.marginRight : null,"
+        "        bodyOverflowX: bodyStyle ? bodyStyle.overflowX : null,"
+        "        bodyOverflowY: bodyStyle ? bodyStyle.overflowY : null"
+        "      };"
         "      if (!width || !height) { return fail('mermaid produced zero-sized svg'); }"
-        "      window.__mermaidRenderResult = { ok: !!svg, error: svg ? null : 'no svg generated', width: width, height: height, bboxWidth: bbox ? bbox.width : null, bboxHeight: bbox ? bbox.height : null, rectWidth: rect ? rect.width : null, rectHeight: rect ? rect.height : null, svgPresent: !!svg, codeLength: code.length, ...meta };"
+        "      window.__mermaidRenderResult = { ok: !!svg, error: svg ? null : 'no svg generated', width: width, height: height, bboxWidth: bbox ? bbox.width : null, bboxHeight: bbox ? bbox.height : null, rectWidth: rect ? rect.width : null, rectHeight: rect ? rect.height : null, svgPresent: !!svg, codeLength: code.length, ...metrics, ...meta };"
         "      return window.__mermaidRenderResult.ok ? 'render-succeeded' : 'render-no-svg';"
         "    } catch (e) { return fail('JS Exception: ' + (e ? (e.message || e.toString()) : 'Unknown error')); }"
         "  };"
@@ -497,6 +529,31 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     const qreal dpr = std::max(viewDpr, screenDpr);
     result->devicePixelRatio = dpr;
 
+    QString postRenderHtml;
+    {
+        QEventLoop htmlLoop;
+        QTimer htmlTimeout;
+        htmlTimeout.setSingleShot(true);
+        htmlTimeout.setInterval(2000);
+        QObject::connect(&htmlTimeout, &QTimer::timeout, &htmlLoop, &QEventLoop::quit);
+        page->toHtml([&postRenderHtml, &htmlLoop](const QString& html) {
+            postRenderHtml = html;
+            htmlLoop.quit();
+        });
+        htmlTimeout.start();
+        htmlLoop.exec();
+    }
+
+    if (!postRenderHtml.isEmpty()) {
+        QFile artifactFile(artifactPath);
+        if (artifactFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+            artifactFile.write(postRenderHtml.toUtf8());
+            artifactFile.close();
+        } else {
+            qWarning() << logPrefix << "Failed to write post-render artifact" << artifactPath << artifactFile.errorString();
+        }
+    }
+
     RenderSizing sizing = planRenderSizing(svgWidth, svgHeight, scaleFactor, dpr);
     if (!sizing.error.isEmpty()) {
         result->error = sizing.error;
@@ -513,14 +570,112 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         detailParts << sizing.detail;
     }
 
+    const auto waitForResize = [&view, page](int targetWidth, int targetHeight) -> bool {
+        if (targetWidth <= 0 || targetHeight <= 0) {
+            return false;
+        }
+
+        QEventLoop waitLoop;
+        QTimer pollTimer;
+        QTimer timeoutTimer;
+        bool matched = false;
+        QElapsedTimer logClock;
+        logClock.start();
+        int lastJsWidth = -1;
+        int lastJsHeight = -1;
+        double lastJsDpr = -1.0;
+
+        pollTimer.setSingleShot(false);
+        pollTimer.setInterval(50);
+        timeoutTimer.setSingleShot(true);
+        timeoutTimer.setInterval(2000);
+
+        const auto check = [&]() {
+            const int viewWidth = view.width();
+            const int viewHeight = view.height();
+            if (viewWidth <= 0 || viewHeight <= 0) {
+                return;
+            }
+
+            static const QString script = QStringLiteral("(() => [window.innerWidth, window.innerHeight, window.devicePixelRatio])()");
+            page->runJavaScript(script, [&, viewWidth, viewHeight](const QVariant& value) {
+                const QVariantList dims = value.toList();
+                if (dims.size() >= 2) {
+                    const int jsWidth = dims.at(0).toInt();
+                    const int jsHeight = dims.at(1).toInt();
+                    const double jsDpr = dims.size() >= 3 ? dims.at(2).toDouble() : -1.0;
+                    lastJsWidth = jsWidth;
+                    lastJsHeight = jsHeight;
+                    lastJsDpr = jsDpr;
+
+                    const qreal zoomFactor = page->zoomFactor();
+                    if (zoomFactor <= 0.0) {
+                        return;
+                    }
+
+                    const int expectedJsWidth = qRound(static_cast<qreal>(viewWidth) / zoomFactor);
+                    const int expectedJsHeight = qRound(static_cast<qreal>(viewHeight) / zoomFactor);
+                    const auto withinTolerance = [](int a, int b) {
+                        return std::abs(a - b) <= 2;
+                    };
+
+                    if (withinTolerance(jsWidth, expectedJsWidth) && withinTolerance(jsHeight, expectedJsHeight)) {
+                        matched = true;
+                        timeoutTimer.stop();
+                        waitLoop.quit();
+                        return;
+                    }
+
+                    if (logClock.elapsed() >= 1000) {
+                        qWarning() << "Waiting for resize: JS says" << jsWidth << "x" << jsHeight
+                                   << "DPR" << jsDpr
+                                   << "Expected" << expectedJsWidth << "x" << expectedJsHeight
+                                   << "(View:" << viewWidth << "x" << viewHeight << "Zoom:" << zoomFactor << ")";
+                        logClock.restart();
+                    }
+                }
+            });
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+        };
+
+        QObject::connect(&pollTimer, &QTimer::timeout, &waitLoop, check);
+        QObject::connect(&timeoutTimer, &QTimer::timeout, &waitLoop, &QEventLoop::quit);
+
+        timeoutTimer.start();
+        pollTimer.start();
+        check();
+        waitLoop.exec();
+        pollTimer.stop();
+        timeoutTimer.stop();
+
+        if (!matched) {
+            if (lastJsWidth >= 0 && lastJsHeight >= 0) {
+                qWarning() << "Timed out waiting for viewport resize after clamping. Last JS" << lastJsWidth << "x" << lastJsHeight
+                           << "DPR" << lastJsDpr
+                           << "View" << view.width() << "x" << view.height()
+                           << "Zoom" << page->zoomFactor();
+            }
+            return false;
+        }
+
+        QElapsedTimer settleClock;
+        settleClock.start();
+        while (settleClock.elapsed() < 100) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+            QThread::msleep(5);
+        }
+
+        return true;
+    };
+
     page->setZoomFactor(sizing.effectiveScale);
     view.resize(sizing.viewWidth, sizing.viewHeight);
     view.show();
 
-    QEventLoop waitLoop;
-    const int waitMs = (sizing.viewWidth > 8000 || sizing.viewHeight > 8000) ? 400 : 200;
-    QTimer::singleShot(waitMs, &waitLoop, &QEventLoop::quit);
-    waitLoop.exec();
+    if (!waitForResize(sizing.viewWidth, sizing.viewHeight)) {
+        result->error = QStringLiteral("Timed out waiting for viewport resize");
+        return;
+    }
 
     const auto grabAndEstimate = [&view](QPixmap& pix, qint64& pixelWidth, qint64& pixelHeight, qint64& estimatedBytes, qreal& pixDpr) {
         pix = view.grab();
@@ -551,10 +706,10 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         page->setZoomFactor(sizing.effectiveScale);
         view.resize(sizing.viewWidth, sizing.viewHeight);
 
-        QEventLoop retryWait;
-        const int retryWaitMs = (sizing.viewWidth > 8000 || sizing.viewHeight > 8000) ? 400 : 200;
-        QTimer::singleShot(retryWaitMs, &retryWait, &QEventLoop::quit);
-        retryWait.exec();
+        if (!waitForResize(sizing.viewWidth, sizing.viewHeight)) {
+            result->error = QStringLiteral("Timed out waiting for viewport resize after DPR rescale");
+            return;
+        }
 
         if (!grabAndEstimate(shot, shotPixelWidth, shotPixelHeight, estimatedBytes, shotDpr)) {
             result->error = QStringLiteral("Failed to capture Mermaid image after DPR rescale");
@@ -609,10 +764,10 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         page->setZoomFactor(retrySizing.effectiveScale);
         view.resize(retrySizing.viewWidth, retrySizing.viewHeight);
 
-        QEventLoop retryLoop;
-        const int retryWaitMs = (retrySizing.viewWidth > 8000 || retrySizing.viewHeight > 8000) ? 400 : 200;
-        QTimer::singleShot(retryWaitMs, &retryLoop, &QEventLoop::quit);
-        retryLoop.exec();
+        if (!waitForResize(retrySizing.viewWidth, retrySizing.viewHeight)) {
+            result->error = QStringLiteral("Timed out waiting for viewport resize after clamping");
+            return false;
+        }
 
         if (!grabAndEstimate(shot, shotPixelWidth, shotPixelHeight, estimatedBytes, shotDpr)) {
             result->error = QStringLiteral("Failed to capture Mermaid image after downscaling for %1 limit").arg(label);

@@ -308,6 +308,7 @@ if(ENABLE_TESTING)
             tests/test_logging.cpp
             tests/test_image_node.cpp
             tests/test_mermaid_node.cpp
+            tests/test_mermaid_repro.cpp
             tests/test_pdf_node.cpp
             tests/test_rag_foundation.cpp
             tests/test_document_loader.cpp
