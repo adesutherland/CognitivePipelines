@@ -4,6 +4,7 @@
 #include <QEventLoop>
 #include <QTimer>
 
+#include "test_app.h"
 #include "NodeGraphModel.h"
 #include "ExecutionEngine.h"
 #include "ToolNodeDelegate.h"
@@ -16,13 +17,7 @@ using namespace QtNodes;
 
 static QApplication* ensureApp()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        int argc = 0;
-        char* argv[] = { nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 static bool runEngineAndWait(ExecutionEngine& engine, DataPacket& finalOut, int timeoutMs = 60000)

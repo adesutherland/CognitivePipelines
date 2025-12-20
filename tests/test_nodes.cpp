@@ -6,6 +6,7 @@
 #include <QDebug>
 #include <QtGlobal>
 #include <cstdio>
+#include "test_app.h"
 
 #include "TextInputNode.h"
 #include "TextInputPropertiesWidget.h"
@@ -48,7 +49,6 @@ static void qtTestMessageHandler(QtMsgType type, const QMessageLogContext& ctx, 
 // Ensure a QApplication exists for widget-based property editors used by nodes.
 static QApplication* ensureApp()
 {
-    static QApplication* app = nullptr;
     static bool handlerInstalled = false;
     if (!handlerInstalled) {
         // Direct all Qt logs to stderr and request console logging explicitly
@@ -56,13 +56,7 @@ static QApplication* ensureApp()
         qputenv("QT_LOGGING_TO_CONSOLE", QByteArray("1"));
         handlerInstalled = true;
     }
-    if (!app) {
-        static int argc = 1;
-        static char appName[] = "unit_tests";
-        static char* argv[] = { appName, nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 TEST(TextInputNodeTest, EmitsConfiguredTextViaExecute)

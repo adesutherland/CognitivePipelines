@@ -30,6 +30,7 @@
 #include <QMutexLocker>
 #include <QFile>
 #include <QDir>
+#include <QCoreApplication>
 #include <QStandardPaths>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -86,21 +87,34 @@ QList<ILLMBackend*> LLMProviderRegistry::allBackends() {
 
 QString LLMProviderRegistry::getCredential(const QString& providerId) {
     // First, check for environment variables (preferred for CI/CD and testing)
+    const auto readEnv = [](std::initializer_list<const char*> names) -> QString {
+        for (const char* name : names) {
+            const QByteArray val = qgetenv(name);
+            if (!val.isEmpty()) {
+                return QString::fromUtf8(val);
+            }
+        }
+        return {};
+    };
+
     if (providerId.compare(QStringLiteral("openai"), Qt::CaseInsensitive) == 0) {
-        const QByteArray envKey = qgetenv("OPENAI_API_KEY");
+        const QString envKey = readEnv({ "OPENAI_API_KEY" });
         if (!envKey.isEmpty()) {
-            return QString::fromUtf8(envKey);
+            return envKey;
         }
     } else if (providerId.compare(QStringLiteral("google"), Qt::CaseInsensitive) == 0) {
-        const QByteArray envKey = qgetenv("GOOGLE_API_KEY");
+        const QString envKey = readEnv({ "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY", "GOOGLE_AI_API_KEY" });
         if (!envKey.isEmpty()) {
-            return QString::fromUtf8(envKey);
+            return envKey;
         }
     }
 
     // Fall back to accounts.json file
     // Reuse the same path logic as LLMConnector::defaultAccountsFilePath()
-    // to ensure consistency across the application.
+    // to ensure consistency across the application, but also scan a few
+    // likely locations used in CI (current working dir / repo root).
+
+    QStringList candidatePaths;
 
 #if defined(Q_OS_MAC)
     const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation); // Application Support
@@ -108,46 +122,55 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
     const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
 #endif
 
-    if (baseDir.isEmpty()) {
+    if (!baseDir.isEmpty()) {
+        candidatePaths << QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/accounts.json"));
+    } else {
         qWarning() << "LLMProviderRegistry::getCredential: Base directory unavailable (QStandardPaths returned empty).";
-        return {};
     }
 
-    const QString path = QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/accounts.json"));
+    candidatePaths << QDir::current().filePath(QStringLiteral("accounts.json"));
 
-    QFile f(path);
-    if (!f.exists()) {
-        return {};
+    const QString appDir = QCoreApplication::applicationDirPath();
+    if (!appDir.isEmpty()) {
+        const QDir dir(appDir);
+        candidatePaths << dir.filePath(QStringLiteral("accounts.json"));
+        candidatePaths << dir.filePath(QStringLiteral("../accounts.json"));
+        candidatePaths << dir.filePath(QStringLiteral("../../accounts.json"));
     }
 
-    if (!f.open(QIODevice::ReadOnly)) {
-        qWarning() << "LLMProviderRegistry::getCredential: Failed to open" << path << ":" << f.errorString();
-        return {};
-    }
+    candidatePaths.removeDuplicates();
 
-    const QByteArray data = f.readAll();
-    f.close();
+    for (const QString& path : candidatePaths) {
+        QFile f(path);
+        if (!f.exists()) {
+            continue;
+        }
 
-    const QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (!doc.isObject()) {
-        qWarning() << "LLMProviderRegistry::getCredential: Invalid JSON in" << path;
-        return {};
-    }
+        if (!f.open(QIODevice::ReadOnly)) {
+            qWarning() << "LLMProviderRegistry::getCredential: Failed to open" << path << ":" << f.errorString();
+            continue;
+        }
 
-    const QJsonObject root = doc.object();
+        const QByteArray data = f.readAll();
+        f.close();
 
-    // Search for the provider in the accounts array
-    // Format: { "accounts": [ { "name": "openai", "api_key": "..." }, ... ] }
-    const QJsonArray accounts = root.value(QStringLiteral("accounts")).toArray();
-    for (const QJsonValue& v : accounts) {
-        const QJsonObject acc = v.toObject();
-        const QString name = acc.value(QStringLiteral("name")).toString();
-        
-        // Match the provider ID (case-insensitive for flexibility)
-        if (name.compare(providerId, Qt::CaseInsensitive) == 0) {
-            const QString key = acc.value(QStringLiteral("api_key")).toString();
-            if (!key.isEmpty()) {
-                return key;
+        const QJsonDocument doc = QJsonDocument::fromJson(data);
+        if (!doc.isObject()) {
+            qWarning() << "LLMProviderRegistry::getCredential: Invalid JSON in" << path;
+            continue;
+        }
+
+        const QJsonObject root = doc.object();
+        const QJsonArray accounts = root.value(QStringLiteral("accounts")).toArray();
+        for (const QJsonValue& v : accounts) {
+            const QJsonObject acc = v.toObject();
+            const QString name = acc.value(QStringLiteral("name")).toString();
+
+            if (name.compare(providerId, Qt::CaseInsensitive) == 0) {
+                const QString key = acc.value(QStringLiteral("api_key")).toString();
+                if (!key.isEmpty()) {
+                    return key;
+                }
             }
         }
     }

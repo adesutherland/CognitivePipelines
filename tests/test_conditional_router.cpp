@@ -7,20 +7,14 @@
 #include <QApplication>
 #include <QTest>
 
+#include "test_app.h"
 #include "ConditionalRouterNode.h"
 #include "ConditionalRouterPropertiesWidget.h"
 
 // Local helper to ensure a QApplication exists (mirrors pattern in test_nodes.cpp)
 static QApplication* ensureAppForConditionalRouter()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        static int argc = 1;
-        static char appName[] = "unit_tests";
-        static char* argv[] = { appName, nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 class ConditionalRouterNodeTest : public ::testing::Test {

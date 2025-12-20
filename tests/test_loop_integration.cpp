@@ -8,8 +8,8 @@
 #include <QApplication>
 #include <QEventLoop>
 #include <QTimer>
-#include <QElapsedTimer>
 
+#include "test_app.h"
 #include "NodeGraphModel.h"
 #include "ExecutionEngine.h"
 #include "ToolNodeDelegate.h"
@@ -21,13 +21,7 @@ using namespace QtNodes;
 
 static QApplication* ensureApp_loop_integration()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        int argc = 0;
-        char* argv[] = { nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 TEST(LoopIntegrationTest, DownstreamExecutesThreeTimesInOrder)

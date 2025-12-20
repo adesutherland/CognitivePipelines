@@ -14,6 +14,7 @@
 
 #include <QtNodes/internal/Definitions.hpp>
 
+#include "test_app.h"
 #include "NodeGraphModel.h"
 #include "ExecutionEngine.h"
 #include "ToolNodeDelegate.h"
@@ -27,13 +28,7 @@ namespace {
 
 static QApplication* ensureApp_RouterExecution()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        int argc = 0;
-        char* argv[] = { nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 // Helper: run engine and wait up to timeout

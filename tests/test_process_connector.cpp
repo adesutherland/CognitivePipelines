@@ -5,20 +5,14 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QLineEdit>
 
+#include "test_app.h"
 #include "ProcessConnector.h"
 #include "ProcessConnectorPropertiesWidget.h"
 
 // Local ensureApp for this test file to create a minimal QApplication when needed
 static QApplication* ensureApp()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        static int argc = 1;
-        static char appName[] = "unit_tests";
-        static char* argv[] = { appName, nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 TEST(ProcessConnectorTest, ExecutesCommandAndHandlesIO)

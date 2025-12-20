@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <QSet>
 
+#include "test_app.h"
 #include "NodeGraphModel.h"
 #include "ExecutionEngine.h"
 #include "ToolNodeDelegate.h"
@@ -16,13 +17,7 @@ using namespace QtNodes;
 
 static QApplication* ensureApp2()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        int argc = 0;
-        char* argv[] = { nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 TEST(ExecutionControlTest, SelectiveEntryExecution)

@@ -14,20 +14,19 @@
 #include <QDir>
 #include <QFile>
 
+#include "test_app.h"
 #include "UniversalLLMNode.h"
 #include "core/LLMProviderRegistry.h"
 
 // Minimal app helper in case QObject machinery needs it
 static QApplication* ensureApp()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        static int argc = 1;
-        static char appName[] = "unit_tests";
-        static char* argv[] = { appName, nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
+}
+
+static QString resolveApiKey(const QString& providerId)
+{
+    return LLMProviderRegistry::instance().getCredential(providerId);
 }
 
 // Helper function to create a dummy 10x10 red PNG image for testing
@@ -63,12 +62,8 @@ TEST(UniversalLLMNodeTest, OpenAIIntegration)
 {
     ensureApp();
 
-    // Try to get API key from environment or accounts.json
-    QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
-    if (apiKey.isEmpty()) {
-        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
-    }
-    
+    const QString apiKey = resolveApiKey(QStringLiteral("openai"));
+
     if (apiKey.isEmpty()) {
         GTEST_SKIP() << "No OpenAI API key provided. Set OPENAI_API_KEY environment variable or add to accounts.json.";
     }
@@ -123,14 +118,10 @@ TEST(UniversalLLMNodeTest, GoogleIntegration)
 {
     ensureApp();
 
-    // Try to get API key from environment or accounts.json
-    QString apiKey = qEnvironmentVariable("GOOGLE_API_KEY");
+    const QString apiKey = resolveApiKey(QStringLiteral("google"));
+
     if (apiKey.isEmpty()) {
-        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("google"));
-    }
-    
-    if (apiKey.isEmpty()) {
-        GTEST_SKIP() << "No Google API key provided. Set GOOGLE_API_KEY environment variable or add to accounts.json.";
+        GTEST_SKIP() << "No Google API key provided. Set GOOGLE_API_KEY/GOOGLE_GENAI_API_KEY (or add accounts.json).";
     }
 
     auto* node = new UniversalLLMNode();
@@ -191,12 +182,8 @@ TEST(UniversalLLMNodeTest, OpenAIVisionIntegration)
 {
     ensureApp();
 
-    // Try to get API key from environment or accounts.json
-    QString apiKey = qEnvironmentVariable("OPENAI_API_KEY");
-    if (apiKey.isEmpty()) {
-        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
-    }
-    
+    const QString apiKey = resolveApiKey(QStringLiteral("openai"));
+
     if (apiKey.isEmpty()) {
         GTEST_SKIP() << "No OpenAI API key provided. Set OPENAI_API_KEY environment variable or add to accounts.json.";
     }
@@ -259,14 +246,10 @@ TEST(UniversalLLMNodeTest, GoogleVisionIntegration)
 {
     ensureApp();
 
-    // Try to get API key from environment or accounts.json
-    QString apiKey = qEnvironmentVariable("GOOGLE_API_KEY");
+    const QString apiKey = resolveApiKey(QStringLiteral("google"));
+
     if (apiKey.isEmpty()) {
-        apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("google"));
-    }
-    
-    if (apiKey.isEmpty()) {
-        GTEST_SKIP() << "No Google API key provided. Set GOOGLE_API_KEY environment variable or add to accounts.json.";
+        GTEST_SKIP() << "No Google API key provided. Set GOOGLE_API_KEY/GOOGLE_GENAI_API_KEY (or add accounts.json).";
     }
 
     // Create a dummy image file

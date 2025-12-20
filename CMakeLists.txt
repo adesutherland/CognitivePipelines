@@ -298,6 +298,8 @@ if(ENABLE_TESTING)
             ${INCLUDE_DIR}/IToolConnector.h
             ${INCLUDE_DIR}/CommonDataTypes.h
             # Test sources
+            tests/test_app_init.cpp
+            tests/test_main.cpp
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
             tests/test_text_output_fanout.cpp
@@ -439,7 +441,7 @@ if(ENABLE_TESTING)
     )
     target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(unit_tests PRIVATE
-            GTest::gtest_main # Use vcpkg target
+            GTest::gtest # Use vcpkg target
             cpr::cpr
             Qt6::Core
             Qt6::Widgets

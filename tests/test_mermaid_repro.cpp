@@ -8,18 +8,12 @@
 #include <QTest>
 #include <QStringList>
 
+#include "test_app.h"
 #include "MermaidRenderService.h"
 
 static QApplication* ensureAppForMermaid()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        static int argc = 1;
-        static char appName[] = "unit_tests";
-        static char* argv[] = { appName, nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 class TestMermaidRepro : public QObject {

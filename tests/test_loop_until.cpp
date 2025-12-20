@@ -6,18 +6,12 @@
 
 #include <QApplication>
 
+#include "test_app.h"
 #include "LoopUntilNode.h"
 
 static QApplication* ensureAppForLoopUntil()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        static int argc = 1;
-        static char appName[] = "unit_tests";
-        static char* argv[] = { appName, nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 class LoopUntilNodeTest : public ::testing::Test {

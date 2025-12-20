@@ -4,6 +4,7 @@
 #include <QTemporaryFile>
 #include <QtNodes/internal/Definitions.hpp>
 
+#include "test_app.h"
 #include "NodeGraphModel.h"
 #include "PdfToImageNode.h"
 #include "ToolNodeDelegate.h"
@@ -13,14 +14,7 @@ using namespace QtNodes;
 // Ensure a QApplication exists for widget-based operations
 static QApplication* ensureApp()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        static int argc = 1;
-        static char appName[] = "unit_tests";
-        static char* argv[] = { appName, nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 TEST(PdfToImageNodeTest, Registration)

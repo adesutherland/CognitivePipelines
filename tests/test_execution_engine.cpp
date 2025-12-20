@@ -7,6 +7,7 @@
 #include <QVariant>
 #include <QMutexLocker>
 
+#include "test_app.h"
 #include <QtNodes/internal/Definitions.hpp>
 
 #include "NodeGraphModel.h"
@@ -20,13 +21,7 @@ using namespace QtNodes;
 // Ensure a QApplication exists for any queued connections and potential widgets
 static QApplication* ensureApp()
 {
-    static QApplication* app = nullptr;
-    if (!app) {
-        int argc = 0;
-        char* argv[] = { nullptr };
-        app = new QApplication(argc, argv);
-    }
-    return app;
+    return sharedTestApp();
 }
 
 class ExecutionEngineSignatureFriend {
