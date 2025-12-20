@@ -166,14 +166,6 @@ TEST(TextChunkerTest, MultipleConsecutiveSeparators) {
     
     ASSERT_GT(chunks.size(), 1);
 
-    // Debug: print chunks to aid diagnosing duplication regressions.
-    // (Output is harmless in passing runs and useful when investigating
-    // failing behaviour.)
-    for (int i = 0; i < chunks.size(); ++i) {
-        std::cout << "[NoDuplicationInChunks] chunk[" << i << "]: '"
-                  << chunks[i].toStdString() << "'\n";
-    }
-    
     // Verify chunks respect size limit
     for (const QString& chunk : chunks) {
         EXPECT_LE(chunk.length(), chunkSize);
@@ -301,13 +293,6 @@ TEST(TextChunkerTest, CodePython_SplitsAtDefBoundaries) {
     QStringList chunks = TextChunker::split(text, chunkSize, chunkOverlap, FileType::CodePython);
     
     ASSERT_GT(chunks.size(), 1);
-    
-    // Debug: print chunks to inspect Python def-boundary behaviour when
-    // diagnosing regressions.
-    for (int i = 0; i < chunks.size(); ++i) {
-        std::cout << "[CodePython_SplitsAtDefBoundaries] chunk[" << i << "]: '"
-                  << chunks[i].toStdString() << "'\n";
-    }
     
     // Verify that splits happen at function boundaries (def)
     // The chunker should prefer splitting before "def" rather than mid-function

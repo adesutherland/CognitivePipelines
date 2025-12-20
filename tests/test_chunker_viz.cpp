@@ -15,6 +15,7 @@
 #include "core/TextChunker.h"
 #include "core/DocumentLoader.h"
 
+#ifdef VERBOSE_TESTS
 // Helper to print a visible separator line
 void printSeparator(const std::string& title) {
     std::cerr << "\n================================================================================\n";
@@ -32,6 +33,10 @@ void printChunk(int index, const QString& content) {
     std::cerr << utf8 << "\n";
     std::cerr << "----------------------------------------\n";
 }
+#else
+inline void printSeparator(const std::string&) {}
+inline void printChunk(int, const QString&) {}
+#endif
 
 class ChunkerVizTest : public ::testing::Test {
 protected:
@@ -60,7 +65,6 @@ TEST_F(ChunkerVizTest, VisualizeBowieCorpus) {
     
     if (!dir.exists()) {
         // Only fail if we absolutely can't find the data
-        std::cerr << "[WARN] Could not find tests/test_data directory. Skipping visualization.\n";
         return;
     }
 
@@ -69,7 +73,6 @@ TEST_F(ChunkerVizTest, VisualizeBowieCorpus) {
         QFileInfo info(fullPath);
         
         if (!info.exists()) {
-            std::cerr << "[WARN] File not found: " << filename.toStdString() << "\n";
             continue;
         }
 
@@ -82,7 +85,8 @@ TEST_F(ChunkerVizTest, VisualizeBowieCorpus) {
         // 3. Chunk
         QStringList chunks = TextChunker::split(content, CHUNK_SIZE, CHUNK_OVERLAP, type);
 
-        // 4. Visualize
+        // 4. Visualize (only when VERBOSE_TESTS is enabled)
+#ifdef VERBOSE_TESTS
         printSeparator("FILE: " + filename.toStdString());
         std::cerr << "Detected Type: " << static_cast<int>(type) << "\n";
         std::cerr << "Total Length:  " << content.length() << " chars\n";
@@ -91,5 +95,6 @@ TEST_F(ChunkerVizTest, VisualizeBowieCorpus) {
         for (int i = 0; i < chunks.size(); ++i) {
             printChunk(i, chunks[i]);
         }
+#endif
     }
 }
