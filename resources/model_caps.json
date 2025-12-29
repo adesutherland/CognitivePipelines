@@ -1,0 +1,174 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "openai-defaults",
+      "backend": "openai",
+      "priority": 1,
+      "notes": "Default properties for OpenAI backend consumed by RAG logic.",
+      "rag_default_embedding": "text-embedding-3-small",
+      "pattern": "^.*$(?!.*tts|.*audio|.*realtime|.*search|.*transcribe|.*embedding|.*whisper|.*dall-e|.*moderation|.*codex|.*nano)",
+      "role_mode": "system"
+    },
+    {
+      "id": "openai-gpt5.2-pro-assistant",
+      "backend": "openai",
+      "priority": 200,
+      "notes": "Pivot gpt-5.2-pro to Assistant family endpoints to avoid /v1/completions 404",
+      "pattern": "^gpt-5\\.2-pro$",
+      "endpoint": "assistant",
+      "role_mode": "system",
+      "parameter_constraints": {
+        "omitTemperature": true,
+        "tokenFieldName": "max_tokens"
+      }
+    },
+    {
+      "id": "openai-gpt5-current",
+      "backend": "openai",
+      "priority": 100,
+      "notes": "GPT‑5 general (current + previous minor); exclude non‑chat variants.",
+      "pattern": "^gpt-5(?:\\.(?:2|1))?(?:$|[-.].*)(?!.*tts|.*audio|.*realtime|.*search|.*transcribe|.*embedding|.*whisper|.*dall-e|.*moderation|.*codex|.*nano)",
+      "role_mode": "system",
+      "capabilities": ["vision"],
+      "parameter_constraints": {
+        "temperature": { "default": 0.7 },
+        "omitTemperature": true,
+        "tokenFieldName": "max_completion_tokens"
+      }
+    },
+    {
+      "id": "openai-gpt4o-best-general",
+      "backend": "openai",
+      "priority": 90,
+      "notes": "Best GPT‑4 non‑thinking line (4o + 4o‑mini); exclude non‑chat variants.",
+      "pattern": "^gpt-4o(?:-mini)?(?:$|[-.].*)(?!.*tts|.*audio|.*realtime|.*search|.*transcribe)",
+      "role_mode": "system",
+      "capabilities": ["vision"],
+      "parameter_constraints": { "temperature": { "default": 0.7 } }
+    },
+    {
+      "id": "openai-o4-mini-deep-research",
+      "backend": "openai",
+      "priority": 95,
+      "notes": "Deep research variant of o4-mini.",
+      "pattern": "^o4-mini-deep-research(?:$|[-.].*)",
+      "role_mode": "developer",
+      "capabilities": ["reasoning"],
+      "parameter_constraints": {
+        "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
+        "reasoning_effort": { "default": "medium", "allowed": ["low", "medium", "high"] },
+        "omitTemperature": true,
+        "tokenFieldName": "max_completion_tokens"
+      }
+    },
+    {
+      "id": "openai-o4-mini-reasoning",
+      "backend": "openai",
+      "priority": 85,
+      "notes": "o4-mini (reasoning).",
+      "pattern": "^o4-mini(?:$|[-.].*)(?!.*audio|.*realtime|.*search|.*transcribe)",
+      "role_mode": "developer",
+      "capabilities": ["reasoning"],
+      "parameter_constraints": {
+        "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
+        "omitTemperature": true,
+        "tokenFieldName": "max_completion_tokens"
+      }
+    },
+    {
+      "id": "openai-o1-flagship",
+      "priority": 80,
+      "pattern": "^o1(?:-pro)?$",
+      "backend": "openai",
+      "role_mode": "developer",
+      "capabilities": ["reasoning", "vision"],
+      "parameter_constraints": {
+         "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
+         "reasoning_effort": { "default": "medium", "allowed": ["low", "medium", "high"] },
+         "omitTemperature": true,
+         "tokenFieldName": "max_completion_tokens"
+      }
+    },
+    {
+      "id": "openai-o1-mini",
+      "priority": 80,
+      "pattern": "^o1-(?:mini|preview)(?:$|[-.].*)",
+      "backend": "openai",
+      "role_mode": "developer",
+      "capabilities": ["reasoning"],
+      "parameter_constraints": {
+         "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
+         "omitTemperature": true,
+         "tokenFieldName": "max_completion_tokens"
+      }
+    },
+    {
+      "id": "openai-o3",
+      "priority": 80,
+      "pattern": "^o3(?:$|[-.].*)(?!.*audio|.*realtime|.*search|.*transcribe)",
+      "backend": "openai",
+      "role_mode": "developer",
+      "capabilities": ["reasoning"],
+      "parameter_constraints": {
+        "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
+        "omitTemperature": true,
+        "tokenFieldName": "max_completion_tokens"
+      }
+    },
+    {
+      "id": "google-gemini-3",
+      "pattern": "^gemini-3-(pro|pro-image|flash)(?:$|[-.].*)",
+      "backend": "google",
+      "role_mode": "system_instruction",
+      "priority": 110,
+      "capabilities": ["vision"],
+      "parameter_constraints": {
+        "temperature": { "default": 0.7, "max": 2.0 }
+      }
+    },
+    {
+      "id": "google-gemini-3-preview",
+      "pattern": "^gemini-3-(pro|pro-image|flash)-preview(?:$|[-.].*)",
+      "backend": "google",
+      "role_mode": "system_instruction",
+      "priority": 105,
+      "capabilities": ["vision"],
+      "parameter_constraints": {
+        "temperature": { "default": 0.7, "max": 2.0 }
+      }
+    },
+    {
+      "id": "google-gemini-2.5",
+      "pattern": "^gemini-2\\.5-(pro|flash)(?:$|[-.].*)",
+      "backend": "google",
+      "role_mode": "system_instruction",
+      "priority": 100,
+      "capabilities": ["vision"],
+      "parameter_constraints": {
+        "temperature": { "default": 0.7, "max": 2.0 }
+      }
+    },
+    {
+      "id": "google-gemini-2.0",
+      "pattern": "^gemini-2\\.0-(pro|flash)(?:$|[-.].*)",
+      "backend": "google",
+      "endpoint": "chat",
+      "role_mode": "system_instruction",
+      "priority": 90,
+      "capabilities": ["vision"],
+      "parameter_constraints": {
+        "temperature": { "default": 0.7, "max": 2.0 }
+      }
+    },
+    {
+      "id": "claude-3-5",
+      "priority": 80,
+      "pattern": "^claude-3-5.*",
+      "backend": "anthropic",
+      "role_mode": "system",
+      "capabilities": ["vision", "reasoning"],
+      "parameter_constraints": { "temperature": { "default": 0.7 } }
+    }
+  ]
+}

@@ -7,6 +7,7 @@
 #include <QEventLoop>
 #include <QTimer>
 #include <QtNodes/internal/Definitions.hpp>
+#include <QLoggingCategory>
 
 #include <stdio.h> // For fprintf, stderr/stdout redirection
 #include <iostream>
@@ -212,15 +213,29 @@ void ciMessageHandler(QtMsgType type, const QMessageLogContext &context, const Q
     fflush(stderr); // Ensure it's written immediately
 }
 
+// Forward declaration from tests/test_matrix.cpp
+int run_provider_matrix_probe(int argc, char** argv);
+
 // Custom main to ensure QApplication is created and logging is captured in CI
 int main(int argc, char** argv)
 {
     redirectStdoutToStderr(); // Route QTest/stdout to stderr
     qInstallMessageHandler(ciMessageHandler); // Install handler before QApplication
 
+    // Silence debug-level logs from our app-specific categories by default to keep CI output clean.
+    // Enable them selectively via QT_LOGGING_RULES when needed.
+    QLoggingCategory::setFilterRules(QStringLiteral("cp.*.debug=false"));
+
     QApplication app(argc, argv);
+    int exitCode = 0;
+
     IntegrationTests tc;
-    return QTest::qExec(&tc, argc, argv);
+    exitCode |= QTest::qExec(&tc, argc, argv);
+
+    // Run the Provider Compatibility Matrix Probe (headless informational)
+    exitCode |= run_provider_matrix_probe(argc, argv);
+
+    return exitCode;
 }
 
 #include "test_integration.moc"

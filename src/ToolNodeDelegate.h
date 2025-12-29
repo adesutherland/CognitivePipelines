@@ -76,6 +76,7 @@ public:
     void setDescription(const QString& desc);
 
 private:
+    void setToolConnector(std::shared_ptr<IToolConnector> connector);
     // Minimal generic NodeData that carries QVariant and a declared type id/name
     class VariantNodeData : public QtNodes::NodeData {
     public:
@@ -88,6 +89,7 @@ private:
     };
 
     void ensureDescriptorCached() const;
+    void rebuildCachedDescriptor(const NodeDescriptor& descriptor) const;
 
     // Helpers to translate between port index and our pin ids
     QString inputPinIdForIndex(QtNodes::PortIndex idx) const;
@@ -99,6 +101,7 @@ public:
 
 private Q_SLOTS:
     void onConnectorInputPinsUpdateRequested(const QStringList& newVariables);
+    void onInputPinsChanged();
 
 private:
     std::shared_ptr<IToolConnector> _connector;
@@ -108,6 +111,8 @@ private:
     mutable NodeDescriptor _descriptor;
     mutable std::vector<QString> _inputOrder;
     mutable std::vector<QString> _outputOrder;
+    QMetaObject::Connection _dynamicPinsConnection;
+    QMetaObject::Connection _capsConnection;
 
     // Runtime IO values
     QMap<QString, QVariant> _inputs;   // keyed by pin id

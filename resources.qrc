@@ -3,5 +3,6 @@
         <file>packaging/macos/CognitivePipelines.icns</file>
         <file>packaging/windows/CognitivePipelines.ico</file>
         <file>packaging/linux/CognitivePipelines.png</file>
+        <file>resources/model_caps.json</file>
     </qresource>
 </RCC>

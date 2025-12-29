@@ -99,6 +99,15 @@ public:
     virtual QStringList availableEmbeddingModels() const = 0;
 
     /**
+     * @brief Asynchronously fetches the displayable list of chat models for this provider.
+     *
+     * Implementations should perform any network I/O and filtering off the UI thread
+     * (e.g., via QtConcurrent::run) and resolve the future with the final, user-visible
+     * list of model identifiers. Implementations may cache results to avoid repeated calls.
+     */
+    virtual QFuture<QStringList> fetchModelList() = 0;
+
+    /**
      * @brief Sends a prompt to the backend and returns the normalized response.
      *
      * This is a synchronous method that should be called from a background thread

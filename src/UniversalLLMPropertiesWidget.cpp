@@ -24,6 +24,7 @@
 #include "UniversalLLMPropertiesWidget.h"
 #include "core/LLMProviderRegistry.h"
 #include "backends/ILLMBackend.h"
+#include "ModelCapsRegistry.h"
 
 #include <QVBoxLayout>
 #include <QLabel>
@@ -32,6 +33,9 @@
 #include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QSignalBlocker>
+#include <QDebug>
+#include <QLoggingCategory>
+#include "logging_categories.h"
 
 UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
     : QWidget(parent)
@@ -114,11 +118,12 @@ UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
     connect(m_providerCombo, qOverload<int>(&QComboBox::currentIndexChanged),
             this, &UniversalLLMPropertiesWidget::onProviderChanged);
     
-    connect(m_modelCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this]() {
-        if (m_modelCombo->currentIndex() >= 0) {
-            emit modelChanged(m_modelCombo->currentData().toString());
-        }
-    });
+    connect(m_modelCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &UniversalLLMPropertiesWidget::onModelChanged);
+
+    // Async model discovery watcher
+    connect(&m_modelFetcher, &QFutureWatcher<QStringList>::finished,
+            this, &UniversalLLMPropertiesWidget::onModelsFetched);
 
     connect(m_systemPromptEdit, &QTextEdit::textChanged, this, [this]() {
         emit systemPromptChanged(m_systemPromptEdit->toPlainText());
@@ -147,34 +152,99 @@ void UniversalLLMPropertiesWidget::onProviderChanged(int index)
     }
 
     const QString providerId = m_providerCombo->itemData(index).toString();
-    
-    // Clear existing models and repopulate
+    // Instrumentation: log provider selection from the UI (debug‑gated)
+    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] UI: providerChanged -> providerId=" << providerId;
+    // Clear existing models and set loading state
     {
         const QSignalBlocker blocker(m_modelCombo);
         m_modelCombo->clear();
+        m_modelCombo->addItem(tr("Fetching..."));
+    }
+    m_modelCombo->setEnabled(false);
 
-        // Get backend and populate models
-        ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId);
-        if (backend) {
-            const QStringList models = backend->availableModels();
-            for (const QString& model : models) {
-                m_modelCombo->addItem(model, model);
+    // Kick off async fetch via backend
+    if (ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId)) {
+        qCDebug(cp_discovery).noquote() << QStringLiteral("Requesting live Model List for Provider [%1]...")
+                                 .arg(backend->name());
+        QFuture<QStringList> fut = backend->fetchModelList();
+        m_modelFetcher.setFuture(fut);
+    }
+
+    // Emit provider changed signal (capabilities will be re-evaluated after models arrive)
+    emit providerChanged(providerId);
+}
+
+void UniversalLLMPropertiesWidget::onModelChanged(int index)
+{
+    if (!m_modelCombo || index < 0) {
+        return;
+    }
+
+    const QString modelId = m_modelCombo->itemData(index).toString();
+    // Instrumentation: log model selection from the UI (debug‑gated)
+    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] UI: modelChanged -> modelId=" << modelId;
+    emit modelChanged(modelId);
+
+    const auto caps = ModelCapsRegistry::instance().resolve(modelId);
+    const bool hasVision = caps.has_value() && caps->hasCapability(ModelCapsTypes::Capability::Vision);
+    const bool hasReasoning = caps.has_value() && caps->hasCapability(ModelCapsTypes::Capability::Reasoning);
+    const bool omitTemp = caps.has_value() && caps->constraints.omitTemperature.value_or(false);
+
+    if (m_temperatureSpinBox) {
+        if (hasReasoning || omitTemp) {
+            m_temperatureSpinBox->setEnabled(false);
+        } else {
+            m_temperatureSpinBox->setEnabled(true);
+        }
+
+        if (caps.has_value() && caps->constraints.temperature.has_value()) {
+            const auto& temp = *caps->constraints.temperature;
+            if (temp.defaultValue.has_value()) {
+                const QSignalBlocker blocker(m_temperatureSpinBox);
+                m_temperatureSpinBox->setValue(*temp.defaultValue);
             }
         }
-        
-        // Set default model to first item if available
+    }
+
+    const QString tempConstraint = QStringLiteral("N/A");
+    const QString logLine = QStringLiteral("UI Enforcement: Selected %1. Vision=%2, Reasoning=%3. Constraints: Temp=[%4]")
+            .arg(modelId,
+                 hasVision ? QStringLiteral("T") : QStringLiteral("F"),
+                 hasReasoning ? QStringLiteral("T") : QStringLiteral("F"),
+                 tempConstraint);
+
+    qCDebug(cp_lifecycle).noquote() << logLine;
+}
+
+void UniversalLLMPropertiesWidget::onModelsFetched()
+{
+    // Obtain latest provider/ backend for potential fallback
+    const QString providerId = m_providerCombo ? m_providerCombo->currentData().toString() : QString();
+    ILLMBackend* backend = providerId.isEmpty() ? nullptr : LLMProviderRegistry::instance().getBackend(providerId);
+
+    QStringList models = m_modelFetcher.result();
+    if (models.isEmpty() && backend) {
+        qWarning().noquote() << QStringLiteral("Async fetch returned empty model list for provider [%1]; falling back to static list")
+                                    .arg(backend->name());
+        models = backend->availableModels();
+    }
+
+    {
+        const QSignalBlocker blocker(m_modelCombo);
+        m_modelCombo->clear();
+        for (const QString& m : models) {
+            m_modelCombo->addItem(m, m);
+        }
         if (m_modelCombo->count() > 0) {
             m_modelCombo->setCurrentIndex(0);
         }
-    } // QSignalBlocker goes out of scope here
+    }
 
-    // Emit provider changed signal
-    emit providerChanged(providerId);
-    
-    // Explicitly emit modelChanged signal with the new default model
-    // This is crucial because QSignalBlocker prevented the automatic signal
+    m_modelCombo->setEnabled(true);
+
+    // Trigger downstream updates for the newly selected model
     if (m_modelCombo->count() > 0 && m_modelCombo->currentIndex() >= 0) {
-        emit modelChanged(m_modelCombo->currentData().toString());
+        onModelChanged(m_modelCombo->currentIndex());
     }
 }
 

@@ -41,6 +41,9 @@ public:
     QStringList availableModels() const override;
     QStringList availableEmbeddingModels() const override;
 
+    // Dynamic discovery API (async)
+    QFuture<QStringList> fetchModelList() override;
+
     LLMResult sendPrompt(
         const QString& apiKey,
         const QString& modelName,

@@ -29,6 +29,7 @@
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
+#include "ModelCaps.h"
 
 /**
  * @brief Universal LLM Node that delegates to backend strategies.
@@ -52,11 +53,18 @@ public:
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 
+    void updateCapabilities(const ModelCapsTypes::ModelCaps& caps);
+
+    double temperature() const { return m_temperature; }
+
     // Constants for pin IDs
     static constexpr const char* kInputSystemId = "system";
     static constexpr const char* kInputPromptId = "prompt";
     static constexpr const char* kInputImageId = "image";
     static constexpr const char* kOutputResponseId = "response";
+
+signals:
+    void inputPinsChanged();
 
 public slots:
     // Slots to receive signals from UniversalLLMPropertiesWidget
@@ -68,6 +76,8 @@ public slots:
     void onMaxTokensChanged(int value);
 
 private:
+    // Helper exposed for this class only; implementation lives in string_utils.h
+    // and is applied at safe choke points.
     // Node state/configuration
     QString m_providerId;      // e.g., "openai", "google"
     QString m_modelId;         // e.g., "gpt-4o-mini", "gemini-pro"
@@ -75,4 +85,6 @@ private:
     QString m_userPrompt;      // Default user prompt from properties
     double m_temperature = 0.7;
     int m_maxTokens = 1024;
+    NodeDescriptor m_descriptor;
+    ModelCapsTypes::ModelCaps m_caps;
 };

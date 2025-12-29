@@ -24,6 +24,8 @@
 #pragma once
 
 #include <QWidget>
+#include <QFutureWatcher>
+#include <QStringList>
 
 class QComboBox;
 class QTextEdit;
@@ -71,6 +73,8 @@ signals:
 
 private slots:
     void onProviderChanged(int index);
+    void onModelChanged(int index);
+    void onModelsFetched();
 
 private:
     QComboBox* m_providerCombo {nullptr};
@@ -79,4 +83,6 @@ private:
     QTextEdit* m_userPromptEdit {nullptr};
     QDoubleSpinBox* m_temperatureSpinBox {nullptr};
     QSpinBox* m_maxTokensSpinBox {nullptr};
+
+    QFutureWatcher<QStringList> m_modelFetcher;
 };

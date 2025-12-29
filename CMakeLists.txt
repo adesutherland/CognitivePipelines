@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.7.1 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.8.3 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -111,6 +111,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/backends/OpenAIBackend.h
     ${SRC_DIR}/backends/GoogleBackend.cpp
     ${SRC_DIR}/backends/GoogleBackend.h
+    ${SRC_DIR}/ModelCaps.cpp
+    ${SRC_DIR}/ModelCaps.h
+    ${SRC_DIR}/ModelCapsRegistry.cpp
+    ${SRC_DIR}/ModelCapsRegistry.h
     ${SRC_DIR}/core/LLMProviderRegistry.cpp
     ${SRC_DIR}/core/LLMProviderRegistry.h
     ${SRC_DIR}/core/DocumentLoader.cpp
@@ -146,6 +150,7 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ImagePropertiesWidget.h
     ${SRC_DIR}/ImagePopupDialog.cpp
     ${SRC_DIR}/ImagePopupDialog.h
+    ${SRC_DIR}/logging_categories.cpp
     ${SRC_DIR}/MermaidNode.cpp
     ${SRC_DIR}/MermaidNode.h
     ${SRC_DIR}/MermaidPropertiesWidget.cpp
@@ -297,6 +302,7 @@ if(ENABLE_TESTING)
             # Core headers
             ${INCLUDE_DIR}/IToolConnector.h
             ${INCLUDE_DIR}/CommonDataTypes.h
+            ${INCLUDE_DIR}/string_utils.h
             # Test sources
             tests/test_app_init.cpp
             tests/test_main.cpp
@@ -327,7 +333,13 @@ if(ENABLE_TESTING)
             tests/test_loop_integration.cpp
             tests/test_execution_control.cpp
             tests/test_loop_until.cpp
+            tests/test_model_caps.cpp
+            tests/test_universal_caps.cpp
+            tests/test_dynamic_discovery.cpp
+            tests/test_model_selection.cpp
+            tests/test_string_utils.cpp
             # Sources required by the unit tests
+            ${SRC_DIR}/logging_categories.cpp
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
             ${SRC_DIR}/NodeGraphModel.cpp
@@ -361,6 +373,7 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/MermaidRenderService.cpp
             ${SRC_DIR}/MermaidRenderService.h
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
             ${SRC_DIR}/PdfToImageNode.cpp
             ${SRC_DIR}/PdfToImageNode.h
             ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
@@ -411,6 +424,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/UniversalLLMNode.h
             ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
             ${SRC_DIR}/UniversalLLMPropertiesWidget.h
+            ${SRC_DIR}/ModelCaps.cpp
+            ${SRC_DIR}/ModelCaps.h
+            ${SRC_DIR}/ModelCapsRegistry.cpp
+            ${SRC_DIR}/ModelCapsRegistry.h
             ${SRC_DIR}/ImageGenNode.cpp
             ${SRC_DIR}/ImageGenNode.h
             ${SRC_DIR}/ImageGenPropertiesWidget.cpp
@@ -468,6 +485,8 @@ if(ENABLE_TESTING)
             ${INCLUDE_DIR}/CommonDataTypes.h
             # Test sources and required implementations
             tests/test_integration.cpp
+            tests/test_matrix.cpp
+            ${SRC_DIR}/logging_categories.cpp
             ${SRC_DIR}/mainwindow.cpp
             ${SRC_DIR}/mainwindow.h
             ${SRC_DIR}/about_dialog.cpp
@@ -482,6 +501,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/UniversalLLMNode.h
             ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
             ${SRC_DIR}/UniversalLLMPropertiesWidget.h
+            ${SRC_DIR}/ModelCaps.cpp
+            ${SRC_DIR}/ModelCaps.h
+            ${SRC_DIR}/ModelCapsRegistry.cpp
+            ${SRC_DIR}/ModelCapsRegistry.h
             ${SRC_DIR}/ImageGenNode.cpp
             ${SRC_DIR}/ImageGenNode.h
             ${SRC_DIR}/ImageGenPropertiesWidget.cpp
@@ -529,6 +552,7 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/MermaidRenderService.cpp
             ${SRC_DIR}/MermaidRenderService.h
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
+            ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
             ${SRC_DIR}/PdfToImageNode.cpp
             ${SRC_DIR}/PdfToImageNode.h
             ${SRC_DIR}/PdfToImagePropertiesWidget.cpp

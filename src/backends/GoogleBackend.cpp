@@ -22,6 +22,8 @@
 // SOFTWARE.
 //
 #include "GoogleBackend.h"
+#include "core/LLMProviderRegistry.h"
+#include "ModelCapsRegistry.h"
 
 #include <cpr/cpr.h>
 #include <QFile>
@@ -29,7 +31,10 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QDebug>
+#include <QLoggingCategory>
+#include "../logging_categories.h"
 #include <QtConcurrent>
+
 
 QString GoogleBackend::id() const {
     return QStringLiteral("google");
@@ -56,6 +61,86 @@ QStringList GoogleBackend::availableEmbeddingModels() const {
     };
 }
 
+QFuture<QStringList> GoogleBackend::fetchModelList()
+{
+    // Network fetch performed on a background thread
+    return QtConcurrent::run([]() -> QStringList {
+        const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("google"));
+        if (apiKey.trimmed().isEmpty()) {
+            qWarning() << "GoogleBackend::fetchModelList: missing API key";
+            return {};
+        }
+
+        try {
+            const std::string url = std::string("https://generativelanguage.googleapis.com/v1beta/models?key=")
+                                    + apiKey.toStdString();
+
+            const auto response = cpr::Get(
+                cpr::Url{url},
+                cpr::Header{{"Accept", "application/json"}},
+                cpr::Timeout{60000}
+            );
+
+            if (response.status_code != 200) {
+                qWarning() << "GoogleBackend::fetchModelList: HTTP" << response.status_code
+                           << "-" << QString::fromStdString(response.error.message);
+                return {};
+            }
+
+            const QByteArray payload = QByteArray::fromStdString(response.text);
+            QJsonParseError parseError;
+            const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
+            if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+                qWarning() << "GoogleBackend::fetchModelList: JSON parse error:" << parseError.errorString();
+                return {};
+            }
+
+            const QJsonObject root = doc.object();
+            const QJsonValue modelsVal = root.value(QStringLiteral("models"));
+            if (!modelsVal.isArray()) {
+                qWarning() << "GoogleBackend::fetchModelList: 'models' array missing";
+                return {};
+            }
+
+            QStringList ids;
+            const QJsonArray modelsArr = modelsVal.toArray();
+            ids.reserve(modelsArr.size());
+            for (const QJsonValue& v : modelsArr) {
+                if (!v.isObject()) continue;
+                const QJsonObject obj = v.toObject();
+                const QJsonValue nameVal = obj.value(QStringLiteral("name"));
+                if (!nameVal.isString()) continue;
+                QString name = nameVal.toString(); // e.g., "models/gemini-pro"
+                const QString prefix = QStringLiteral("models/");
+                if (name.startsWith(prefix)) {
+                    name = name.mid(prefix.size());
+                }
+                if (!name.isEmpty()) {
+                    ids.append(name);
+                }
+            }
+
+            // Apply registry-based filtering for Google, consistent with OpenAI
+            ids.removeDuplicates();
+            QStringList filtered;
+            filtered.reserve(ids.size());
+            for (const QString& id : ids) {
+                if (ModelCapsRegistry::instance().resolve(id, QStringLiteral("google")).has_value()) {
+                    filtered.append(id);
+                }
+            }
+
+            // Deterministic order for UX stability
+            filtered.removeDuplicates();
+            std::sort(filtered.begin(), filtered.end(), [](const QString& a, const QString& b){ return a.localeAwareCompare(b) < 0; });
+            return filtered;
+        } catch (const std::exception& ex) {
+            qWarning() << "GoogleBackend::fetchModelList: exception:" << ex.what();
+            return {};
+        }
+    });
+}
+
 LLMResult GoogleBackend::sendPrompt(
     const QString& apiKey,
     const QString& modelName,
@@ -66,18 +151,35 @@ LLMResult GoogleBackend::sendPrompt(
     const QString& imagePath
 ) {
     LLMResult result;
-    
+
+    // Instrumentation: log the final model ID used for the API request (debug‑gated)
+    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] GoogleBackend::sendPrompt using model=" << modelName;
+
+    qCDebug(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << modelName
+             << ": Role Mode=system (system prompt as first content entry; no developer role), Vision="
+             << (imagePath.trimmed().isEmpty()
+                     ? "disabled (no imagePath provided; no model gating)"
+                     : "enabled via inline_data (imagePath provided; no model gating)");
+
     // Google Generative Language (Gemini) endpoint selection:
-    // Preview models use v1beta, stable models use v1.
+    // Preview models use v1beta; certain families (e.g., early 1.5, 3.x) may require v1beta.
     // API key is passed as a query parameter, not via Authorization header.
     const bool isPreviewModel = modelName.contains(QStringLiteral("preview"), Qt::CaseInsensitive);
-    const std::string apiVersion = isPreviewModel ? "v1beta" : "v1";
+    const bool forceV1beta = modelName.startsWith(QStringLiteral("gemini-1.5-"), Qt::CaseInsensitive)
+                           || modelName.startsWith(QStringLiteral("gemini-3-"), Qt::CaseInsensitive);
+    const std::string apiVersion = (isPreviewModel || forceV1beta) ? "v1beta" : "v1";
     const std::string url = std::string("https://generativelanguage.googleapis.com/")
                             + apiVersion
                             + "/models/"
                             + modelName.toStdString()
                             + ":generateContent?key="
                             + apiKey.toStdString();
+
+    // Resolve model caps for capability-driven filtering and role normalization
+    const auto capsOpt = ModelCapsRegistry::instance().resolve(modelName, QStringLiteral("google"));
+    const ModelCapsTypes::RoleMode roleMode = capsOpt.has_value() ? capsOpt->roleMode : ModelCapsTypes::RoleMode::System;
+    const bool isReasoning = capsOpt.has_value() && capsOpt->hasCapability(ModelCapsTypes::Capability::Reasoning);
+    const bool temperatureSupported = capsOpt.has_value() && capsOpt->constraints.temperature.has_value() && !isReasoning;
 
     // v1 request schema: contents is an array of content objects, each
     // with its own parts array. We send system and user as separate
@@ -88,11 +190,15 @@ LLMResult GoogleBackend::sendPrompt(
     //   ]
     QJsonArray contents;
 
-    if (!systemPrompt.trimmed().isEmpty()) {
-        QJsonObject sysPart;
-        sysPart.insert(QStringLiteral("text"), systemPrompt);
-        QJsonObject sysContent;
-        sysContent.insert(QStringLiteral("parts"), QJsonArray{sysPart});
+    // If RoleMode indicates SystemInstruction, use top-level field instead of a first content entry
+    const bool useSystemInstruction = (roleMode == ModelCapsTypes::RoleMode::SystemInstruction);
+    QJsonObject systemInstructionObj;
+    if (useSystemInstruction && !systemPrompt.trimmed().isEmpty()) {
+        QJsonObject sysPart; sysPart.insert(QStringLiteral("text"), systemPrompt);
+        systemInstructionObj.insert(QStringLiteral("parts"), QJsonArray{sysPart});
+    } else if (!systemPrompt.trimmed().isEmpty()) {
+        QJsonObject sysPart; sysPart.insert(QStringLiteral("text"), systemPrompt);
+        QJsonObject sysContent; sysContent.insert(QStringLiteral("parts"), QJsonArray{sysPart});
         contents.append(sysContent);
     }
 
@@ -155,12 +261,18 @@ LLMResult GoogleBackend::sendPrompt(
     contents.append(userContent);
 
     QJsonObject generationConfig;
-    generationConfig.insert(QStringLiteral("temperature"), temperature);
+    if (temperatureSupported) {
+        generationConfig.insert(QStringLiteral("temperature"), temperature);
+    }
     generationConfig.insert(QStringLiteral("maxOutputTokens"), maxTokens);
 
     QJsonObject root;
     root.insert(QStringLiteral("contents"), contents);
     root.insert(QStringLiteral("generationConfig"), generationConfig);
+    if (!systemInstructionObj.isEmpty()) {
+        // Gemini v1/v1beta supports top-level system_instruction when required
+        root.insert(QStringLiteral("system_instruction"), systemInstructionObj);
+    }
 
     const QByteArray jsonBytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
 

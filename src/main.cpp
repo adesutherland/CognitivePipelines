@@ -25,14 +25,47 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QIcon>
+#include <QDebug>
+#include <QLoggingCategory>
+#include "logging_categories.h"
 #include "mainwindow.h"
+#include "ModelCapsRegistry.h"
 
 int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("CognitivePipelines"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("cognitivepipelines.com"));
     QCoreApplication::setApplicationName(QStringLiteral("CognitivePipelines"));
 
+    // By default, silence debug-level logs for our app categories unless the user
+    // explicitly opts in via QT_LOGGING_RULES. This keeps the main app console clean
+    // while preserving warnings/criticals.
+    if (qEnvironmentVariableIsEmpty("QT_LOGGING_RULES")) {
+        QLoggingCategory::setFilterRules(QStringLiteral(
+            "cp.*.debug=false" // hide qCDebug from all cp.* categories
+        ));
+    }
+
+    // Default: silence our application logging categories unless the user overrides
+    // via QT_LOGGING_RULES. This keeps the main app console clean by default.
+    if (qEnvironmentVariableIsEmpty("QT_LOGGING_RULES")) {
+        QLoggingCategory::setFilterRules(QStringLiteral(
+            "cp.*.debug=false\n"
+            "cp.*.info=false"));
+    }
+
     QApplication app(argc, argv);
+
+    // Silence our categorized logs by default in the main app unless explicitly enabled
+    // via QT_LOGGING_RULES. This keeps normal runs clean while preserving opt-in verbosity.
+    if (qEnvironmentVariableIsEmpty("QT_LOGGING_RULES")) {
+        QLoggingCategory::setFilterRules(QStringLiteral(
+            "cp.*.debug=false\n"
+            "cp.*.info=false\n"
+        ));
+    }
+
+    qCDebug(cp_registry) << "Initializing Model Capabilities Registry...";
+    ModelCapsRegistry::instance().loadFromFile(":/resources/model_caps.json");
 
     // Set application icon (cross-platform)
     // Note: Using PNG for macOS to avoid "skipping unknown tag type" warnings

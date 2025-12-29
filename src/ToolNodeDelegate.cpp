@@ -28,6 +28,7 @@
 
 #include <QJsonObject>
 #include <QSet>
+#include <QMetaObject>
 
 #include "PromptBuilderNode.h"
 #include "NodeInfoWidget.h"
@@ -35,21 +36,8 @@
 using namespace QtNodes;
 
 ToolNodeDelegate::ToolNodeDelegate(std::shared_ptr<IToolConnector> connector)
-    : _connector(std::move(connector))
 {
-    // If the connector is a PromptBuilderNode that can notify about dynamic input pin changes, listen for updates.
-    if (auto* pb = dynamic_cast<PromptBuilderNode*>(_connector.get())) {
-        QObject::connect(pb, &PromptBuilderNode::inputPinsUpdateRequested,
-                         this, &ToolNodeDelegate::onConnectorInputPinsUpdateRequested);
-    }
-
-    // Initialize default dynamic inputs for known dynamic models (e.g., PromptBuilder)
-    if (_connector) {
-        const auto id = _connector->getDescriptor().id;
-        if (id == QStringLiteral("prompt-builder")) {
-            onConnectorInputPinsUpdateRequested(QStringList{ QStringLiteral("input") });
-        }
-    }
+    setToolConnector(std::move(connector));
 }
 
 QString ToolNodeDelegate::name() const
@@ -62,6 +50,46 @@ QString ToolNodeDelegate::caption() const
 {
     ensureDescriptorCached();
     return _descriptor.name;
+}
+
+void ToolNodeDelegate::setToolConnector(std::shared_ptr<IToolConnector> connector)
+{
+    if (_dynamicPinsConnection) {
+        QObject::disconnect(_dynamicPinsConnection);
+    }
+    if (_capsConnection) {
+        QObject::disconnect(_capsConnection);
+    }
+
+    _connector = std::move(connector);
+    _descriptorCached = false;
+    _inputOrder.clear();
+    _outputOrder.clear();
+    _inputs.clear();
+    _outputs.clear();
+
+    if (!_connector) {
+        return;
+    }
+
+    if (auto* pb = dynamic_cast<PromptBuilderNode*>(_connector.get())) {
+        _dynamicPinsConnection = QObject::connect(pb, &PromptBuilderNode::inputPinsUpdateRequested,
+                                                 this, &ToolNodeDelegate::onConnectorInputPinsUpdateRequested);
+
+        const auto id = _connector->getDescriptor().id;
+        if (id == QStringLiteral("prompt-builder")) {
+            onConnectorInputPinsUpdateRequested(QStringList{ QStringLiteral("input") });
+        }
+    }
+
+    if (auto* obj = dynamic_cast<QObject*>(_connector.get())) {
+        const int sigIndex = obj->metaObject()->indexOfSignal(QMetaObject::normalizedSignature("inputPinsChanged()"));
+        if (sigIndex != -1) {
+            _capsConnection = QObject::connect(obj, SIGNAL(inputPinsChanged()), this, SLOT(onInputPinsChanged()));
+        }
+    }
+
+    ensureDescriptorCached();
 }
 
 unsigned int ToolNodeDelegate::nPorts(PortType portType) const
@@ -179,6 +207,62 @@ void ToolNodeDelegate::onConnectorInputPinsUpdateRequested(const QStringList& ne
     emit embeddedWidgetSizeUpdated();
 }
 
+void ToolNodeDelegate::onInputPinsChanged()
+{
+    ensureDescriptorCached();
+
+    if (!_connector) {
+        return;
+    }
+
+    const NodeDescriptor newDescriptor = _connector->getDescriptor();
+    const auto buildOrder = [](const NodeDescriptor& desc) {
+        std::vector<QString> order;
+        for (auto it = desc.inputPins.constBegin(); it != desc.inputPins.constEnd(); ++it) {
+            order.push_back(it.key());
+        }
+        return order;
+    };
+
+    const auto oldOrder = _inputOrder;
+    const auto newOrder = buildOrder(newDescriptor);
+
+    const auto hasId = [](const std::vector<QString>& order, const QString& id) {
+        return std::find(order.begin(), order.end(), id) != order.end();
+    };
+
+    const bool hadImage = hasId(oldOrder, QStringLiteral("image"));
+    const bool hasImageNow = hasId(newOrder, QStringLiteral("image"));
+
+    if (hadImage != hasImageNow) {
+        if (hadImage) {
+            auto itOld = std::find(oldOrder.begin(), oldOrder.end(), QStringLiteral("image"));
+            const PortIndex idx = static_cast<PortIndex>(std::distance(oldOrder.begin(), itOld));
+            emit portsAboutToBeDeleted(PortType::In, idx, idx);
+        } else {
+            auto itNew = std::find(newOrder.begin(), newOrder.end(), QStringLiteral("image"));
+            const PortIndex idx = static_cast<PortIndex>(std::distance(newOrder.begin(), itNew));
+            emit portsAboutToBeInserted(PortType::In, idx, idx);
+        }
+    }
+
+    rebuildCachedDescriptor(newDescriptor);
+
+    if (hadImage && !hasImageNow) {
+        _inputs.remove(QStringLiteral("image"));
+    }
+
+    if (hadImage != hasImageNow) {
+        if (hadImage) {
+            emit portsDeleted();
+        } else {
+            emit portsInserted();
+        }
+    }
+
+    emit embeddedWidgetSizeUpdated();
+}
+
 QWidget *ToolNodeDelegate::embeddedWidget()
 {
     // Lazily create the info widget to display the node description inside the node
@@ -216,15 +300,20 @@ void ToolNodeDelegate::setDescription(const QString& desc)
 void ToolNodeDelegate::ensureDescriptorCached() const
 {
     if (_descriptorCached || !_connector) return;
-    _descriptor = _connector->getDescriptor();
+    rebuildCachedDescriptor(_connector->getDescriptor());
+}
+
+void ToolNodeDelegate::rebuildCachedDescriptor(const NodeDescriptor& descriptor) const
+{
+    _descriptor = descriptor;
 
     _inputOrder.clear();
     _outputOrder.clear();
 
-    // QMap iteration is key-sorted, provides stable order
     for (auto it = _descriptor.inputPins.constBegin(); it != _descriptor.inputPins.constEnd(); ++it) {
         _inputOrder.push_back(it.key());
     }
+
     for (auto it = _descriptor.outputPins.constBegin(); it != _descriptor.outputPins.constEnd(); ++it) {
         _outputOrder.push_back(it.key());
     }

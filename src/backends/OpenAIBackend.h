@@ -24,6 +24,7 @@
 #pragma once
 
 #include "ILLMBackend.h"
+#include <QByteArray>
 
 /**
  * @brief OpenAI backend implementation using the Chat Completions API.
@@ -40,6 +41,9 @@ public:
     QString name() const override;
     QStringList availableModels() const override;
     QStringList availableEmbeddingModels() const override;
+
+    // Dynamic discovery API (async)
+    QFuture<QStringList> fetchModelList() override;
 
     LLMResult sendPrompt(
         const QString& apiKey,
@@ -64,4 +68,8 @@ public:
         const QString& quality,
         const QString& style
     ) override;
+
+protected:
+    // Test seam: allows tests to override the raw JSON fetcher without real network
+    virtual QFuture<QByteArray> fetchRawModelListJson();
 };
