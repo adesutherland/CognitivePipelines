@@ -25,6 +25,7 @@
 
 #include <optional>
 
+#include <QMap>
 #include <QRegularExpression>
 #include <QSet>
 #include <QString>
@@ -48,7 +49,8 @@ enum class EndpointMode {
 enum class RoleMode {
     System,
     Developer,
-    SystemInstruction
+    SystemInstruction,
+    SystemParameter
 };
 Q_ENUM_NS(RoleMode)
 
@@ -89,6 +91,7 @@ struct ModelCaps {
     RoleMode roleMode { RoleMode::System };
     QSet<Capability> capabilities;
     ParameterConstraints constraints {};
+    QMap<QString, QString> customHeaders;
 
     bool hasCapability(Capability c) const;
 };

@@ -62,6 +62,9 @@ std::optional<RoleMode> roleModeFromString(const QString& value)
     if (normalized == QStringLiteral("systeminstruction")) {
         return RoleMode::SystemInstruction;
     }
+    if (normalized == QStringLiteral("systemparameter")) {
+        return RoleMode::SystemParameter;
+    }
 
     return std::nullopt;
 }
@@ -298,6 +301,15 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
             parseConstraints(paramConstraintsValue.toObject());
         }
 
+        if (const QJsonValue headersValue = ruleObj.value(QStringLiteral("headers")); headersValue.isObject()) {
+            const QJsonObject headersObj = headersValue.toObject();
+            for (auto it = headersObj.begin(); it != headersObj.end(); ++it) {
+                if (it.value().isString()) {
+                    caps.customHeaders.insert(it.key(), it.value().toString());
+                }
+            }
+        }
+
         // Endpoint routing mode (safe default Chat if missing/invalid)
         if (const QJsonValue endpointVal = ruleObj.value(QStringLiteral("endpoint")); endpointVal.isString()) {
             if (const auto em = endpointModeFromString(endpointVal.toString())) {
@@ -404,4 +416,9 @@ std::optional<ModelCapsTypes::ModelCaps> ModelCapsRegistry::resolve(const QStrin
         return rc->caps;
     }
     return std::nullopt;
+}
+
+bool ModelCapsRegistry::isSupported(const QString& backendId, const QString& modelId) const
+{
+    return resolve(modelId, backendId).has_value();
 }

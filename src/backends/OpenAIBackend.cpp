@@ -41,16 +41,8 @@
 #include <QUuid>
 #include <QByteArray>
 
-QString OpenAIBackend::id() const {
-    return QStringLiteral("openai");
-}
-
-QString OpenAIBackend::name() const {
-    return QStringLiteral("OpenAI");
-}
-
-QStringList OpenAIBackend::availableModels() const {
-    return {
+OpenAIBackend::OpenAIBackend() {
+    m_cachedModels = {
         QStringLiteral("gpt-5.1"),
         QStringLiteral("gpt-5-pro"),
         QStringLiteral("gpt-5"),
@@ -62,6 +54,19 @@ QStringList OpenAIBackend::availableModels() const {
         QStringLiteral("gpt-image-1"),
         QStringLiteral("gpt-image-1-mini")
     };
+}
+
+QString OpenAIBackend::id() const {
+    return QStringLiteral("openai");
+}
+
+QString OpenAIBackend::name() const {
+    return QStringLiteral("OpenAI");
+}
+
+QStringList OpenAIBackend::availableModels() const {
+    QMutexLocker locker(&m_cacheMutex);
+    return m_cachedModels;
 }
 
 QStringList OpenAIBackend::availableEmbeddingModels() const {
@@ -84,7 +89,7 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
 
         if (payload.isEmpty()) {
             qWarning() << "OpenAIBackend::fetchModelList: empty payload from raw fetch";
-            return {};
+            return availableModels();
         }
 
         // 2) Parse JSON safely
@@ -92,14 +97,14 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
         const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
         if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
             qWarning() << "OpenAIBackend::fetchModelList: JSON parse error:" << parseError.errorString();
-            return {};
+            return availableModels();
         }
 
         const QJsonObject root = doc.object();
         const QJsonValue dataVal = root.value(QStringLiteral("data"));
         if (!dataVal.isArray()) {
             qWarning() << "OpenAIBackend::fetchModelList: 'data' array missing";
-            return {};
+            return availableModels();
         }
 
         const QJsonArray dataArr = dataVal.toArray();
@@ -125,6 +130,12 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
         // Keep deterministic order for UX stability
         filtered.removeDuplicates();
         std::sort(filtered.begin(), filtered.end(), [](const QString& a, const QString& b){ return a.localeAwareCompare(b) < 0; });
+
+        {
+            QMutexLocker locker(&m_cacheMutex);
+            m_cachedModels = filtered;
+        }
+
         return filtered;
     });
 }
@@ -350,15 +361,15 @@ LLMResult OpenAIBackend::sendPrompt(
         headers.emplace("OpenAI-Beta", "assistants=v2");
     }
 
+    if (resolved.has_value()) {
+        for (auto it = resolved->caps.customHeaders.begin(); it != resolved->caps.customHeaders.end(); ++it) {
+            headers.insert({it.key().toStdString(), it.value().toStdString()});
+        }
+    }
+
     // Assistant API self-correction: probe a non-404 endpoint when Assistant mode is selected.
     // This avoids hard 404s on legacy payloads while we implement full Assistant threads/runs.
     if (endpointMode == ModelCapsTypes::EndpointMode::Assistant) {
-        cpr::Header headers{
-            {"Authorization", std::string("Bearer ") + apiKey.toStdString()},
-            {"Content-Type", "application/json"},
-            {"OpenAI-Beta", "assistants=v2"}
-        };
-
         const std::string pingUrl = std::string("https://api.openai.com/v1/assistants?limit=1");
         qCDebug(cp_endpoint).noquote() << "[EndpointRouting] OpenAI assistant probe =>" << QString::fromStdString(pingUrl);
 

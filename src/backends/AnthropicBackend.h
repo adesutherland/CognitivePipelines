@@ -21,31 +21,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
+
 #pragma once
 
 #include "ILLMBackend.h"
 #include <QMutex>
-#include <QStringList>
 
 /**
- * @brief Google Gemini backend implementation using the Generative Language API.
- *
- * This backend communicates with Google's Gemini API endpoints and supports
- * various Gemini model versions.
+ * @brief Backend implementation for Anthropic (Claude).
  */
-class GoogleBackend : public ILLMBackend {
+class AnthropicBackend : public ILLMBackend {
 public:
-    GoogleBackend();
-    ~GoogleBackend() override = default;
-
     QString id() const override;
     QString name() const override;
     QStringList availableModels() const override;
     QStringList availableEmbeddingModels() const override;
-
-    // Dynamic discovery API (async)
     QFuture<QStringList> fetchModelList() override;
-
+    
     LLMResult sendPrompt(
         const QString& apiKey,
         const QString& modelName,
@@ -71,6 +63,6 @@ public:
     ) override;
 
 private:
+    mutable QStringList m_cachedModels;
     mutable QMutex m_cacheMutex;
-    QStringList m_cachedModels;
 };

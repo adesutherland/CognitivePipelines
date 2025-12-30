@@ -38,6 +38,7 @@ private slots:
     void testNegativeLookahead();
     // TDAD Phase 2: Endpoint parsing & defaulting — intentionally failing until implemented
     void testEndpointParsingAndDefaulting();
+    void testCustomHeaders();
 };
 
 namespace {
@@ -151,6 +152,29 @@ void TestModelCaps::testEndpointParsingAndDefaulting()
         const auto mode = resolved->caps.endpointMode;
         QCOMPARE(mode, ModelCapsTypes::EndpointMode::Completion);
     }
+}
+
+void TestModelCaps::testCustomHeaders()
+{
+    QJsonArray rules;
+    QJsonObject headers;
+    headers.insert(QStringLiteral("X-Test-Header"), QStringLiteral("TestValue"));
+    headers.insert(QStringLiteral("anthropic-version"), QStringLiteral("2023-06-01"));
+
+    rules.append(QJsonObject{
+        { QStringLiteral("pattern"), QStringLiteral("^test-model$") },
+        { QStringLiteral("headers"), headers }
+    });
+
+    QTemporaryFile file;
+    QVERIFY2(writeRulesToTempFile(file, rules), "Unable to write temporary rules file");
+
+    QVERIFY2(ModelCapsRegistry::instance().loadFromFile(file.fileName()), "Registry failed to load rules");
+
+    const auto resolved = ModelCapsRegistry::instance().resolve(QStringLiteral("test-model"));
+    QVERIFY2(resolved.has_value(), "Resolution should have produced a value");
+    QCOMPARE(resolved->customHeaders.value(QStringLiteral("X-Test-Header")), QStringLiteral("TestValue"));
+    QCOMPARE(resolved->customHeaders.value(QStringLiteral("anthropic-version")), QStringLiteral("2023-06-01"));
 }
 
 TEST(ModelCapsRegistryTests, QtHarness)

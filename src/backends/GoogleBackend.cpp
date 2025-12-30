@@ -36,6 +36,17 @@
 #include <QtConcurrent>
 
 
+GoogleBackend::GoogleBackend() {
+    m_cachedModels = {
+        QStringLiteral("gemini-3-pro-preview"),
+        QStringLiteral("gemini-3-pro-image-preview"),
+        QStringLiteral("gemini-2.5-pro"),
+        QStringLiteral("gemini-2.5-flash"),
+        QStringLiteral("gemini-2.5-flash-lite"),
+        QStringLiteral("imagen-3")
+    };
+}
+
 QString GoogleBackend::id() const {
     return QStringLiteral("google");
 }
@@ -45,14 +56,8 @@ QString GoogleBackend::name() const {
 }
 
 QStringList GoogleBackend::availableModels() const {
-    return {
-        QStringLiteral("gemini-3-pro-preview"),
-        QStringLiteral("gemini-3-pro-image-preview"),
-        QStringLiteral("gemini-2.5-pro"),
-        QStringLiteral("gemini-2.5-flash"),
-        QStringLiteral("gemini-2.5-flash-lite"),
-        QStringLiteral("imagen-3")
-    };
+    QMutexLocker locker(&m_cacheMutex);
+    return m_cachedModels;
 }
 
 QStringList GoogleBackend::availableEmbeddingModels() const {
@@ -64,11 +69,11 @@ QStringList GoogleBackend::availableEmbeddingModels() const {
 QFuture<QStringList> GoogleBackend::fetchModelList()
 {
     // Network fetch performed on a background thread
-    return QtConcurrent::run([]() -> QStringList {
+    return QtConcurrent::run([this]() -> QStringList {
         const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("google"));
         if (apiKey.trimmed().isEmpty()) {
             qWarning() << "GoogleBackend::fetchModelList: missing API key";
-            return {};
+            return availableModels();
         }
 
         try {
@@ -84,7 +89,7 @@ QFuture<QStringList> GoogleBackend::fetchModelList()
             if (response.status_code != 200) {
                 qWarning() << "GoogleBackend::fetchModelList: HTTP" << response.status_code
                            << "-" << QString::fromStdString(response.error.message);
-                return {};
+                return availableModels();
             }
 
             const QByteArray payload = QByteArray::fromStdString(response.text);
@@ -92,14 +97,14 @@ QFuture<QStringList> GoogleBackend::fetchModelList()
             const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
             if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
                 qWarning() << "GoogleBackend::fetchModelList: JSON parse error:" << parseError.errorString();
-                return {};
+                return availableModels();
             }
 
             const QJsonObject root = doc.object();
             const QJsonValue modelsVal = root.value(QStringLiteral("models"));
             if (!modelsVal.isArray()) {
                 qWarning() << "GoogleBackend::fetchModelList: 'models' array missing";
-                return {};
+                return availableModels();
             }
 
             QStringList ids;
@@ -133,10 +138,16 @@ QFuture<QStringList> GoogleBackend::fetchModelList()
             // Deterministic order for UX stability
             filtered.removeDuplicates();
             std::sort(filtered.begin(), filtered.end(), [](const QString& a, const QString& b){ return a.localeAwareCompare(b) < 0; });
+
+            {
+                QMutexLocker locker(&m_cacheMutex);
+                m_cachedModels = filtered;
+            }
+
             return filtered;
         } catch (const std::exception& ex) {
             qWarning() << "GoogleBackend::fetchModelList: exception:" << ex.what();
-            return {};
+            return availableModels();
         }
     });
 }
@@ -280,6 +291,12 @@ LLMResult GoogleBackend::sendPrompt(
     cpr::Header headers{
         {"Content-Type", "application/json"}
     };
+
+    if (capsOpt.has_value()) {
+        for (auto it = capsOpt->customHeaders.begin(); it != capsOpt->customHeaders.end(); ++it) {
+            headers.insert({it.key().toStdString(), it.value().toStdString()});
+        }
+    }
 
     // Perform POST synchronously with explicit timeouts to avoid hanging indefinitely
     auto response = cpr::Post(

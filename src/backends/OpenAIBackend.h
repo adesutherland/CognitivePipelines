@@ -24,7 +24,9 @@
 #pragma once
 
 #include "ILLMBackend.h"
+#include <QMutex>
 #include <QByteArray>
+#include <QStringList>
 
 /**
  * @brief OpenAI backend implementation using the Chat Completions API.
@@ -34,7 +36,7 @@
  */
 class OpenAIBackend : public ILLMBackend {
 public:
-    OpenAIBackend() = default;
+    OpenAIBackend();
     ~OpenAIBackend() override = default;
 
     QString id() const override;
@@ -72,4 +74,8 @@ public:
 protected:
     // Test seam: allows tests to override the raw JSON fetcher without real network
     virtual QFuture<QByteArray> fetchRawModelListJson();
+
+private:
+    mutable QMutex m_cacheMutex;
+    QStringList m_cachedModels;
 };

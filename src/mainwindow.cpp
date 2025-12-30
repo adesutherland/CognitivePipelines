@@ -69,7 +69,7 @@
 #include <QSaveFile>
 #include "ExecutionIdUtils.h"
 
-#include "CredentialsEditorDialog.h"
+#include "CredentialsDialog.h"
 #include "UserInputDialog.h"
 
 MainWindow::MainWindow(QWidget* parent)
@@ -513,18 +513,7 @@ void MainWindow::populateRunMenu()
 
 void MainWindow::onEditCredentials()
 {
-#if defined(Q_OS_MAC)
-    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-#else
-    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-#endif
-    if (baseDir.isEmpty()) {
-        QMessageBox::critical(this, tr("Error"), tr("Could not determine configuration directory."));
-        return;
-    }
-    const QString filePath = QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/accounts.json"));
-
-    CredentialsEditorDialog dialog(filePath, this);
+    CredentialsDialog dialog(this);
     dialog.exec();
 }
 

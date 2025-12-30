@@ -162,13 +162,34 @@
       }
     },
     {
-      "id": "claude-3-5",
-      "priority": 80,
-      "pattern": "^claude-3-5.*",
+      "id": "anthropic-claude-4.5",
+      "priority": 100,
+      "pattern": "^claude-(opus|sonnet|haiku)-4-5-\\d{8}$",
       "backend": "anthropic",
-      "role_mode": "system",
-      "capabilities": ["vision", "reasoning"],
-      "parameter_constraints": { "temperature": { "default": 0.7 } }
+      "role_mode": "system_parameter",
+      "capabilities": ["vision"],
+      "headers": {
+        "anthropic-version": "2023-06-01"
+      },
+      "parameter_constraints": {
+        "maxInputTokens": 200000,
+        "temperature": { "default": 0.7 }
+      }
+    },
+    {
+      "id": "anthropic-claude-3.5",
+      "priority": 90,
+      "pattern": "^claude-3-5-(sonnet|haiku)-\\d{8}$",
+      "backend": "anthropic",
+      "role_mode": "system_parameter",
+      "capabilities": ["vision"],
+      "headers": {
+        "anthropic-version": "2023-06-01"
+      },
+      "parameter_constraints": {
+        "maxInputTokens": 200000,
+        "temperature": { "default": 0.7 }
+      }
     }
   ]
 }

@@ -26,15 +26,19 @@
 #include "../backends/ILLMBackend.h"
 #include "../backends/OpenAIBackend.h"
 #include "../backends/GoogleBackend.h"
+#include "../backends/AnthropicBackend.h"
 
 #include <QMutexLocker>
 #include <QFile>
+#include <QFileInfo>
 #include <QDir>
 #include <QCoreApplication>
 #include <QStandardPaths>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QSaveFile>
+#include <QTextStream>
 #include <QDebug>
 
 LLMProviderRegistry& LLMProviderRegistry::instance() {
@@ -46,6 +50,7 @@ LLMProviderRegistry& LLMProviderRegistry::instance() {
     if (!backendsRegistered) {
         instance.registerBackend(std::make_shared<OpenAIBackend>());
         instance.registerBackend(std::make_shared<GoogleBackend>());
+        instance.registerBackend(std::make_shared<AnthropicBackend>());
         backendsRegistered = true;
     }
     
@@ -85,6 +90,94 @@ QList<ILLMBackend*> LLMProviderRegistry::allBackends() {
     return result;
 }
 
+void LLMProviderRegistry::setAnthropicKey(const QString& key) {
+    QMutexLocker locker(&m_mutex);
+    m_anthropicApiKey = key;
+}
+
+bool LLMProviderRegistry::saveCredentials(const QMap<QString, QString>& credentials) {
+    // Determine target path (canonical)
+#if defined(Q_OS_MAC)
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+#else
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+#endif
+
+    if (baseDir.isEmpty()) {
+        qWarning() << "LLMProviderRegistry::saveCredentials: Base directory unavailable.";
+        return false;
+    }
+
+    const QString filePath = QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/accounts.json"));
+
+    // Ensure parent directory exists
+    const QFileInfo fi(filePath);
+    QDir().mkpath(fi.dir().absolutePath());
+
+    // Load existing JSON to preserve other fields if any
+    QJsonObject root;
+    QFile file(filePath);
+    if (file.open(QIODevice::ReadOnly)) {
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        if (doc.isObject()) {
+            root = doc.object();
+        }
+        file.close();
+    }
+
+    // Update accounts array
+    QJsonArray accounts = root.value(QStringLiteral("accounts")).toArray();
+
+    for (auto it = credentials.begin(); it != credentials.end(); ++it) {
+        const QString providerId = it.key();
+        const QString key = it.value();
+
+        bool found = false;
+        for (int i = 0; i < accounts.size(); ++i) {
+            QJsonObject acc = accounts[i].toObject();
+            if (acc.value(QStringLiteral("name")).toString().compare(providerId, Qt::CaseInsensitive) == 0) {
+                acc.insert(QStringLiteral("api_key"), key);
+                accounts.replace(i, acc);
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            QJsonObject acc;
+            acc.insert(QStringLiteral("name"), providerId);
+            acc.insert(QStringLiteral("api_key"), key);
+            accounts.append(acc);
+        }
+    }
+
+    root.insert(QStringLiteral("accounts"), accounts);
+
+    // Atomic save
+    QSaveFile sf(filePath);
+    if (!sf.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        qWarning() << "LLMProviderRegistry::saveCredentials: Could not open for writing:" << filePath;
+        return false;
+    }
+
+    sf.write(QJsonDocument(root).toJson());
+    if (!sf.commit()) {
+        qWarning() << "LLMProviderRegistry::saveCredentials: Failed to finalize save:" << filePath;
+        return false;
+    }
+
+#ifdef Q_OS_UNIX
+    QFile::setPermissions(filePath, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+#endif
+
+    // Also update in-memory Anthropic key if present
+    if (credentials.contains(QStringLiteral("anthropic"))) {
+        setAnthropicKey(credentials.value(QStringLiteral("anthropic")));
+    }
+
+    return true;
+}
+
 QString LLMProviderRegistry::getCredential(const QString& providerId) {
     // First, check for environment variables (preferred for CI/CD and testing)
     const auto readEnv = [](std::initializer_list<const char*> names) -> QString {
@@ -106,6 +199,16 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
         const QString envKey = readEnv({ "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY", "GOOGLE_AI_API_KEY" });
         if (!envKey.isEmpty()) {
             return envKey;
+        }
+    } else if (providerId.compare(QStringLiteral("anthropic"), Qt::CaseInsensitive) == 0) {
+        const QString envKey = readEnv({ "ANTHROPIC_API_KEY" });
+        if (!envKey.isEmpty()) {
+            return envKey;
+        }
+
+        QMutexLocker locker(&m_mutex);
+        if (!m_anthropicApiKey.isEmpty()) {
+            return m_anthropicApiKey;
         }
     }
 

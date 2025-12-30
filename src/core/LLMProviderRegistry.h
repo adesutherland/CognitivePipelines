@@ -83,10 +83,23 @@ public:
      */
     QString getCredential(const QString& providerId);
 
+    /**
+     * @brief Saves credentials for multiple providers to accounts.json.
+     * @param credentials Map of provider ID to API key.
+     * @return True if successful, false otherwise.
+     */
+    bool saveCredentials(const QMap<QString, QString>& credentials);
+
+    /**
+     * @brief Helper for testing credential priority.
+     */
+    void setAnthropicKey(const QString& key);
+
 private:
     LLMProviderRegistry() = default;
     ~LLMProviderRegistry() = default;
 
     QMap<QString, std::shared_ptr<ILLMBackend>> m_backends;
+    QString m_anthropicApiKey;
     QMutex m_mutex;
 };

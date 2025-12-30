@@ -35,18 +35,23 @@ using namespace ModelCapsTypes;
 using namespace QtNodes;
 
 struct ProbeRow {
-    QString provider;   // "openai" | "google"
+    QString provider;   // "openai" | "google" | "anthropic"
     QString modelId;    // e.g., "gpt-4o"
+    int expectedCode = 200;
 };
 
 static const QVector<ProbeRow> kHighValueProbes = {
     // OpenAI
-    { QStringLiteral("openai"), QStringLiteral("gpt-4o") },            // Chat
-    { QStringLiteral("openai"), QStringLiteral("gpt-5.2-pro") },       // Completion/Base probe
-    { QStringLiteral("openai"), QStringLiteral("o1-mini") },           // Reasoning
+    { QStringLiteral("openai"), QStringLiteral("gpt-4o"), 200 },            // Chat
+    { QStringLiteral("openai"), QStringLiteral("gpt-5.2-pro"), 200 },       // Completion/Base probe
+    { QStringLiteral("openai"), QStringLiteral("o1-mini"), 200 },           // Reasoning
     // Google
-    { QStringLiteral("google"), QStringLiteral("gemini-2.0-flash") },  // New
-    { QStringLiteral("google"), QStringLiteral("gemini-3-flash-preview") } // Next-Gen probe
+    { QStringLiteral("google"), QStringLiteral("gemini-2.0-flash"), 200 },  // New
+    { QStringLiteral("google"), QStringLiteral("gemini-3-flash-preview"), 200 }, // Next-Gen probe
+    // Anthropic
+    { QStringLiteral("anthropic"), QStringLiteral("claude-haiku-4-5-20251001"), 200 },
+    { QStringLiteral("anthropic"), QStringLiteral("claude-sonnet-4-5-20250929"), 200 },
+    { QStringLiteral("anthropic"), QStringLiteral("claude-opus-4-5-20251101"), 200 }
 };
 
 static QString endpointModeToString(EndpointMode m)
@@ -118,6 +123,11 @@ private:
         if (provider == QStringLiteral("google")) {
             const bool env = !qEnvironmentVariable("GOOGLE_API_KEY").isEmpty();
             const bool reg = !LLMProviderRegistry::instance().getCredential(QStringLiteral("google")).isEmpty();
+            return env || reg;
+        }
+        if (provider == QStringLiteral("anthropic")) {
+            const bool env = !qEnvironmentVariable("ANTHROPIC_API_KEY").isEmpty();
+            const bool reg = !LLMProviderRegistry::instance().getCredential(QStringLiteral("anthropic")).isEmpty();
             return env || reg;
         }
         return false;
@@ -336,13 +346,15 @@ void ProviderMatrixProbe::initTestCase()
 
 void ProviderMatrixProbe::test_PreFlightMatrix()
 {
-    const bool hasOpenAi = !qEnvironmentVariable("OPENAI_API_KEY").isEmpty();
-    const bool hasGoogle = !qEnvironmentVariable("GOOGLE_API_KEY").isEmpty();
+    const bool hasOpenAi = hasApiKeyForProvider(QStringLiteral("openai"));
+    const bool hasGoogle = hasApiKeyForProvider(QStringLiteral("google"));
+    const bool hasAnthropic = hasApiKeyForProvider(QStringLiteral("anthropic"));
 
     qInfo() << "==== Universal Provider Compatibility Pre-Flight Check ====";
     qInfo() << "Keys detected:";
-    qInfo() << "  OPENAI_API_KEY:" << (hasOpenAi ? "Yes" : "No");
-    qInfo() << "  GOOGLE_API_KEY:" << (hasGoogle ? "Yes" : "No");
+    qInfo() << "  OpenAI:   " << (hasOpenAi ? "Yes" : "No");
+    qInfo() << "  Google:   " << (hasGoogle ? "Yes" : "No");
+    qInfo() << "  Anthropic:" << (hasAnthropic ? "Yes" : "No");
     qInfo() << "-----------------------------------------------------------";
     qInfo() << "Provider | Model ID                 | Multimodal | Endpoint | Caps";
     qInfo() << "---------+---------------------------+------------+----------+-----------------------------";
@@ -402,6 +414,13 @@ void ProviderMatrixProbe::test_LiveMatrixExecution()
         const QString endpoint = resolved.has_value() ? endpointModeToString(resolved->endpointMode)
                                                       : QStringLiteral("(unresolved)");
 
+        // Registry Check: Verify ModelCapsRegistry returns RoleMode::SystemParameter for live Anthropic ones
+        if (row.provider == QStringLiteral("anthropic") && row.expectedCode == 200) {
+            QVERIFY2(resolved.has_value(), 
+                     QStringLiteral("Model %1 not found in registry").arg(row.modelId).toLocal8Bit().constData());
+            QCOMPARE(resolved->roleMode, RoleMode::SystemParameter);
+        }
+
         LiveResult lr = runSingleLive(row.provider, row.modelId, kPrompt);
 
         const QString providerCol = row.provider.leftJustified(7, ' ', true);
@@ -412,7 +431,7 @@ void ProviderMatrixProbe::test_LiveMatrixExecution()
                                    ? (lr.status == LiveResult::Status::Success ? QStringLiteral("Yes")
                                          : (lr.status == LiveResult::Status::Skipped ? QStringLiteral("Skipped")
                                              : QStringLiteral("Error")))
-                                   : QStringLiteral("No");
+                                   : (row.expectedCode == 200 && resolved.has_value() && resolved->hasCapability(Capability::Vision) ? QStringLiteral("Failed") : QStringLiteral("No"));
 
         qInfo().noquote() << QStringLiteral("%1 | %2 | %3 | %4 | %5")
                              .arg(providerCol)
@@ -433,16 +452,18 @@ void ProviderMatrixProbe::test_LiveMatrixExecution()
                      .arg(row.provider, row.modelId)
                      .toLocal8Bit().constData());
 
-        // Must have non-empty response
-        QVERIFY2(!lr.response.trimmed().isEmpty(),
-                 QStringLiteral("Empty response for provider=%1 model=%2")
-                     .arg(row.provider, row.modelId)
-                     .toLocal8Bit().constData());
+        // Must have non-empty response if success expected
+        if (row.expectedCode == 200) {
+            QVERIFY2(!lr.response.trimmed().isEmpty(),
+                     QStringLiteral("Empty response for provider=%1 model=%2")
+                         .arg(row.provider, row.modelId)
+                         .toLocal8Bit().constData());
+        }
 
-        // Must be HTTP 200
-        QVERIFY2(lr.httpCode == 200,
-                 QStringLiteral("Expected HTTP 200 but got %1 for provider=%2 model=%3 (error=%4)")
-                     .arg(QString::number(lr.httpCode), row.provider, row.modelId, lr.error)
+        // Must match expected HTTP code
+        QVERIFY2(lr.httpCode == row.expectedCode,
+                 QStringLiteral("Expected HTTP %1 but got %2 for provider=%3 model=%4 (error=%5)")
+                     .arg(QString::number(row.expectedCode), QString::number(lr.httpCode), row.provider, row.modelId, lr.error)
                      .toLocal8Bit().constData());
 
         // Vision audit: if attempted, it must not 400

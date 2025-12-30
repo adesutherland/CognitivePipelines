@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QEventLoop>
 #include <QTimer>
+#include "ModelCapsRegistry.h"
 #include <QtNodes/internal/Definitions.hpp>
 #include <QLoggingCategory>
 
@@ -44,6 +45,8 @@ private:
 
 void IntegrationTests::initTestCase()
 {
+    ModelCapsRegistry::instance().loadFromFile(QStringLiteral(":/resources/model_caps.json"));
+
     // Instantiate the entire application stack (headless)
     mainWindow_ = std::make_unique<MainWindow>();
     model_ = mainWindow_->graphModel();

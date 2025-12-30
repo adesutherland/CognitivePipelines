@@ -44,6 +44,7 @@ public:
     bool loadFromFile(const QString& path);
     std::optional<ResolvedCaps> resolveWithRule(const QString& modelId, const QString& backendId = {}) const;
     std::optional<ModelCapsTypes::ModelCaps> resolve(const QString& modelId, const QString& backendId = {}) const;
+    bool isSupported(const QString& backendId, const QString& modelId) const;
 
 private:
     ModelCapsRegistry() = default;

@@ -21,26 +21,29 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 //
-#ifndef CREDENTIALS_EDITORDIALOG_H
-#define CREDENTIALS_EDITORDIALOG_H
+
+#pragma once
 
 #include <QDialog>
+#include <QMap>
+#include <QString>
 
-class QTextEdit;
-class QDialogButtonBox;
+class QLineEdit;
 
-class CredentialsEditorDialog : public QDialog {
+/**
+ * @brief Dialog for editing LLM provider credentials.
+ *
+ * This dialog dynamically builds a form based on the registered backends
+ * in the LLMProviderRegistry, providing a structured way to manage API keys.
+ */
+class CredentialsDialog : public QDialog {
     Q_OBJECT
 public:
-    explicit CredentialsEditorDialog(const QString &filePath, QWidget *parent = nullptr);
+    explicit CredentialsDialog(QWidget *parent = nullptr);
 
 private slots:
     void onSaveClicked();
 
 private:
-    QTextEdit *textEdit;
-    QDialogButtonBox *buttonBox;
-    QString m_filePath;
+    QMap<QString, QLineEdit*> m_edits;
 };
-
-#endif // CREDENTIALS_EDITORDIALOG_H

@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.8.3 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.8.4 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -111,6 +111,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/backends/OpenAIBackend.h
     ${SRC_DIR}/backends/GoogleBackend.cpp
     ${SRC_DIR}/backends/GoogleBackend.h
+    ${SRC_DIR}/backends/AnthropicBackend.cpp
+    ${SRC_DIR}/backends/AnthropicBackend.h
     ${SRC_DIR}/ModelCaps.cpp
     ${SRC_DIR}/ModelCaps.h
     ${SRC_DIR}/ModelCapsRegistry.cpp
@@ -199,8 +201,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ExecutionEngine.h
     ${SRC_DIR}/MermaidRenderService.cpp
     ${SRC_DIR}/MermaidRenderService.h
-    ${SRC_DIR}/CredentialsEditorDialog.cpp
-    ${SRC_DIR}/CredentialsEditorDialog.h
+    ${SRC_DIR}/CredentialsDialog.cpp
+    ${SRC_DIR}/CredentialsDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
     ${qtnodes_SOURCE_DIR}/resources/resources.qrc
@@ -338,6 +340,8 @@ if(ENABLE_TESTING)
             tests/test_dynamic_discovery.cpp
             tests/test_model_selection.cpp
             tests/test_string_utils.cpp
+            tests/test_anthropic_foundation.cpp
+            tests/test_anthropic_chat.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/logging_categories.cpp
             ${SRC_DIR}/ExecutionEngine.cpp
@@ -388,8 +392,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/UserInputDialog.h
             ${SRC_DIR}/about_dialog.cpp
             ${SRC_DIR}/about_dialog.h
-            ${SRC_DIR}/CredentialsEditorDialog.cpp
-            ${SRC_DIR}/CredentialsEditorDialog.h
+            ${SRC_DIR}/CredentialsDialog.cpp
+            ${SRC_DIR}/CredentialsDialog.h
             ${SRC_DIR}/ProcessConnector.cpp
             ${SRC_DIR}/ProcessConnector.h
             ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
@@ -454,6 +458,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/backends/OpenAIBackend.h
             ${SRC_DIR}/backends/GoogleBackend.cpp
             ${SRC_DIR}/backends/GoogleBackend.h
+            ${SRC_DIR}/backends/AnthropicBackend.cpp
+            ${SRC_DIR}/backends/AnthropicBackend.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
     target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -516,6 +522,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/backends/OpenAIBackend.h
             ${SRC_DIR}/backends/GoogleBackend.cpp
             ${SRC_DIR}/backends/GoogleBackend.h
+            ${SRC_DIR}/backends/AnthropicBackend.cpp
+            ${SRC_DIR}/backends/AnthropicBackend.h
             ${SRC_DIR}/core/DocumentLoader.cpp
             ${SRC_DIR}/core/DocumentLoader.h
             ${SRC_DIR}/core/TextChunker.cpp
@@ -569,8 +577,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/NodeInfoWidget.h
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h
-            ${SRC_DIR}/CredentialsEditorDialog.cpp
-            ${SRC_DIR}/CredentialsEditorDialog.h
+            ${SRC_DIR}/CredentialsDialog.cpp
+            ${SRC_DIR}/CredentialsDialog.h
             ${SRC_DIR}/ProcessConnector.cpp
             ${SRC_DIR}/ProcessConnector.h
             ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
