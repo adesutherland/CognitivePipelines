@@ -16,22 +16,21 @@ using namespace ModelCapsTypes;
 
 class AnthropicFoundationTest : public ::testing::Test {
 protected:
+    QByteArray m_originalApiKey;
+
     void SetUp() override {
+        m_originalApiKey = qgetenv("ANTHROPIC_API_KEY");
         // Ensure we have a clean environment for each test
-#ifdef Q_OS_WIN
-        _putenv("ANTHROPIC_API_KEY=");
-#else
-        unsetenv("ANTHROPIC_API_KEY");
-#endif
+        qunsetenv("ANTHROPIC_API_KEY");
         ModelCapsRegistry::instance().loadFromFile(":/resources/model_caps.json");
     }
 
     void TearDown() override {
-#ifdef Q_OS_WIN
-        _putenv("ANTHROPIC_API_KEY=");
-#else
-        unsetenv("ANTHROPIC_API_KEY");
-#endif
+        if (!m_originalApiKey.isNull()) {
+            qputenv("ANTHROPIC_API_KEY", m_originalApiKey);
+        } else {
+            qunsetenv("ANTHROPIC_API_KEY");
+        }
     }
 };
 
@@ -83,11 +82,7 @@ TEST_F(AnthropicFoundationTest, Headers_ShouldLoadFromConfig) {
 TEST_F(AnthropicFoundationTest, CredentialPriority_EnvVarShouldWin) {
     // 1. Setup Environment Variable
     QString envKey = "env-key-123";
-#ifdef Q_OS_WIN
-    _putenv_s("ANTHROPIC_API_KEY", envKey.toStdString().c_str());
-#else
-    setenv("ANTHROPIC_API_KEY", envKey.toStdString().c_str(), 1);
-#endif
+    qputenv("ANTHROPIC_API_KEY", envKey.toUtf8());
 
     // 2. Setup temporary accounts.json
     // We need to know where LLMProviderRegistry looks for it. 
