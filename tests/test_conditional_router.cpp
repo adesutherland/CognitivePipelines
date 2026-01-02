@@ -34,8 +34,8 @@ TEST_F(ConditionalRouterNodeTest, RoutingTrueVariantsGoToTrueOutput)
 
     for (const QString& cond : trueValues) {
         DataPacket in;
-        // Provide payload using the standard text key so it can flow into the router's text input.
-        in.insert(QStringLiteral("text"), QStringLiteral("payload"));
+        // Provide payload using the standard "in" key as required by the router's input pin.
+        in.insert(QString::fromLatin1(ConditionalRouterNode::kInputDataId), QStringLiteral("payload"));
         in.insert(QString::fromLatin1(ConditionalRouterNode::kInputConditionId), cond);
 
         ExecutionToken token;
@@ -71,7 +71,7 @@ TEST_F(ConditionalRouterNodeTest, RoutingFalseVariantsGoToFalseOutput)
 
     for (const QString& cond : falseValues) {
         DataPacket in;
-        in.insert(QStringLiteral("text"), QStringLiteral("payload"));
+        in.insert(QString::fromLatin1(ConditionalRouterNode::kInputDataId), QStringLiteral("payload"));
         in.insert(QString::fromLatin1(ConditionalRouterNode::kInputConditionId), cond);
 
         ExecutionToken token;
@@ -110,7 +110,7 @@ TEST_F(ConditionalRouterNodeTest, DefaultConditionFallbackUsedWhenPinEmpty)
     QApplication::processEvents();
 
     DataPacket in;
-    in.insert(QStringLiteral("text"), QStringLiteral("payload"));
+    in.insert(QString::fromLatin1(ConditionalRouterNode::kInputDataId), QStringLiteral("payload"));
     // NOTE: no condition pin provided -> should fall back to default
 
     ExecutionToken token;
@@ -143,8 +143,8 @@ TEST_F(ConditionalRouterNodeTest, DataPayloadPassesThroughUnchanged)
     const QString complexPayload = QStringLiteral("{""a"":42,""b"":""text"",""c"": [1,2,3]}");
 
     DataPacket in;
-    // Provide as text payload
-    in.insert(QStringLiteral("text"), complexPayload);
+    // Provide as input data
+    in.insert(QString::fromLatin1(ConditionalRouterNode::kInputDataId), complexPayload);
     in.insert(QString::fromLatin1(ConditionalRouterNode::kInputConditionId), QStringLiteral("ok"));
 
     ExecutionToken token;

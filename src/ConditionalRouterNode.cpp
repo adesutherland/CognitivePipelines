@@ -120,6 +120,19 @@ TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
         }
     }
 
+    // Inspect input data before evaluation to prevent phantom execution.
+    const QString inputDataKey = QString::fromLatin1(kInputDataId);
+    if (!inputs.contains(inputDataKey)) {
+        qWarning() << "ConditionalRouterNode: Skipping execution due to missing input data.";
+        return TokenList{};
+    }
+
+    const QVariant inputData = inputs.value(inputDataKey);
+    if (inputData.isNull()) {
+        qWarning() << "ConditionalRouterNode: Skipping execution due to null input data.";
+        return TokenList{};
+    }
+
     // Determine which branch to route
     bool routeTrue = false;
     const QString condKey = QString::fromLatin1(kInputConditionId);

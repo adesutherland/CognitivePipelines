@@ -56,6 +56,8 @@ FetchContent_Declare(
 
 # Add QuickJS as a dependency
 message(STATUS "Fetching QuickJS (quickjs-ng fork)...")
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Force static QuickJS" FORCE)
+set(BUILD_QJS_LIBC OFF CACHE BOOL "Skip QuickJS Shell" FORCE)
 set(QJS_BUILD_LIBC OFF CACHE BOOL "Build QuickJS libc" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_Declare(
