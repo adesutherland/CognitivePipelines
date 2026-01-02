@@ -106,9 +106,8 @@ AboutDialog::AboutDialog(QWidget* parent)
     licenseEdit->setMinimumHeight(250);
 
     QString licenseText = tr(
-        "MIT License\n"
-        "\n"
-        "Copyright (c) 2025 Adrian Sutherland\n"
+        "Cognitive Pipeline Application\n"
+        "Copyright (c) 2026\n"
         "\n"
         "Permission is hereby granted, free of charge, to any person obtaining a copy\n"
         "of this software and associated documentation files (the \"Software\"), to deal\n"
@@ -128,11 +127,11 @@ AboutDialog::AboutDialog(QWidget* parent)
         "OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n"
         "SOFTWARE.\n"
         "\n"
-        "================================================================================\n"
+        "Third Party Components\n"
         "\n"
-        "Qt Framework Attribution\n"
+        "---\n"
         "\n"
-        "This application uses the Qt Toolkit under the terms of the LGPLv3.\n"
+        "This application uses the Qt Toolkit under the terms of the LGPLv3\n"
         "\n"
         "Qt is a cross-platform C++ application framework developed by The Qt Company.\n"
         "For more information about Qt and its licensing, please visit:\n"
@@ -143,10 +142,21 @@ AboutDialog::AboutDialog(QWidget* parent)
         "this application. The Qt libraries remain under the LGPL, and any modifications\n"
         "to Qt itself must be made available under the same license.\n"
         "\n"
+        "---\n"
+        "\n"
         "MermaidJS\n"
         "Copyright (c) 2014-2025 Knut Sveidqvist\n"
         "Licensed under the MIT License.\n"
         "https://mermaid.js.org/\n"
+        "\n"
+        "---\n"
+        "\n"
+        "QuickJS\n"
+        "Copyright (c) 2017-2021 Fabrice Bellard\n"
+        "Licensed under the MIT license.\n"
+        "https://github.com/quickjs-ng/quickjs\n"
+        "\n"
+        "---\n"
     );
 
     licenseEdit->setPlainText(licenseText);

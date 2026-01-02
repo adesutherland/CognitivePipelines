@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.12.2 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.12.2 LANGUAGES C CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -52,9 +52,47 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/paceholder/nodeeditor.git
     GIT_TAG        3.0.12
 )
+
+# Add QuickJS as a dependency
+FetchContent_Declare(
+    quickjs
+    GIT_REPOSITORY https://github.com/bellard/quickjs.git
+    GIT_TAG        master
+)
+
 # Explicitly build QtNodes as a shared library (required for proper resource loading)
 set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QtNodes as shared library" FORCE)
-FetchContent_MakeAvailable(QtNodes)
+FetchContent_MakeAvailable(QtNodes quickjs)
+
+# Define QuickJS target manually
+file(READ ${quickjs_SOURCE_DIR}/VERSION QUICKJS_VERSION_CONTENT)
+string(STRIP "${QUICKJS_VERSION_CONTENT}" QUICKJS_VERSION)
+
+add_library(quickjs STATIC
+    ${quickjs_SOURCE_DIR}/quickjs.c
+    ${quickjs_SOURCE_DIR}/libregexp.c
+    ${quickjs_SOURCE_DIR}/cutils.c
+    ${quickjs_SOURCE_DIR}/libunicode.c
+    ${quickjs_SOURCE_DIR}/dtoa.c
+)
+set_target_properties(quickjs PROPERTIES LINKER_LANGUAGE C)
+
+target_compile_definitions(quickjs PRIVATE 
+    _GNU_SOURCE 
+    CONFIG_VERSION="${QUICKJS_VERSION}"
+)
+
+# Create a clean include directory for QuickJS to avoid 'VERSION' header conflict on macOS
+set(QUICKJS_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/quickjs_include")
+file(MAKE_DIRECTORY "${QUICKJS_INCLUDE_DIR}")
+file(COPY "${quickjs_SOURCE_DIR}/quickjs.h" DESTINATION "${QUICKJS_INCLUDE_DIR}")
+# Also copy other likely needed headers
+file(COPY "${quickjs_SOURCE_DIR}/quickjs-libc.h" DESTINATION "${QUICKJS_INCLUDE_DIR}")
+
+target_include_directories(quickjs 
+    PRIVATE ${quickjs_SOURCE_DIR}
+    INTERFACE ${QUICKJS_INCLUDE_DIR}
+)
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -178,6 +216,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/DatabaseConnector.h
     ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
     ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
+    ${SRC_DIR}/QuickJSRuntime.cpp
+    ${SRC_DIR}/QuickJSRuntime.h
     ${SRC_DIR}/RagIndexerNode.cpp
     ${SRC_DIR}/RagIndexerNode.h
     ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
@@ -236,6 +276,7 @@ target_link_libraries(CognitivePipelines PRIVATE
     QtNodes::QtNodes
     Boost::boost
     cpr::cpr
+    quickjs
 )
 
 # Define build information macros for use in C++
@@ -347,6 +388,7 @@ if(ENABLE_TESTING)
             tests/test_anthropic_foundation.cpp
             tests/test_anthropic_chat.cpp
             tests/test_execution_host.cpp
+            tests/test_quickjs_backend.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionScriptHost.cpp
             ${SRC_DIR}/ExecutionScriptHost.h
@@ -413,6 +455,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/DatabaseConnector.h
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
+            ${SRC_DIR}/QuickJSRuntime.cpp
+            ${SRC_DIR}/QuickJSRuntime.h
             ${SRC_DIR}/RagIndexerNode.cpp
             ${SRC_DIR}/RagIndexerNode.h
             ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
@@ -482,6 +526,7 @@ if(ENABLE_TESTING)
             Qt6::WebEngineWidgets
             QtNodes::QtNodes
             Boost::boost
+            quickjs
     )
     # Add unit tests to CTest
     include(GoogleTest)
