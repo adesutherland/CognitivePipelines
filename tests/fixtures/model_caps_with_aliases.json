@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "openai-o3",
+      "priority": 80,
+      "pattern": "^o3(?:$|[-.].*)(?!.*audio|.*realtime|.*search|.*transcribe)",
+      "backend": "openai",
+      "role_mode": "developer",
+      "capabilities": ["reasoning"],
+      "parameter_constraints": {
+        "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
+        "omitTemperature": true,
+        "tokenFieldName": "max_completion_tokens"
+      }
+    }
+  ],
+  "virtual_models": [
+    {
+      "id": "openai-reasoning-latest",
+      "target": "o3",
+      "backend": "openai",
+      "name": "OpenAI Reasoning (Latest)"
+    },
+    {
+      "id": "universal-best-reasoner",
+      "target": "o3",
+      "name": "Best Reasoner"
+    }
+  ]
+}

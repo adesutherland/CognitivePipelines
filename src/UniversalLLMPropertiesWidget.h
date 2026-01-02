@@ -85,4 +85,5 @@ private:
     QSpinBox* m_maxTokensSpinBox {nullptr};
 
     QFutureWatcher<QStringList> m_modelFetcher;
+    QString m_pendingModelId;
 };

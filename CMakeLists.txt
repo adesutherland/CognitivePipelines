@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.8.4 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.12.1 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -339,6 +339,7 @@ if(ENABLE_TESTING)
             tests/test_universal_caps.cpp
             tests/test_dynamic_discovery.cpp
             tests/test_model_selection.cpp
+            tests/test_backend_discovery.cpp
             tests/test_string_utils.cpp
             tests/test_anthropic_foundation.cpp
             tests/test_anthropic_chat.cpp

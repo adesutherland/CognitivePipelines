@@ -28,6 +28,7 @@
 #include <QObject>
 #include <QString>
 #include <QVector>
+#include <QList>
 #include <QReadWriteLock>
 
 #include "ModelCaps.h"
@@ -46,11 +47,15 @@ public:
     std::optional<ModelCapsTypes::ModelCaps> resolve(const QString& modelId, const QString& backendId = {}) const;
     bool isSupported(const QString& backendId, const QString& modelId) const;
 
+    QString resolveAlias(const QString& id, const QString& backendId = QString()) const;
+    QList<ModelCapsTypes::VirtualModel> virtualModelsForBackend(const QString& backendId = QString()) const;
+
 private:
     ModelCapsRegistry() = default;
     Q_DISABLE_COPY(ModelCapsRegistry)
 
     QVector<ModelCapsTypes::ModelRule> rules_;
+    QVector<ModelCapsTypes::VirtualModel> virtualModels_;
     mutable QReadWriteLock lock_;
 };
 

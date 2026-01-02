@@ -105,4 +105,11 @@ struct ModelRule {
     std::optional<QRegularExpression> trailingNegativeLookahead;
 };
 
+struct VirtualModel {
+    QString id;      // The alias
+    QString target;  // The real model ID
+    QString backend; // Optional backend filter
+    QString name;    // UI Display name
+};
+
 } // namespace ModelCapsTypes

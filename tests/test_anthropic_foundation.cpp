@@ -41,8 +41,8 @@ protected:
 TEST_F(AnthropicFoundationTest, CapabilityResolution_ShouldReturnSystemParameter) {
     auto& registry = ModelCapsRegistry::instance();
     
-    // We expect claude-3-5 and newer to use the new SystemParameter role mode
-    QString modelId = "claude-3-5-sonnet-20240620";
+    // We expect claude-4.5 and newer to use the new SystemParameter role mode
+    QString modelId = "claude-sonnet-4-5-20250929";
     QString providerId = "anthropic";
 
     auto capsOpt = registry.resolve(modelId, providerId);
@@ -65,7 +65,7 @@ TEST_F(AnthropicFoundationTest, CapabilityResolution_ShouldReturnSystemParameter
  */
 TEST_F(AnthropicFoundationTest, Headers_ShouldLoadFromConfig) {
     auto& registry = ModelCapsRegistry::instance();
-    QString modelId = "claude-3-5-sonnet-20240620";
+    QString modelId = "claude-sonnet-4-5-20250929";
     QString providerId = "anthropic";
 
     auto capsOpt = registry.resolve(modelId, providerId);

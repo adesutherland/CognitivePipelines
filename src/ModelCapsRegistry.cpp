@@ -358,6 +358,46 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
     // Commit parsed rules
     rules_ = std::move(parsedRules);
 
+    // Parse virtual models (aliases)
+    const QJsonValue virtualModelsValue = root.value(QStringLiteral("virtual_models"));
+    QVector<VirtualModel> parsedVirtualModels;
+    if (virtualModelsValue.isArray()) {
+        const QJsonArray virtualModelsArray = virtualModelsValue.toArray();
+        parsedVirtualModels.reserve(virtualModelsArray.size());
+
+        for (const auto& vmValue : virtualModelsArray) {
+            if (!vmValue.isObject()) {
+                qWarning() << "ModelCapsRegistry: skipping non-object virtual_model entry";
+                continue;
+            }
+
+            const QJsonObject vmObj = vmValue.toObject();
+            const QJsonValue idVal = vmObj.value(QStringLiteral("id"));
+            const QJsonValue targetVal = vmObj.value(QStringLiteral("target"));
+            const QJsonValue nameVal = vmObj.value(QStringLiteral("name"));
+
+            if (!idVal.isString() || !targetVal.isString() || !nameVal.isString()) {
+                qWarning() << "ModelCapsRegistry: skipping virtual_model missing id, target, or name";
+                continue;
+            }
+
+            VirtualModel vm;
+            vm.id = idVal.toString();
+            vm.target = targetVal.toString();
+            vm.name = nameVal.toString();
+
+            if (const QJsonValue backendVal = vmObj.value(QStringLiteral("backend")); backendVal.isString()) {
+                vm.backend = backendVal.toString();
+            }
+
+            qCDebug(cp_registry).noquote() << QStringLiteral("Loaded Virtual Model: Alias='%1', Target='%2', Backend='%3'")
+                                     .arg(vm.id, vm.target, vm.backend.isEmpty() ? QStringLiteral("(any)") : vm.backend);
+
+            parsedVirtualModels.push_back(std::move(vm));
+        }
+    }
+    virtualModels_ = std::move(parsedVirtualModels);
+
     // Emit a concise summary at info level (categorized so it can be filtered via QT_LOGGING_RULES)
     int total = rules_.size();
     QHash<QString,int> perBackend;
@@ -376,22 +416,24 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
 
 std::optional<ModelCapsRegistry::ResolvedCaps> ModelCapsRegistry::resolveWithRule(const QString& modelId, const QString& backendId) const
 {
+    const QString realModelId = resolveAlias(modelId, backendId);
+
     QReadLocker readLocker(&lock_);
     // Instrumentation: introspect modelId at resolve entry to detect quoting issues
-    const auto firstChar = modelId.isEmpty() ? QStringLiteral("∅") : modelId.left(1);
-    const auto lastChar = modelId.isEmpty() ? QStringLiteral("∅") : modelId.right(1);
+    const auto firstChar = realModelId.isEmpty() ? QStringLiteral("∅") : realModelId.left(1);
+    const auto lastChar = realModelId.isEmpty() ? QStringLiteral("∅") : realModelId.right(1);
     qCDebug(cp_registry).noquote() << "[ModelLifecycle] Registry::resolve entry -> backend='" << (backendId.isEmpty()?QStringLiteral("(any)"):backendId)
-                       << "' model='" << modelId << "' len=" << modelId.size()
+                       << "' model='" << realModelId << "' len=" << realModelId.size()
                        << " first='" << firstChar << "' last='" << lastChar << "'";
     for (const auto& rule : rules_) {
         if (!backendId.isEmpty() && !rule.backend.isEmpty() && rule.backend != backendId) {
             continue;
         }
 
-        const auto match = rule.pattern.match(modelId);
+        const auto match = rule.pattern.match(realModelId);
         if (match.hasMatch()) {
             if (rule.trailingNegativeLookahead.has_value()) {
-                if (const auto& negative = *rule.trailingNegativeLookahead; negative.isValid() && negative.match(modelId).hasMatch()) {
+                if (const auto& negative = *rule.trailingNegativeLookahead; negative.isValid() && negative.match(realModelId).hasMatch()) {
                     continue;
                 }
             }
@@ -399,14 +441,14 @@ std::optional<ModelCapsRegistry::ResolvedCaps> ModelCapsRegistry::resolveWithRul
             const bool hasReasoning = rule.caps.capabilities.contains(Capability::Reasoning);
             const QString idForLog = rule.id.isEmpty() ? QStringLiteral("(no-id)") : rule.id;
             qCDebug(cp_registry).noquote() << QStringLiteral("RESOLVE: Model '%1' matched Rule '%2' (Priority %3). Capabilities: Vision=%4, Reasoning=%5")
-                                     .arg(modelId, idForLog, QString::number(rule.priority),
+                                     .arg(realModelId, idForLog, QString::number(rule.priority),
                                           hasVision ? QStringLiteral("T") : QStringLiteral("F"),
                                           hasReasoning ? QStringLiteral("T") : QStringLiteral("F"));
             ResolvedCaps rc { rule.caps, rule.id };
             return rc;
         }
     }
-    qCDebug(cp_registry).noquote() << QStringLiteral("RESOLVE: Model '%1' hit FALLBACK.").arg(modelId);
+    qCDebug(cp_registry).noquote() << QStringLiteral("RESOLVE: Model '%1' hit FALLBACK.").arg(realModelId);
     return std::nullopt;
 }
 
@@ -421,4 +463,61 @@ std::optional<ModelCapsTypes::ModelCaps> ModelCapsRegistry::resolve(const QStrin
 bool ModelCapsRegistry::isSupported(const QString& backendId, const QString& modelId) const
 {
     return resolve(modelId, backendId).has_value();
+}
+
+QString ModelCapsRegistry::resolveAlias(const QString& id, const QString& backendId) const
+{
+    QReadLocker readLocker(&lock_);
+    QString current = id;
+    QSet<QString> visited;
+    bool foundInPass;
+
+    do {
+        foundInPass = false;
+        if (visited.contains(current)) {
+            qWarning() << "ModelCapsRegistry: cycle detected in virtual models for" << id;
+            break;
+        }
+        visited.insert(current);
+
+        QString bestTarget;
+        bool backendSpecificMatch = false;
+
+        for (const auto& vm : virtualModels_) {
+            if (vm.id.compare(current, Qt::CaseInsensitive) == 0) {
+                if (!backendId.isEmpty() && vm.backend == backendId) {
+                    bestTarget = vm.target;
+                    backendSpecificMatch = true;
+                    break; // Prefer backend-specific
+                } else if (vm.backend.isEmpty()) {
+                    if (bestTarget.isEmpty()) {
+                        bestTarget = vm.target; // Use first global if none yet
+                    }
+                }
+            }
+        }
+
+        if (!bestTarget.isEmpty()) {
+            current = bestTarget;
+            foundInPass = true;
+        }
+    } while (foundInPass);
+
+    return current;
+}
+
+QList<ModelCapsTypes::VirtualModel> ModelCapsRegistry::virtualModelsForBackend(const QString& backendId) const
+{
+    QReadLocker readLocker(&lock_);
+    if (backendId.isEmpty()) {
+        return virtualModels_.toList();
+    }
+
+    QList<VirtualModel> result;
+    for (const auto& vm : virtualModels_) {
+        if (vm.backend.isEmpty() || vm.backend == backendId) {
+            result.append(vm);
+        }
+    }
+    return result;
 }

@@ -90,9 +90,24 @@ QFuture<QStringList> AnthropicBackend::fetchModelList() {
             }
         }
 
+        // 3) Inject Virtual Models
+        const auto virtualModels = ModelCapsRegistry::instance().virtualModelsForBackend(this->id());
+        QSet<QString> virtualIds;
+        for (const auto& vm : virtualModels) {
+            models.append(vm.id);
+            virtualIds.insert(vm.id);
+        }
+
         // Keep deterministic order
         models.removeDuplicates();
-        std::sort(models.begin(), models.end());
+        std::sort(models.begin(), models.end(), [&virtualIds](const QString& a, const QString& b) {
+            const bool aVirtual = virtualIds.contains(a);
+            const bool bVirtual = virtualIds.contains(b);
+            if (aVirtual != bVirtual) {
+                return aVirtual; // Virtual models first
+            }
+            return a.localeAwareCompare(b) < 0;
+        });
 
         QMutexLocker locker(&m_cacheMutex);
         m_cachedModels = models;
@@ -111,8 +126,14 @@ LLMResult AnthropicBackend::sendPrompt(
 ) {
     LLMResult result;
     
+    // Resolve alias to real ID for the API request
+    const QString resolvedModel = ModelCapsRegistry::instance().resolveAlias(modelName, id());
+    if (resolvedModel != modelName) {
+        qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
+    }
+
     // Resolve model caps for role normalization and capability-driven behavior
-    const auto resolved = ModelCapsRegistry::instance().resolveWithRule(modelName, QStringLiteral("anthropic"));
+    const auto resolved = ModelCapsRegistry::instance().resolveWithRule(resolvedModel, id());
     const auto capsOpt = resolved.has_value() ? std::optional<ModelCapsTypes::ModelCaps>(resolved->caps) : std::nullopt;
     const ModelCapsTypes::RoleMode roleMode = capsOpt.has_value() ? capsOpt->roleMode : ModelCapsTypes::RoleMode::System;
 
@@ -125,7 +146,7 @@ LLMResult AnthropicBackend::sendPrompt(
 
     // Prepare JSON payload
     QJsonObject root;
-    root.insert(QStringLiteral("model"), modelName);
+    root.insert(QStringLiteral("model"), resolvedModel);
 
     // Default to 4096 if not provided, as required by Anthropic
     int finalMaxTokens = (maxTokens > 0) ? maxTokens : 4096;

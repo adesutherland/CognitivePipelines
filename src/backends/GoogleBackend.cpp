@@ -135,9 +135,24 @@ QFuture<QStringList> GoogleBackend::fetchModelList()
                 }
             }
 
+            // 3) Inject Virtual Models
+            const auto virtualModels = ModelCapsRegistry::instance().virtualModelsForBackend(this->id());
+            QSet<QString> virtualIds;
+            for (const auto& vm : virtualModels) {
+                filtered.append(vm.id);
+                virtualIds.insert(vm.id);
+            }
+
             // Deterministic order for UX stability
             filtered.removeDuplicates();
-            std::sort(filtered.begin(), filtered.end(), [](const QString& a, const QString& b){ return a.localeAwareCompare(b) < 0; });
+            std::sort(filtered.begin(), filtered.end(), [&virtualIds](const QString& a, const QString& b) {
+                const bool aVirtual = virtualIds.contains(a);
+                const bool bVirtual = virtualIds.contains(b);
+                if (aVirtual != bVirtual) {
+                    return aVirtual; // Virtual models first
+                }
+                return a.localeAwareCompare(b) < 0;
+            });
 
             {
                 QMutexLocker locker(&m_cacheMutex);
@@ -163,10 +178,16 @@ LLMResult GoogleBackend::sendPrompt(
 ) {
     LLMResult result;
 
-    // Instrumentation: log the final model ID used for the API request (debug‑gated)
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] GoogleBackend::sendPrompt using model=" << modelName;
+    // Resolve alias to real ID for the API request
+    const QString resolvedModel = ModelCapsRegistry::instance().resolveAlias(modelName, id());
+    if (resolvedModel != modelName) {
+        qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
+    }
 
-    qCDebug(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << modelName
+    // Instrumentation: log the final model ID used for the API request (debug‑gated)
+    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] GoogleBackend::sendPrompt using model=" << resolvedModel;
+
+    qCDebug(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << resolvedModel
              << ": Role Mode=system (system prompt as first content entry; no developer role), Vision="
              << (imagePath.trimmed().isEmpty()
                      ? "disabled (no imagePath provided; no model gating)"
@@ -175,19 +196,19 @@ LLMResult GoogleBackend::sendPrompt(
     // Google Generative Language (Gemini) endpoint selection:
     // Preview models use v1beta; certain families (e.g., early 1.5, 3.x) may require v1beta.
     // API key is passed as a query parameter, not via Authorization header.
-    const bool isPreviewModel = modelName.contains(QStringLiteral("preview"), Qt::CaseInsensitive);
-    const bool forceV1beta = modelName.startsWith(QStringLiteral("gemini-1.5-"), Qt::CaseInsensitive)
-                           || modelName.startsWith(QStringLiteral("gemini-3-"), Qt::CaseInsensitive);
+    const bool isPreviewModel = resolvedModel.contains(QStringLiteral("preview"), Qt::CaseInsensitive);
+    const bool forceV1beta = resolvedModel.startsWith(QStringLiteral("gemini-1.5-"), Qt::CaseInsensitive)
+                           || resolvedModel.startsWith(QStringLiteral("gemini-3-"), Qt::CaseInsensitive);
     const std::string apiVersion = (isPreviewModel || forceV1beta) ? "v1beta" : "v1";
     const std::string url = std::string("https://generativelanguage.googleapis.com/")
                             + apiVersion
                             + "/models/"
-                            + modelName.toStdString()
+                            + resolvedModel.toStdString()
                             + ":generateContent?key="
                             + apiKey.toStdString();
 
     // Resolve model caps for capability-driven filtering and role normalization
-    const auto capsOpt = ModelCapsRegistry::instance().resolve(modelName, QStringLiteral("google"));
+    const auto capsOpt = ModelCapsRegistry::instance().resolve(resolvedModel, id());
     const ModelCapsTypes::RoleMode roleMode = capsOpt.has_value() ? capsOpt->roleMode : ModelCapsTypes::RoleMode::System;
     const bool isReasoning = capsOpt.has_value() && capsOpt->hasCapability(ModelCapsTypes::Capability::Reasoning);
     const bool temperatureSupported = capsOpt.has_value() && capsOpt->constraints.temperature.has_value() && !isReasoning;

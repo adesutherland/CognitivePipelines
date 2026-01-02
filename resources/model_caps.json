@@ -1,20 +1,81 @@
 {
-  "version": 1,
+  "version": 3,
+  "virtual_models": [
+    {
+      "id": "openai-flagship",
+      "target": "gpt-5.2",
+      "backend": "openai",
+      "name": "OpenAI GPT-5.2 (Flagship)"
+    },
+    {
+      "id": "openai-reasoning-pro",
+      "target": "gpt-5.2-pro",
+      "backend": "openai",
+      "name": "OpenAI GPT-5.2 Pro (Complex Reasoning)"
+    },
+    {
+      "id": "openai-coding-max",
+      "target": "gpt-5.1-codex-max",
+      "backend": "openai",
+      "name": "OpenAI Codex Max (Interactive Coding)"
+    },
+    {
+      "id": "openai-mini",
+      "target": "gpt-5-mini",
+      "backend": "openai",
+      "name": "OpenAI GPT-5 Mini (Cost-Optimized)"
+    },
+    {
+      "id": "openai-nano",
+      "target": "gpt-5-nano",
+      "backend": "openai",
+      "name": "OpenAI GPT-5 Nano (High-Throughput)"
+    },
+    {
+      "id": "google-pro-latest",
+      "target": "gemini-3-pro-preview",
+      "backend": "google",
+      "name": "Gemini Pro (Complex Reasoning)"
+    },
+    {
+      "id": "google-flash-latest",
+      "target": "gemini-3-flash-preview",
+      "backend": "google",
+      "name": "Gemini Flash (Cost Optimised)"
+    },
+    {
+      "id": "anthropic-sonnet-latest",
+      "target": "claude-sonnet-4-5-20250929",
+      "backend": "anthropic",
+      "name": "Claude Sonnet (Flagship)"
+    },
+    {
+      "id": "anthropic-opus-latest",
+      "target": "claude-opus-4-5-20251101",
+      "backend": "anthropic",
+      "name": "Claude Opus (Complex Reasoning)"
+    },
+    {
+      "id": "anthropic-haiku-latest",
+      "target": "claude-haiku-4-5-20251001",
+      "backend": "anthropic",
+      "name": "Claude Haiku (Cost Optimised)"
+    }
+  ],
   "rules": [
     {
       "id": "openai-defaults",
       "backend": "openai",
       "priority": 1,
-      "notes": "Default properties for OpenAI backend consumed by RAG logic.",
+      "notes": "Default properties. Excludes legacy codex but ALLOWS codex-max.",
       "rag_default_embedding": "text-embedding-3-small",
-      "pattern": "^.*$(?!.*tts|.*audio|.*realtime|.*search|.*transcribe|.*embedding|.*whisper|.*dall-e|.*moderation|.*codex|.*nano)",
+      "pattern": "^(?!.*(?:tts|audio|realtime|search|transcribe|embedding|whisper|dall-e|moderation|codex(?!-max)|nano|babbage|davinci|curie|instruct-beta)).*$",
       "role_mode": "system"
     },
     {
       "id": "openai-gpt5.2-pro-assistant",
       "backend": "openai",
       "priority": 200,
-      "notes": "Pivot gpt-5.2-pro to Assistant family endpoints to avoid /v1/completions 404",
       "pattern": "^gpt-5\\.2-pro$",
       "endpoint": "assistant",
       "role_mode": "system",
@@ -24,11 +85,24 @@
       }
     },
     {
+      "id": "openai-gpt5-codex",
+      "backend": "openai",
+      "priority": 110,
+      "notes": "Specialized rule for Codex Max",
+      "pattern": "^gpt-5\\.1-codex-max$",
+      "role_mode": "developer",
+      "capabilities": ["reasoning", "longcontext"],
+      "parameter_constraints": {
+        "temperature": { "default": 0.2 },
+        "tokenFieldName": "max_completion_tokens"
+      }
+    },
+    {
       "id": "openai-gpt5-current",
       "backend": "openai",
       "priority": 100,
-      "notes": "GPT‑5 general (current + previous minor); exclude non‑chat variants.",
-      "pattern": "^gpt-5(?:\\.(?:2|1))?(?:$|[-.].*)(?!.*tts|.*audio|.*realtime|.*search|.*transcribe|.*embedding|.*whisper|.*dall-e|.*moderation|.*codex|.*nano)",
+      "notes": "General GPT-5 family (5.2, 5.1, Mini, Nano)",
+      "pattern": "^gpt-5(?:\\.(?:2|1))?(?:-mini|-nano)?(?!.*(?:tts|audio|realtime|search|transcribe|embedding|whisper|dall-e|moderation))(?:$|[-.].*)",
       "role_mode": "system",
       "capabilities": ["vision"],
       "parameter_constraints": {
@@ -41,18 +115,16 @@
       "id": "openai-gpt4o-best-general",
       "backend": "openai",
       "priority": 90,
-      "notes": "Best GPT‑4 non‑thinking line (4o + 4o‑mini); exclude non‑chat variants.",
-      "pattern": "^gpt-4o(?:-mini)?(?:$|[-.].*)(?!.*tts|.*audio|.*realtime|.*search|.*transcribe)",
+      "pattern": "^gpt-4o(?:-mini)?(?!.*(?:tts|audio|realtime|search|transcribe))(?:$|[-.].*)",
       "role_mode": "system",
       "capabilities": ["vision"],
       "parameter_constraints": { "temperature": { "default": 0.7 } }
     },
     {
-      "id": "openai-o4-mini-deep-research",
+      "id": "openai-o-series-deep-research",
       "backend": "openai",
       "priority": 95,
-      "notes": "Deep research variant of o4-mini.",
-      "pattern": "^o4-mini-deep-research(?:$|[-.].*)",
+      "pattern": "^o(3|4)-(?:mini-)?deep-research(?:$|[-.].*)",
       "role_mode": "developer",
       "capabilities": ["reasoning"],
       "parameter_constraints": {
@@ -63,50 +135,9 @@
       }
     },
     {
-      "id": "openai-o4-mini-reasoning",
-      "backend": "openai",
+      "id": "openai-o-series-general",
       "priority": 85,
-      "notes": "o4-mini (reasoning).",
-      "pattern": "^o4-mini(?:$|[-.].*)(?!.*audio|.*realtime|.*search|.*transcribe)",
-      "role_mode": "developer",
-      "capabilities": ["reasoning"],
-      "parameter_constraints": {
-        "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
-        "omitTemperature": true,
-        "tokenFieldName": "max_completion_tokens"
-      }
-    },
-    {
-      "id": "openai-o1-flagship",
-      "priority": 80,
-      "pattern": "^o1(?:-pro)?$",
-      "backend": "openai",
-      "role_mode": "developer",
-      "capabilities": ["reasoning", "vision"],
-      "parameter_constraints": {
-         "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
-         "reasoning_effort": { "default": "medium", "allowed": ["low", "medium", "high"] },
-         "omitTemperature": true,
-         "tokenFieldName": "max_completion_tokens"
-      }
-    },
-    {
-      "id": "openai-o1-mini",
-      "priority": 80,
-      "pattern": "^o1-(?:mini|preview)(?:$|[-.].*)",
-      "backend": "openai",
-      "role_mode": "developer",
-      "capabilities": ["reasoning"],
-      "parameter_constraints": {
-         "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
-         "omitTemperature": true,
-         "tokenFieldName": "max_completion_tokens"
-      }
-    },
-    {
-      "id": "openai-o3",
-      "priority": 80,
-      "pattern": "^o3(?:$|[-.].*)(?!.*audio|.*realtime|.*search|.*transcribe)",
+      "pattern": "^o(1|3|4)(?:-mini)?(?!.*(?:deep-research|audio|realtime|search|transcribe))(?:$|[-.].*)",
       "backend": "openai",
       "role_mode": "developer",
       "capabilities": ["reasoning"],
@@ -128,34 +159,11 @@
       }
     },
     {
-      "id": "google-gemini-3-preview",
-      "pattern": "^gemini-3-(pro|pro-image|flash)-preview(?:$|[-.].*)",
-      "backend": "google",
-      "role_mode": "system_instruction",
-      "priority": 105,
-      "capabilities": ["vision"],
-      "parameter_constraints": {
-        "temperature": { "default": 0.7, "max": 2.0 }
-      }
-    },
-    {
       "id": "google-gemini-2.5",
-      "pattern": "^gemini-2\\.5-(pro|flash)(?:$|[-.].*)",
+      "pattern": "^gemini-2\\.5-(pro|flash|flash-lite)(?:$|[-.].*)",
       "backend": "google",
       "role_mode": "system_instruction",
       "priority": 100,
-      "capabilities": ["vision"],
-      "parameter_constraints": {
-        "temperature": { "default": 0.7, "max": 2.0 }
-      }
-    },
-    {
-      "id": "google-gemini-2.0",
-      "pattern": "^gemini-2\\.0-(pro|flash)(?:$|[-.].*)",
-      "backend": "google",
-      "endpoint": "chat",
-      "role_mode": "system_instruction",
-      "priority": 90,
       "capabilities": ["vision"],
       "parameter_constraints": {
         "temperature": { "default": 0.7, "max": 2.0 }
@@ -164,22 +172,7 @@
     {
       "id": "anthropic-claude-4.5",
       "priority": 100,
-      "pattern": "^claude-(opus|sonnet|haiku)-4-5-\\d{8}$",
-      "backend": "anthropic",
-      "role_mode": "system_parameter",
-      "capabilities": ["vision"],
-      "headers": {
-        "anthropic-version": "2023-06-01"
-      },
-      "parameter_constraints": {
-        "maxInputTokens": 200000,
-        "temperature": { "default": 0.7 }
-      }
-    },
-    {
-      "id": "anthropic-claude-3.5",
-      "priority": 90,
-      "pattern": "^claude-3-5-(sonnet|haiku)-\\d{8}$",
+      "pattern": "^claude-(opus|sonnet|haiku)-4-5(?:$|[-.].*)",
       "backend": "anthropic",
       "role_mode": "system_parameter",
       "capabilities": ["vision"],

@@ -154,6 +154,9 @@ void UniversalLLMPropertiesWidget::onProviderChanged(int index)
     const QString providerId = m_providerCombo->itemData(index).toString();
     // Instrumentation: log provider selection from the UI (debug‑gated)
     qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] UI: providerChanged -> providerId=" << providerId;
+
+    m_pendingModelId.clear(); // Switching providers invalidates the pending model
+
     // Clear existing models and set loading state
     {
         const QSignalBlocker blocker(m_modelCombo);
@@ -185,7 +188,8 @@ void UniversalLLMPropertiesWidget::onModelChanged(int index)
     qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] UI: modelChanged -> modelId=" << modelId;
     emit modelChanged(modelId);
 
-    const auto caps = ModelCapsRegistry::instance().resolve(modelId);
+    const QString providerId = m_providerCombo ? m_providerCombo->currentData().toString() : QString();
+    const auto caps = ModelCapsRegistry::instance().resolve(modelId, providerId);
     const bool hasVision = caps.has_value() && caps->hasCapability(ModelCapsTypes::Capability::Vision);
     const bool hasReasoning = caps.has_value() && caps->hasCapability(ModelCapsTypes::Capability::Reasoning);
     const bool omitTemp = caps.has_value() && caps->constraints.omitTemperature.value_or(false);
@@ -229,13 +233,28 @@ void UniversalLLMPropertiesWidget::onModelsFetched()
         models = backend->availableModels();
     }
 
+    bool pendingFound = false;
+    int pendingIndex = -1;
+    if (!m_pendingModelId.isEmpty()) {
+        for (int i = 0; i < models.size(); ++i) {
+            if (models[i] == m_pendingModelId) {
+                pendingFound = true;
+                pendingIndex = i;
+                break;
+            }
+        }
+    }
+
     {
         const QSignalBlocker blocker(m_modelCombo);
         m_modelCombo->clear();
         for (const QString& m : models) {
             m_modelCombo->addItem(m, m);
         }
-        if (m_modelCombo->count() > 0) {
+
+        if (pendingFound) {
+            m_modelCombo->setCurrentIndex(pendingIndex);
+        } else if (m_modelCombo->count() > 0) {
             m_modelCombo->setCurrentIndex(0);
         }
     }
@@ -244,7 +263,16 @@ void UniversalLLMPropertiesWidget::onModelsFetched()
 
     // Trigger downstream updates for the newly selected model
     if (m_modelCombo->count() > 0 && m_modelCombo->currentIndex() >= 0) {
-        onModelChanged(m_modelCombo->currentIndex());
+        if (pendingFound) {
+            // Scenario A (Found): Set current index to m_pendingModelId.
+            // Crucial: Use QSignalBlocker or simply do not emit modelChanged.
+            // The Node already has this value; we are just restoring the View to match the Model.
+            const QSignalBlocker blocker(this);
+            onModelChanged(m_modelCombo->currentIndex());
+        } else {
+            // Scenario B (Not Found): Select index 0 (if available) and emit modelChanged (default behavior).
+            onModelChanged(m_modelCombo->currentIndex());
+        }
     }
 }
 
@@ -268,6 +296,8 @@ void UniversalLLMPropertiesWidget::setProvider(const QString& providerId)
 void UniversalLLMPropertiesWidget::setModel(const QString& modelId)
 {
     if (!m_modelCombo) return;
+
+    m_pendingModelId = modelId;
 
     const QSignalBlocker blocker(m_modelCombo);
     

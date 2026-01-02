@@ -26,8 +26,6 @@
 #include "core/LLMProviderRegistry.h"
 #include "backends/ILLMBackend.h"
 #include "ModelCapsRegistry.h"
-#include "string_utils.h"
-
 #include <QtConcurrent>
 #include <QJsonObject>
 #include <QDebug>
@@ -108,7 +106,7 @@ QWidget* UniversalLLMNode::createConfigurationWidget(QWidget* parent)
     // When the model changes, resolve capabilities and request an update on the node.
     connect(widget, &UniversalLLMPropertiesWidget::modelChanged,
             this, [this](const QString& modelId) {
-                const auto caps = ModelCapsRegistry::instance().resolve(modelId);
+                const auto caps = ModelCapsRegistry::instance().resolve(modelId, m_providerId);
                 if (caps.has_value()) {
                     this->updateCapabilities(*caps);
                 }
@@ -143,12 +141,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
 
     // Copy state for use during this execution
     const QString providerId = m_providerId;
-    const QString modelIdOriginal = m_modelId;
-    const QString modelId = cp::strings::canonicalize_model_id(modelIdOriginal);
-    if (modelId != modelIdOriginal) {
-        qWarning().noquote() << "[ModelLifecycle] Canonicalize: modelId '" << modelIdOriginal
-                             << "' -> '" << modelId << "'";
-    }
+    const QString modelId = m_modelId;
     const QString systemDefault = m_systemPrompt;
     const QString userDefault = m_userPrompt;
     const double temperature = m_temperature;
@@ -180,9 +173,9 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
         ExecutionToken token; token.data = output; return TokenList{token};
     }
 
-    // Validate model id post-canonicalization
+    // Validate model id
     if (modelId.trimmed().isEmpty()) {
-        const QString err = QStringLiteral("ERROR: Model id is empty after canonicalization.");
+        const QString err = QStringLiteral("ERROR: Model id is empty.");
         qWarning() << "UniversalLLMNode:" << err;
         output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
         output.insert(QStringLiteral("__error"), err);
@@ -316,12 +309,7 @@ void UniversalLLMNode::loadState(const QJsonObject& data)
                            << "' model='" << loadedModel << "' len=" << loadedModel.size()
                            << " first='" << firstChar << "' last='" << lastChar << "'";
     }
-    const QString canonModel = cp::strings::canonicalize_model_id(loadedModel);
-    if (canonModel != loadedModel) {
-        qWarning().noquote() << "[ModelLifecycle] Canonicalize(load): modelId '" << loadedModel
-                             << "' -> '" << canonModel << "'";
-    }
-    m_modelId = canonModel;
+    m_modelId = loadedModel;
     m_systemPrompt = data.value(QStringLiteral("systemPrompt")).toString();
     m_userPrompt = data.value(QStringLiteral("userPrompt")).toString();
     m_temperature = data.value(QStringLiteral("temperature")).toDouble(0.7);
@@ -390,12 +378,7 @@ void UniversalLLMNode::onModelChanged(const QString& modelId)
     qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Node: onModelChanged -> modelId='" << modelId
                        << "' len=" << modelId.size()
                        << " first='" << firstChar << "' last='" << lastChar << "'";
-    const QString canon = cp::strings::canonicalize_model_id(modelId);
-    if (canon != modelId) {
-        qWarning().noquote() << "[ModelLifecycle] Canonicalize(onModelChanged): modelId '" << modelId
-                             << "' -> '" << canon << "'";
-    }
-    m_modelId = canon;
+    m_modelId = modelId;
 }
 
 void UniversalLLMNode::onSystemPromptChanged(const QString& text)

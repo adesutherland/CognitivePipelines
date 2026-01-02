@@ -39,6 +39,7 @@ private slots:
     // TDAD Phase 2: Endpoint parsing & defaulting — intentionally failing until implemented
     void testEndpointParsingAndDefaulting();
     void testCustomHeaders();
+    void testVirtualModelAliasing();
 };
 
 namespace {
@@ -175,6 +176,39 @@ void TestModelCaps::testCustomHeaders()
     QVERIFY2(resolved.has_value(), "Resolution should have produced a value");
     QCOMPARE(resolved->customHeaders.value(QStringLiteral("X-Test-Header")), QStringLiteral("TestValue"));
     QCOMPARE(resolved->customHeaders.value(QStringLiteral("anthropic-version")), QStringLiteral("2023-06-01"));
+}
+
+void TestModelCaps::testVirtualModelAliasing()
+{
+    // Load the fixture. Note: In some build environments, we might need to handle pathing carefully.
+    // Assuming execution from project root or that fixtures are accessible.
+    QString fixturePath = QStringLiteral("tests/fixtures/model_caps_with_aliases.json");
+    if (!QFile::exists(fixturePath)) {
+        // Fallback for when running from build directory
+        fixturePath = QStringLiteral("../tests/fixtures/model_caps_with_aliases.json");
+    }
+
+    QVERIFY2(ModelCapsRegistry::instance().loadFromFile(fixturePath), "Failed to load fixture tests/fixtures/model_caps_with_aliases.json");
+
+    // Assert that resolveAlias("openai-reasoning-latest") returns "o3"
+    // This MUST FAIL because the stub currently returns the input unchanged.
+    QCOMPARE(ModelCapsRegistry::instance().resolveAlias(QStringLiteral("openai-reasoning-latest"), QStringLiteral("openai")), QStringLiteral("o3"));
+
+    // Assert that virtualModelsForBackend("openai") returns a list containing the virtual model
+    // This MUST FAIL because the stub currently returns an empty list.
+    auto virtualModels = ModelCapsRegistry::instance().virtualModelsForBackend(QStringLiteral("openai"));
+    QVERIFY2(!virtualModels.isEmpty(), "Virtual models list should not be empty for 'openai'");
+
+    bool found = false;
+    for (const auto& vm : virtualModels) {
+        if (vm.id == QStringLiteral("openai-reasoning-latest")) {
+            found = true;
+            QCOMPARE(vm.target, QStringLiteral("o3"));
+            QCOMPARE(vm.name, QStringLiteral("OpenAI Reasoning (Latest)"));
+            break;
+        }
+    }
+    QVERIFY2(found, "Virtual model 'openai-reasoning-latest' not found for backend 'openai'");
 }
 
 TEST(ModelCapsRegistryTests, QtHarness)

@@ -127,9 +127,27 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
         }
 
         qCDebug(cp_discovery).noquote() << QStringLiteral("OpenAI Filtered Model Count: [%1]").arg(filtered.size());
+
+        // 3) Inject Virtual Models
+        const auto virtualModels = ModelCapsRegistry::instance().virtualModelsForBackend(this->id());
+        QSet<QString> virtualIds;
+        for (const auto& vm : virtualModels) {
+            filtered.append(vm.id);
+            virtualIds.insert(vm.id);
+        }
+
+        qCDebug(cp_discovery).noquote() << QStringLiteral("OpenAI Final Model Count (with aliases): [%1]").arg(filtered.size());
+
         // Keep deterministic order for UX stability
         filtered.removeDuplicates();
-        std::sort(filtered.begin(), filtered.end(), [](const QString& a, const QString& b){ return a.localeAwareCompare(b) < 0; });
+        std::sort(filtered.begin(), filtered.end(), [&virtualIds](const QString& a, const QString& b) {
+            const bool aVirtual = virtualIds.contains(a);
+            const bool bVirtual = virtualIds.contains(b);
+            if (aVirtual != bVirtual) {
+                return aVirtual; // Virtual models first
+            }
+            return a.localeAwareCompare(b) < 0;
+        });
 
         {
             QMutexLocker locker(&m_cacheMutex);
@@ -192,17 +210,23 @@ LLMResult OpenAIBackend::sendPrompt(
 ) {
     LLMResult result;
 
-    // Instrumentation: log the final model ID used for the API request (debug‑gated)
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] OpenAIBackend::sendPrompt using model=" << modelName;
+    // Resolve alias to real ID for the API request
+    const QString resolvedModel = ModelCapsRegistry::instance().resolveAlias(modelName, id());
+    if (resolvedModel != modelName) {
+        qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
+    }
 
-    qCDebug(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << modelName
+    // Instrumentation: log the final model ID used for the API request (debug‑gated)
+    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] OpenAIBackend::sendPrompt using model=" << resolvedModel;
+
+    qCDebug(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << resolvedModel
              << ": Role Mode=system (hardcoded chat messages), Vision="
              << (imagePath.trimmed().isEmpty()
                      ? "disabled (no imagePath provided; no model gating)"
                      : "enabled (imagePath provided; no model gating)");
 
     // Resolve model caps for capability-driven filtering and role normalization
-    const auto resolved = ModelCapsRegistry::instance().resolveWithRule(modelName, QStringLiteral("openai"));
+    const auto resolved = ModelCapsRegistry::instance().resolveWithRule(resolvedModel, id());
     const auto capsOpt = resolved.has_value() ? std::optional<ModelCapsTypes::ModelCaps>(resolved->caps) : std::nullopt;
     const QString matchedRuleId = resolved.has_value() ? resolved->ruleId : QString();
     const ModelCapsTypes::RoleMode roleMode = capsOpt.has_value() ? capsOpt->roleMode : ModelCapsTypes::RoleMode::System;
@@ -223,9 +247,9 @@ LLMResult OpenAIBackend::sendPrompt(
     const std::string url = QStringLiteral("https://api.openai.com").append(path).toStdString();
 
     // Instrumentation: log decision inputs for temperature handling
-    const bool looksLikeGpt5 = modelName.startsWith(QStringLiteral("gpt-5"));
-    const bool looksLikeOSeries = modelName.startsWith(QStringLiteral("o")); // e.g., o3, o4
-    qCDebug(cp_params).noquote() << "[ParamBehavior] TemperatureDecision -> model='" << modelName
+    const bool looksLikeGpt5 = resolvedModel.startsWith(QStringLiteral("gpt-5"));
+    const bool looksLikeOSeries = resolvedModel.startsWith(QStringLiteral("o")); // e.g., o3, o4
+    qCDebug(cp_params).noquote() << "[ParamBehavior] TemperatureDecision -> model='" << resolvedModel
                        << "' family=" << (looksLikeGpt5 ? QStringLiteral("gpt-5") : (looksLikeOSeries ? QStringLiteral("o-series") : QStringLiteral("other")))
                        << " hasTempConstraint=" << (hasTempConstraint ? "T" : "F")
                        << " omitByCaps=" << (omitTemperatureByCaps ? "T" : "F")
@@ -316,7 +340,7 @@ LLMResult OpenAIBackend::sendPrompt(
     messages.append(userMsg);
 
     QJsonObject root;
-    root.insert(QStringLiteral("model"), modelName);
+    root.insert(QStringLiteral("model"), resolvedModel);
     if (temperatureSupported) {
         qCDebug(cp_params).noquote() << "[ParamBehavior] Inserting temperature field (value=" << temperature << ")";
         root.insert(QStringLiteral("temperature"), temperature);
