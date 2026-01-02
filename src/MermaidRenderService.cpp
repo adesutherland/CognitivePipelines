@@ -678,7 +678,54 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     }
 
     const auto grabAndEstimate = [&view](QPixmap& pix, qint64& pixelWidth, qint64& pixelHeight, qint64& estimatedBytes, qreal& pixDpr) {
-        pix = view.grab();
+        auto isBlank = [](const QPixmap& p) {
+            if (p.isNull()) return true;
+            const QImage img = p.toImage();
+            if (img.isNull()) return true;
+
+            const int w = img.width();
+            const int h = img.height();
+            if (w == 0 || h == 0) return true;
+
+            // Sample a few points to see if it's all white or transparent
+            const QVector<QPoint> samples = {
+                {w / 2, h / 2},
+                {w / 4, h / 4},
+                {3 * w / 4, 3 * w / 4},
+                {w / 4, 3 * h / 4},
+                {3 * w / 4, h / 4}
+            };
+
+            for (const QPoint& pt : samples) {
+                if (pt.x() >= w || pt.y() >= h) continue;
+                const QColor c = img.pixelColor(pt);
+                // "Ink" is anything not fully transparent and not "almost white"
+                if (c.alpha() > 0 && (c.red() < 250 || c.green() < 250 || c.blue() < 250)) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        int attempts = 0;
+        const int maxAttempts = 20;
+        while (attempts < maxAttempts) {
+            pix = view.grab();
+            if (!pix.isNull() && !isBlank(pix)) {
+                break;
+            }
+
+            if (attempts + 1 < maxAttempts) {
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+                QThread::msleep(100);
+            }
+            attempts++;
+        }
+
+        if (attempts >= maxAttempts) {
+            qWarning() << "MermaidRenderService: Visual latch timed out, image may be blank.";
+        }
+
         if (pix.isNull()) return false;
         pixDpr = pix.devicePixelRatio();
         pixelWidth = static_cast<qint64>(std::ceil(static_cast<double>(pix.width()) * pixDpr));
