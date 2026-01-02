@@ -47,6 +47,7 @@ endforeach()
 include(FetchContent)
 
 # Add QtNodes (paceholder/nodeeditor) as a dependency
+message(STATUS "Fetching QtNodes...")
 FetchContent_Declare(
     QtNodes
     GIT_REPOSITORY https://github.com/paceholder/nodeeditor.git
@@ -54,45 +55,20 @@ FetchContent_Declare(
 )
 
 # Add QuickJS as a dependency
+message(STATUS "Fetching QuickJS (quickjs-ng fork)...")
+set(QJS_BUILD_LIBC OFF CACHE BOOL "Build QuickJS libc" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_Declare(
     quickjs
-    GIT_REPOSITORY https://github.com/bellard/quickjs.git
-    GIT_TAG        master
+    GIT_REPOSITORY https://github.com/quickjs-ng/quickjs.git
+    GIT_TAG        v0.9.0
 )
 
 # Explicitly build QtNodes as a shared library (required for proper resource loading)
 set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QtNodes as shared library" FORCE)
+message(STATUS "Making QtNodes and quickjs available...")
 FetchContent_MakeAvailable(QtNodes quickjs)
-
-# Define QuickJS target manually
-file(READ ${quickjs_SOURCE_DIR}/VERSION QUICKJS_VERSION_CONTENT)
-string(STRIP "${QUICKJS_VERSION_CONTENT}" QUICKJS_VERSION)
-
-add_library(quickjs STATIC
-    ${quickjs_SOURCE_DIR}/quickjs.c
-    ${quickjs_SOURCE_DIR}/libregexp.c
-    ${quickjs_SOURCE_DIR}/cutils.c
-    ${quickjs_SOURCE_DIR}/libunicode.c
-    ${quickjs_SOURCE_DIR}/dtoa.c
-)
-set_target_properties(quickjs PROPERTIES LINKER_LANGUAGE C)
-
-target_compile_definitions(quickjs PRIVATE 
-    _GNU_SOURCE 
-    CONFIG_VERSION="${QUICKJS_VERSION}"
-)
-
-# Create a clean include directory for QuickJS to avoid 'VERSION' header conflict on macOS
-set(QUICKJS_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/quickjs_include")
-file(MAKE_DIRECTORY "${QUICKJS_INCLUDE_DIR}")
-file(COPY "${quickjs_SOURCE_DIR}/quickjs.h" DESTINATION "${QUICKJS_INCLUDE_DIR}")
-# Also copy other likely needed headers
-file(COPY "${quickjs_SOURCE_DIR}/quickjs-libc.h" DESTINATION "${QUICKJS_INCLUDE_DIR}")
-
-target_include_directories(quickjs 
-    PRIVATE ${quickjs_SOURCE_DIR}
-    INTERFACE ${QUICKJS_INCLUDE_DIR}
-)
+message(STATUS "FetchContent complete.")
 
 # C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -276,7 +252,7 @@ target_link_libraries(CognitivePipelines PRIVATE
     QtNodes::QtNodes
     Boost::boost
     cpr::cpr
-    quickjs
+    qjs
 )
 
 # Define build information macros for use in C++
@@ -526,7 +502,7 @@ if(ENABLE_TESTING)
             Qt6::WebEngineWidgets
             QtNodes::QtNodes
             Boost::boost
-            quickjs
+            qjs
     )
     # Add unit tests to CTest
     include(GoogleTest)
