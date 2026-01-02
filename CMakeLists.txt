@@ -88,6 +88,12 @@ target_compile_definitions(quickjs PUBLIC
 # Include Paths
 target_include_directories(quickjs PUBLIC ${quickjs_ng_SOURCE_DIR})
 
+# Enforce C11 for QuickJS (required for atomics on Windows/MSVC)
+set_target_properties(quickjs PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED ON
+)
+
 # Explicitly build QtNodes as a shared library (required for proper resource loading)
 set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QtNodes as shared library" FORCE)
 message(STATUS "Making QtNodes available...")
