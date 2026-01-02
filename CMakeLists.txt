@@ -56,20 +56,42 @@ FetchContent_Declare(
 
 # Add QuickJS as a dependency
 message(STATUS "Fetching QuickJS (quickjs-ng fork)...")
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Force static QuickJS" FORCE)
-set(BUILD_QJS_LIBC OFF CACHE BOOL "Skip QuickJS Shell" FORCE)
-set(QJS_BUILD_LIBC OFF CACHE BOOL "Build QuickJS libc" FORCE)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 FetchContent_Declare(
-    quickjs
+    quickjs_ng
     GIT_REPOSITORY https://github.com/quickjs-ng/quickjs.git
     GIT_TAG        v0.9.0
 )
 
+# Trigger the download, but DO NOT let it configure itself
+FetchContent_GetProperties(quickjs_ng)
+if(NOT quickjs_ng_POPULATED)
+    FetchContent_Populate(quickjs_ng)
+endif()
+
+# Manually Define the Target
+add_library(quickjs STATIC
+    ${quickjs_ng_SOURCE_DIR}/quickjs.c
+    ${quickjs_ng_SOURCE_DIR}/libregexp.c
+    ${quickjs_ng_SOURCE_DIR}/libunicode.c
+    ${quickjs_ng_SOURCE_DIR}/cutils.c
+    ${quickjs_ng_SOURCE_DIR}/libbf.c
+    ${quickjs_ng_SOURCE_DIR}/quickjs-libc.c
+)
+
+# Critical Definitions
+target_compile_definitions(quickjs PUBLIC
+    _GNU_SOURCE
+    CONFIG_VERSION="2024-01-13"
+    CONFIG_BIGNUM
+)
+
+# Include Paths
+target_include_directories(quickjs PUBLIC ${quickjs_ng_SOURCE_DIR})
+
 # Explicitly build QtNodes as a shared library (required for proper resource loading)
 set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QtNodes as shared library" FORCE)
-message(STATUS "Making QtNodes and quickjs available...")
-FetchContent_MakeAvailable(QtNodes quickjs)
+message(STATUS "Making QtNodes available...")
+FetchContent_MakeAvailable(QtNodes)
 message(STATUS "FetchContent complete.")
 
 # C++ standard
@@ -254,7 +276,7 @@ target_link_libraries(CognitivePipelines PRIVATE
     QtNodes::QtNodes
     Boost::boost
     cpr::cpr
-    qjs
+    quickjs
 )
 
 # Define build information macros for use in C++
@@ -504,7 +526,7 @@ if(ENABLE_TESTING)
             Qt6::WebEngineWidgets
             QtNodes::QtNodes
             Boost::boost
-            qjs
+            quickjs
     )
     # Add unit tests to CTest
     include(GoogleTest)
