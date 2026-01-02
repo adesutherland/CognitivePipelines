@@ -54,28 +54,14 @@ FetchContent_Declare(
     GIT_TAG        3.0.12
 )
 
-# Add QuickJS as a dependency
-message(STATUS "Fetching QuickJS (quickjs-ng fork)...")
-FetchContent_Declare(
-    quickjs_ng
-    GIT_REPOSITORY https://github.com/quickjs-ng/quickjs.git
-    GIT_TAG        v0.9.0
-)
-
-# Trigger the download, but DO NOT let it configure itself
-FetchContent_GetProperties(quickjs_ng)
-if(NOT quickjs_ng_POPULATED)
-    FetchContent_Populate(quickjs_ng)
-endif()
-
-# Manually Define the Target
+# Manually Define the Target from local 3rdparty sources
 add_library(quickjs STATIC
-    ${quickjs_ng_SOURCE_DIR}/quickjs.c
-    ${quickjs_ng_SOURCE_DIR}/libregexp.c
-    ${quickjs_ng_SOURCE_DIR}/libunicode.c
-    ${quickjs_ng_SOURCE_DIR}/cutils.c
-    ${quickjs_ng_SOURCE_DIR}/libbf.c
-    ${quickjs_ng_SOURCE_DIR}/quickjs-libc.c
+    src/3rdparty/quickjs/quickjs.c
+    src/3rdparty/quickjs/libregexp.c
+    src/3rdparty/quickjs/libunicode.c
+    src/3rdparty/quickjs/cutils.c
+    src/3rdparty/quickjs/dtoa.c
+    src/3rdparty/quickjs/quickjs-libc.c
 )
 
 # Critical Definitions
@@ -86,7 +72,7 @@ target_compile_definitions(quickjs PUBLIC
 )
 
 # Include Paths
-target_include_directories(quickjs PUBLIC ${quickjs_ng_SOURCE_DIR})
+target_include_directories(quickjs PUBLIC src/3rdparty/quickjs)
 
 # Enforce C11 for QuickJS (required for atomics on Windows/MSVC)
 set_target_properties(quickjs PROPERTIES
