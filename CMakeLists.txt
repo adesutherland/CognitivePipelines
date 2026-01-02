@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.12.1 LANGUAGES CXX)
+project(CognitivePipelines VERSION 0.12.2 LANGUAGES CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -88,6 +88,7 @@ add_executable(CognitivePipelines
     # Core headers
     ${INCLUDE_DIR}/IToolConnector.h
     ${INCLUDE_DIR}/CommonDataTypes.h
+    ${INCLUDE_DIR}/IScriptHost.h
     # Application sources
     ${SRC_DIR}/main.cpp
     ${SRC_DIR}/mainwindow.cpp
@@ -113,6 +114,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/backends/GoogleBackend.h
     ${SRC_DIR}/backends/AnthropicBackend.cpp
     ${SRC_DIR}/backends/AnthropicBackend.h
+    ${SRC_DIR}/ExecutionScriptHost.cpp
+    ${SRC_DIR}/ExecutionScriptHost.h
     ${SRC_DIR}/ModelCaps.cpp
     ${SRC_DIR}/ModelCaps.h
     ${SRC_DIR}/ModelCapsRegistry.cpp
@@ -343,7 +346,10 @@ if(ENABLE_TESTING)
             tests/test_string_utils.cpp
             tests/test_anthropic_foundation.cpp
             tests/test_anthropic_chat.cpp
+            tests/test_execution_host.cpp
             # Sources required by the unit tests
+            ${SRC_DIR}/ExecutionScriptHost.cpp
+            ${SRC_DIR}/ExecutionScriptHost.h
             ${SRC_DIR}/logging_categories.cpp
             ${SRC_DIR}/ExecutionEngine.cpp
             ${SRC_DIR}/ExecutionEngine.h

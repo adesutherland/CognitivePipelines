@@ -2,61 +2,61 @@
   "version": 3,
   "virtual_models": [
     {
-      "id": "openai-flagship",
+      "id": "gpt-flagship",
       "target": "gpt-5.2",
       "backend": "openai",
       "name": "OpenAI GPT-5.2 (Flagship)"
     },
     {
-      "id": "openai-reasoning-pro",
+      "id": "gpt-reasoning",
       "target": "gpt-5.2-pro",
       "backend": "openai",
       "name": "OpenAI GPT-5.2 Pro (Complex Reasoning)"
     },
     {
-      "id": "openai-coding-max",
+      "id": "gpt-coding",
       "target": "gpt-5.1-codex-max",
       "backend": "openai",
       "name": "OpenAI Codex Max (Interactive Coding)"
     },
     {
-      "id": "openai-mini",
+      "id": "gpt-cost-optimised",
       "target": "gpt-5-mini",
       "backend": "openai",
-      "name": "OpenAI GPT-5 Mini (Cost-Optimized)"
+      "name": "OpenAI GPT-5 Mini (Cost-Optimised)"
     },
     {
-      "id": "openai-nano",
+      "id": "gpt-high-throughput",
       "target": "gpt-5-nano",
       "backend": "openai",
       "name": "OpenAI GPT-5 Nano (High-Throughput)"
     },
     {
-      "id": "google-pro-latest",
+      "id": "gemini-reasoning",
       "target": "gemini-3-pro-preview",
       "backend": "google",
       "name": "Gemini Pro (Complex Reasoning)"
     },
     {
-      "id": "google-flash-latest",
+      "id": "gemini-cost-optimised",
       "target": "gemini-3-flash-preview",
       "backend": "google",
       "name": "Gemini Flash (Cost Optimised)"
     },
     {
-      "id": "anthropic-sonnet-latest",
+      "id": "claude-flagship",
       "target": "claude-sonnet-4-5-20250929",
       "backend": "anthropic",
       "name": "Claude Sonnet (Flagship)"
     },
     {
-      "id": "anthropic-opus-latest",
+      "id": "claude-reasoning",
       "target": "claude-opus-4-5-20251101",
       "backend": "anthropic",
       "name": "Claude Opus (Complex Reasoning)"
     },
     {
-      "id": "anthropic-haiku-latest",
+      "id": "claude-cost-optimised",
       "target": "claude-haiku-4-5-20251001",
       "backend": "anthropic",
       "name": "Claude Haiku (Cost Optimised)"
