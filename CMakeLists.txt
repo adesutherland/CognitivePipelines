@@ -80,6 +80,15 @@ set_target_properties(quickjs PROPERTIES
     C_STANDARD_REQUIRED ON
 )
 
+if(MSVC)
+    target_compile_definitions(quickjs PRIVATE 
+        WIN32_LEAN_AND_MEAN
+        _CRT_SECURE_NO_WARNINGS
+        _WINSOCK_DEPRECATED_NO_WARNINGS
+    )
+    target_compile_options(quickjs PRIVATE /experimental:c11atomics)
+endif()
+
 # Explicitly build QtNodes as a shared library (required for proper resource loading)
 set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QtNodes as shared library" FORCE)
 message(STATUS "Making QtNodes available...")
