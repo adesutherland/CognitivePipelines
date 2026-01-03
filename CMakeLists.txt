@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.12.2 LANGUAGES C CXX)
+project(CognitivePipelines VERSION 0.12.6 LANGUAGES C CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -235,6 +235,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/LoopUntilNode.h
     ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
     ${SRC_DIR}/LoopUntilPropertiesWidget.h
+    ${SRC_DIR}/UniversalScriptConnector.cpp
+    ${SRC_DIR}/UniversalScriptConnector.h
+    ${SRC_DIR}/ScriptPropertiesWidget.cpp
+    ${SRC_DIR}/ScriptPropertiesWidget.h
     ${SRC_DIR}/NodeGraphModel.cpp
     ${SRC_DIR}/NodeGraphModel.h
     ${SRC_DIR}/ToolNodeDelegate.cpp
@@ -458,6 +462,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
             ${SRC_DIR}/QuickJSRuntime.cpp
             ${SRC_DIR}/QuickJSRuntime.h
+            ${SRC_DIR}/UniversalScriptConnector.cpp
+            ${SRC_DIR}/UniversalScriptConnector.h
+            ${SRC_DIR}/ScriptPropertiesWidget.cpp
+            ${SRC_DIR}/ScriptPropertiesWidget.h
             ${SRC_DIR}/RagIndexerNode.cpp
             ${SRC_DIR}/RagIndexerNode.h
             ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
@@ -577,6 +585,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/backends/GoogleBackend.h
             ${SRC_DIR}/backends/AnthropicBackend.cpp
             ${SRC_DIR}/backends/AnthropicBackend.h
+            ${SRC_DIR}/ExecutionScriptHost.cpp
+            ${SRC_DIR}/ExecutionScriptHost.h
             ${SRC_DIR}/core/DocumentLoader.cpp
             ${SRC_DIR}/core/DocumentLoader.h
             ${SRC_DIR}/core/TextChunker.cpp
@@ -622,6 +632,12 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/HumanInputNode.h
             ${SRC_DIR}/HumanInputPropertiesWidget.cpp
             ${SRC_DIR}/HumanInputPropertiesWidget.h
+            ${SRC_DIR}/QuickJSRuntime.cpp
+            ${SRC_DIR}/QuickJSRuntime.h
+            ${SRC_DIR}/UniversalScriptConnector.cpp
+            ${SRC_DIR}/UniversalScriptConnector.h
+            ${SRC_DIR}/ScriptPropertiesWidget.cpp
+            ${SRC_DIR}/ScriptPropertiesWidget.h
             ${SRC_DIR}/NodeGraphModel.cpp
             ${SRC_DIR}/NodeGraphModel.h
             ${SRC_DIR}/ToolNodeDelegate.cpp
@@ -679,6 +695,7 @@ if(ENABLE_TESTING)
             QtNodes::QtNodes
             Boost::boost
             cpr::cpr
+            quickjs
     )
 
     # Force integration_tests to be a CONSOLE app on Windows

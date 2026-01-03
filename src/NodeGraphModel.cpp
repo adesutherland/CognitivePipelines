@@ -42,12 +42,19 @@
 #include "ConditionalRouterNode.h"
 #include "LoopNode.h"
 #include "LoopUntilNode.h"
+#include "UniversalScriptConnector.h"
+#include "QuickJSRuntime.h"
 #include "ExecutionIdUtils.h"
 
 NodeGraphModel::NodeGraphModel(QObject* parent)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
 {
     Q_UNUSED(parent);
+    
+    // Register default script engines
+    ScriptEngineRegistry::instance().registerEngine(QStringLiteral("quickjs"), []() {
+        return std::make_unique<QuickJSRuntime>();
+    });
 
     // IMPORTANT: Disable reactive propagation by default.
     // Our ExecutionEngine is the only mechanism that should trigger execution.
@@ -157,6 +164,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         auto tool = std::make_shared<LoopUntilNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Control Flow"));
+
+    // Register UniversalScriptConnector under the "Scripting" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto connector = std::make_shared<UniversalScriptConnector>();
+        return std::make_unique<ToolNodeDelegate>(connector);
+    }, QStringLiteral("Scripting"));
 }
 
 void NodeGraphModel::clear()

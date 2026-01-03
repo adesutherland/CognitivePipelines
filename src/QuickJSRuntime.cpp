@@ -92,11 +92,15 @@ void QuickJSRuntime::setupGlobalEnv(IScriptHost* host) {
 JSValue QuickJSRuntime::js_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     IScriptHost* host = static_cast<IScriptHost*>(JS_GetContextOpaque(ctx));
     if (host && argc > 0) {
-        const char* str = JS_ToCString(ctx, argv[0]);
-        if (str) {
-            host->log(QString::fromUtf8(str));
-            JS_FreeCString(ctx, str);
+        QStringList parts;
+        for (int i = 0; i < argc; ++i) {
+            const char* str = JS_ToCString(ctx, argv[i]);
+            if (str) {
+                parts << QString::fromUtf8(str);
+                JS_FreeCString(ctx, str);
+            }
         }
+        host->log(parts.join(QStringLiteral(" ")));
     }
     return JS_UNDEFINED;
 }

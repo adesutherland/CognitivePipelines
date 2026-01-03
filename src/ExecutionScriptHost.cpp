@@ -32,6 +32,18 @@ ExecutionScriptHost::ExecutionScriptHost(const DataPacket& inputPacket, DataPack
 void ExecutionScriptHost::log(const QString& message)
 {
     m_logs.append(message);
+
+    QString currentLogs = m_outputPacket.value(QStringLiteral("logs")).toString();
+    if (!currentLogs.isEmpty()) {
+        currentLogs += QStringLiteral("  \n");
+    }
+    
+    // Ensure internal newlines in the message are also treated as Markdown line breaks
+    QString formattedMessage = message;
+    formattedMessage.replace(QStringLiteral("\n"), QStringLiteral("  \n"));
+    
+    currentLogs += formattedMessage;
+    m_outputPacket.insert(QStringLiteral("logs"), currentLogs);
 }
 
 QVariant ExecutionScriptHost::getInput(const QString& key)
