@@ -1,0 +1,21 @@
+name: 'Linux Release'
+description: 'Uploads the Linux AppImage bundle'
+inputs:
+  artifact_name:
+    description: 'Name of the artifact to upload'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Release Upload (Linux)
+      shell: bash
+      run: |
+        # In build.yml, the zip is created as cognitive-pipelines-ubuntu-bundle.zip
+        if [ -f "cognitive-pipelines-ubuntu-bundle.zip" ]; then
+          mv "cognitive-pipelines-ubuntu-bundle.zip" "${{ inputs.artifact_name }}.zip"
+        fi
+        gh release create ${{ github.ref_name }} --generate-notes || true
+        gh release upload ${{ github.ref_name }} "${{ inputs.artifact_name }}.zip" --clobber
+      env:
+        GITHUB_TOKEN: ${{ github.token }}

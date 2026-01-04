@@ -1,0 +1,81 @@
+name: 'macOS Release'
+description: 'Signs, notarizes, and packages the macOS app'
+inputs:
+  certificate:
+    description: 'Base64 encoded certificate'
+    required: true
+  certificate_password:
+    description: 'Certificate password'
+    required: true
+  notarization_apple_id:
+    description: 'Apple ID for notarization'
+    required: true
+  notarization_team_id:
+    description: 'Team ID for notarization'
+    required: true
+  notarization_pwd:
+    description: 'App-specific password for notarization'
+    required: true
+  artifact_name:
+    description: 'Name of the artifact to upload'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: "Step 1: Keychain & Certificate Import"
+      shell: bash
+      env:
+        MACOS_CERTIFICATE: ${{ inputs.certificate }}
+        MACOS_CERTIFICATE_PWD: ${{ inputs.certificate_password }}
+      run: |
+        KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+        KEYCHAIN_PWD=$(openssl rand -base64 12)
+        security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+        
+        echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+        security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN_PATH" -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PWD" "$KEYCHAIN_PATH"
+        
+        # Add keychain to search list
+        security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | xargs)
+
+    - name: "Step 2: Dynamic Identity Resolution"
+      shell: bash
+      run: |
+        IDENTITY_NAME=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -n 1 | sed -E 's/.*"(.*)".*/\1/')
+        echo "MACOS_CERT_ID=$IDENTITY_NAME" >> $GITHUB_ENV
+        echo "Found identity: $IDENTITY_NAME"
+
+    - name: "Step 3: Sign"
+      shell: bash
+      run: |
+        # Re-run deploy with the real identity. We assume build is already done.
+        cmake -S . -B build -DMACOS_SIGNING_IDENTITY="${{ env.MACOS_CERT_ID }}" -DRELEASE_BUILD=ON
+        cmake --build build --target macos_deploy_all --config Release
+
+    - name: "Step 4: Notarization"
+      shell: bash
+      env:
+        APPLE_ID: ${{ inputs.notarization_apple_id }}
+        TEAM_ID: ${{ inputs.notarization_team_id }}
+        PWD: ${{ inputs.notarization_pwd }}
+      run: |
+        ditto -c -k --keepParent build/bin/CognitivePipelines.app app.zip
+        xcrun notarytool submit app.zip --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$PWD" --wait
+
+    - name: "Step 5: Staple & Package"
+      shell: bash
+      run: |
+        xcrun stapler staple build/bin/CognitivePipelines.app
+        hdiutil create -volname "CognitivePipelines" -srcfolder build/bin/CognitivePipelines.app -ov -format UDZO "${{ inputs.artifact_name }}.dmg"
+
+    - name: "Step 6: Release Upload"
+      shell: bash
+      run: |
+        gh release create ${{ github.ref_name }} --generate-notes || true
+        gh release upload ${{ github.ref_name }} "${{ inputs.artifact_name }}.dmg" --clobber
+      env:
+        GITHUB_TOKEN: ${{ github.token }}

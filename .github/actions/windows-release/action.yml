@@ -1,0 +1,22 @@
+name: 'Windows Release'
+description: 'Packages and uploads the Windows release'
+inputs:
+  artifact_name:
+    description: 'Name of the artifact to upload'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Package (Windows)
+      shell: bash
+      run: |
+        cd deploy/windows
+        zip -r "../../${{ inputs.artifact_name }}.zip" .
+    - name: Release Upload (Windows)
+      shell: bash
+      run: |
+        gh release create ${{ github.ref_name }} --generate-notes || true
+        gh release upload ${{ github.ref_name }} "${{ inputs.artifact_name }}.zip" --clobber
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
