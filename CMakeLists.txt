@@ -13,8 +13,24 @@ project(CognitivePipelines VERSION 0.12.6 LANGUAGES C CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
+# Auto-enable RELEASE_BUILD for standard Release configurations if not explicitly overridden
+string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
+if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE|RELWITHDEBINFO|MINSIZEREL")
+    if(NOT DEFINED RELEASE_BUILD_SET_BY_USER)
+        set(RELEASE_BUILD ON CACHE BOOL "Enable full codesigning for release" FORCE)
+        set(RELEASE_BUILD_SET_BY_USER TRUE CACHE INTERNAL "Flag to track if user explicitly set RELEASE_BUILD")
+    endif()
+endif()
+# Allow user to manually toggle it; if they do -DRELEASE_BUILD=OFF/ON, it should persist.
+# CMake's option() handles the cache, but since we might have forced it above, 
+# we need to be careful. Actually, the requirement says "force RELEASE_BUILD to ON if...".
+set(MACOS_SIGNING_IDENTITY "" CACHE STRING "macOS Code Signing Identity")
 if(RELEASE_BUILD)
-    set(APPLE_SIGN_IDENTITY "Developer ID Application")
+    if(NOT MACOS_SIGNING_IDENTITY)
+        set(APPLE_SIGN_IDENTITY "Developer ID Application")
+    else()
+        set(APPLE_SIGN_IDENTITY "${MACOS_SIGNING_IDENTITY}")
+    endif()
 else()
     set(APPLE_SIGN_IDENTITY "-") # Use fast ad-hoc signing
 endif()
@@ -24,7 +40,7 @@ if(APPLE)
     # Full path to the .icns and its base file name for CFBundleIconFile
     set(MACOSX_ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.icns)
     get_filename_component(MACOSX_ICON_NAME "${MACOSX_ICON_FILE}" NAME)
-    set(MACOSX_ENTITLEMENTS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.entitlements)
+    set(MACOSX_ENTITLEMENTS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/resources/entitlements.plist)
     set(MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/QtWebEngineProcess.entitlements)
     set(MACOSX_INFO_PLIST_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in)
     set(MACOSX_QTWEBENGINE_CODESIGNER ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/codesign_qtwebengine_helpers.cmake)
@@ -1078,10 +1094,26 @@ if(APPLE AND NOT XCODE)
         add_custom_target(macos_deploy_all)
         if(TARGET CognitivePipelines)
             add_dependencies(macos_deploy_all CognitivePipelines)
+
+
+            if(MACDEPLOYQT_EXECUTABLE AND NOT IS_DEBUG_BUILD)
+                add_custom_command(TARGET CognitivePipelines POST_BUILD
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" -always-overwrite
+                    COMMENT "Running macdeployqt on CognitivePipelines.app"
+                    VERBATIM)
+
+                add_custom_command(TARGET CognitivePipelines POST_BUILD
+                    COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
+                            --entitlements "${MACOSX_ENTITLEMENTS_FILE}"
+                            --sign "${APPLE_SIGN_IDENTITY}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>"
+                    COMMENT "Codesigning CognitivePipelines.app with identity: ${APPLE_SIGN_IDENTITY}"
+                    VERBATIM)
+            endif()
+
             if(MACDEPLOYQT_EXECUTABLE)
                 add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" -always-overwrite -codesign=-
-                    COMMENT "macdeployqt CognitivePipelines.app"
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" -always-overwrite -codesign=${APPLE_SIGN_IDENTITY}
+                    COMMENT "macdeployqt CognitivePipelines.app (Targeted via macos_deploy_all)"
                     VERBATIM)
             endif()
             add_custom_command(TARGET macos_deploy_all POST_BUILD
@@ -1188,3 +1220,14 @@ target_sources(CognitivePipelines PRIVATE
     ${SRC_DIR}/ExecutionAwarePainters.cpp
     ${SRC_DIR}/ExecutionStateModel.cpp
 )
+
+# Windows Post-Build Signing
+if(WIN32 AND WINDOWS_SIGNING_ENABLED)
+    add_custom_command(TARGET CognitivePipelines POST_BUILD
+        COMMAND "${SIGNTOOL_EXECUTABLE}" sign /f "${WINDOWS_PFX_FILE}" /p "${WINDOWS_PFX_PASSWORD}" 
+                /tr http://timestamp.digicert.com /td sha256 /fd sha256 
+                "$<TARGET_FILE:CognitivePipelines>"
+        COMMENT "Signing CognitivePipelines.exe with signtool.exe"
+        VERBATIM
+    )
+endif()
