@@ -1,6 +1,7 @@
 # Ignore local secrets file containing real API keys
 accounts.json
 accounts.json.template
+/secrets.txt
 
 # Ignore JetBrains IDE project files (local workspace state)
 .idea/
