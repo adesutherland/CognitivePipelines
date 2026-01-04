@@ -27,12 +27,15 @@ endif()
 set(MACOS_SIGNING_IDENTITY "" CACHE STRING "macOS Code Signing Identity")
 if(RELEASE_BUILD)
     if(NOT MACOS_SIGNING_IDENTITY)
-        set(APPLE_SIGN_IDENTITY "Developer ID Application")
+        set(APPLE_SIGN_IDENTITY "-")
+        message(STATUS "macOS signing: No identity provided. Defaulting to Ad-Hoc signing (-)")
     else()
         set(APPLE_SIGN_IDENTITY "${MACOS_SIGNING_IDENTITY}")
+        message(STATUS "macOS signing: Using provided identity: ${APPLE_SIGN_IDENTITY}")
     endif()
 else()
     set(APPLE_SIGN_IDENTITY "-") # Use fast ad-hoc signing
+    message(STATUS "macOS signing: Not a release build. Using Ad-Hoc signing (-)")
 endif()
 
 # macOS packaging resources

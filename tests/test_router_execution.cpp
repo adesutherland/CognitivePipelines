@@ -11,6 +11,7 @@
 #include <QApplication>
 #include <QEventLoop>
 #include <QTimer>
+#include <QtTest/QTest>
 
 #include <QtNodes/internal/Definitions.hpp>
 
@@ -171,6 +172,7 @@ TEST(RouterExecutionTest, testTrueBranch)
     ASSERT_TRUE(runEngineAndWait(engine));
 
     // With condition true: only the true branch should execute
+    QTest::qWait(100);
     EXPECT_EQ(trueExecCount, 1);
     EXPECT_EQ(falseExecCount, 0);
 }
@@ -288,6 +290,7 @@ TEST(RouterExecutionTest, testFalseBranch)
     ASSERT_TRUE(runEngineAndWait(engine));
 
     // With condition false: only the false branch should execute
+    QTest::qWait(100);
     EXPECT_EQ(trueExecCount, 0);
     EXPECT_EQ(falseExecCount, 1);
 }

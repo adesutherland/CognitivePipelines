@@ -325,7 +325,7 @@ LLMResult GoogleBackend::sendPrompt(
         headers,
         cpr::Body{jsonBytes.constData()},
         cpr::ConnectTimeout{10000},   // 10s connect timeout
-        cpr::Timeout{60000}           // 60s total request timeout
+        cpr::Timeout{120000}           // 120s total request timeout
     );
     
     if (response.error) {
