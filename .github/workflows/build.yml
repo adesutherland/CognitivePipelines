@@ -17,6 +17,8 @@ jobs:
     name: ${{ matrix.name }} • Qt ${{ matrix.qt-version }}
     permissions:
       contents: write
+      packages: write  # Needed for vcpkg/NuGet uploads
+      actions: write   # Restores the top-level permission
     timeout-minutes: 60
     strategy:
       fail-fast: false
