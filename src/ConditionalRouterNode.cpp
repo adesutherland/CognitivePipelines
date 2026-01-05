@@ -99,14 +99,24 @@ QWidget* ConditionalRouterNode::createConfigurationWidget(QWidget* parent)
 
 bool ConditionalRouterNode::isReady(const QVariantMap& inputs, int incomingConnectionsCount) const
 {
-    Q_UNUSED(incomingConnectionsCount);
     const bool hasData = inputs.contains(QString::fromLatin1(kInputDataId));
     if (!hasData) return false;
+
     if (m_routerMode == 2) {
         // Wait for Signal mode: require both data and condition before scheduling
         return inputs.contains(QString::fromLatin1(kInputConditionId));
     }
-    // Immediate execution modes: only data required
+
+    // Logic for modes 0 and 1:
+    // If the condition input is connected (Port index 0), we must wait for it
+    // before we are ready to execute, even in immediate modes.
+    // We use incomingConnectionsCount > 1 as a proxy for "is condition connected"
+    // since this node has exactly two possible input pins.
+    if (incomingConnectionsCount > 1) {
+        return inputs.contains(QString::fromLatin1(kInputConditionId));
+    }
+
+    // Immediate execution modes: only data required when condition not connected
     return true;
 }
 

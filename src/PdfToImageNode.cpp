@@ -51,7 +51,7 @@ NodeDescriptor PdfToImageNode::getDescriptor() const
     inPin.direction = PinDirection::Input;
     inPin.id = QString::fromLatin1(kPdfPathPinId);
     inPin.name = QStringLiteral("PDF File");
-    inPin.type = QStringLiteral("file");
+    inPin.type = QStringLiteral("text");
     desc.inputPins.insert(inPin.id, inPin);
 
     // Output pin: Image
