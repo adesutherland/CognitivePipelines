@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QLibraryInfo>
 #include <QString>
+#include "Logger.h"
 
 namespace {
 
@@ -48,6 +49,16 @@ void configureQtPlatform()
 int main(int argc, char** argv)
 {
     configureQtPlatform();
+
+    // Parse command line arguments for debug flag
+    bool debugEnabled = false;
+    for (int i = 1; i < argc; ++i) {
+        if (QString::fromLocal8Bit(argv[i]) == QStringLiteral("-d")) {
+            debugEnabled = true;
+            break;
+        }
+    }
+    AppLogHelper::setGlobalDebugEnabled(debugEnabled);
 
     QApplication app(argc, argv);
 

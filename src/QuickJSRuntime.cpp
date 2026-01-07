@@ -23,7 +23,7 @@
 //
 
 #include "QuickJSRuntime.h"
-#include <QDebug>
+#include "Logger.h"
 
 QuickJSRuntime::QuickJSRuntime() {
     m_rt = JS_NewRuntime();

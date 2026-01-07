@@ -68,6 +68,10 @@ public slots:
     // Per-node debug logging
     void onNodeLog(const QString& message);
 
+    // Global static access for logging from anywhere
+    static void logMessage(const QString& message);
+    static bool instanceExists();
+
     // Request user input from worker thread (blocking)
     // Returns true if user accepted (OK), false if canceled
     Q_INVOKABLE bool requestUserInput(const QString& prompt, QString& outText);

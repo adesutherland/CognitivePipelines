@@ -23,6 +23,7 @@
 //
 #include "PdfToImageNode.h"
 #include "PdfToImagePropertiesWidget.h"
+#include "Logger.h"
 
 #include <QtConcurrent/QtConcurrent>
 #include <QJsonObject>
@@ -30,9 +31,13 @@
 #include <QPainter>
 #include <QImage>
 #include <QTemporaryFile>
+#include <QStandardPaths>
+#include <QDir>
+#include <QUuid>
 #include <QUrl>
 #include <QSizeF>
 #include <QRectF>
+#include <QFileInfo>
 
 PdfToImageNode::PdfToImageNode(QObject* parent)
     : QObject(parent)
@@ -93,9 +98,15 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         }
     }
 
+    // Step 1: Resolve Temp Directory and Construct Template
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (tempDir.isEmpty()) {
+        tempDir = QDir::tempPath();
+    }
+    QString templatePath = tempDir + QDir::separator() + QStringLiteral("pdf_stitched_XXXXXX.png");
+
     // Reset the temporary file for this execution (destroys previous file if any)
-    m_tempFile = std::make_unique<QTemporaryFile>();
-    m_tempFile->setFileTemplate(QStringLiteral("pdf_stitched_XXXXXX.png"));
+    m_tempFile = std::make_unique<QTemporaryFile>(templatePath);
     m_tempFile->setAutoRemove(true); // Will be removed when node is destroyed or re-run
 
     // Capture m_pdfPath for use during this execution
@@ -103,7 +114,7 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
 
     DataPacket output;
 
-    // Step 1: Extract PDF path from input or use configured path (Source Mode)
+    // Step 2: Extract PDF path from input or use configured path (Source Mode)
     const QString pdfPathPinId = QString::fromLatin1(kPdfPathPinId);
     QString pdfPath;
 
@@ -117,6 +128,16 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         pdfPath = configuredPath;
     }
 
+    // Instrumentation Logic
+    CP_CLOG(PDF_DEBUG) << "Received raw input path:" << pdfPath;
+
+    QFileInfo pdfInfo(pdfPath);
+    QString absolutePdfPath = pdfInfo.absoluteFilePath();
+    CP_CLOG(PDF_DEBUG) << "Absolute File Path:" << absolutePdfPath;
+    CP_CLOG(PDF_DEBUG) << "Exists:" << pdfInfo.exists();
+    CP_CLOG(PDF_DEBUG) << "Is Readable:" << pdfInfo.isReadable();
+    CP_CLOG(PDF_DEBUG) << "Permissions:" << static_cast<int>(pdfInfo.permissions());
+
     // If still no path, return empty packet
     if (pdfPath.isEmpty()) {
         ExecutionToken token;
@@ -124,12 +145,19 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         return TokenList{token};
     }
 
-    // Step 2: Load PDF document
+    // Step 3: Load PDF document
     QPdfDocument pdfDoc;
     pdfDoc.load(pdfPath);
 
-    // Step 3: Error handling - check if loading was successful
+    // Step 4: Error handling - check if loading was successful
     if (pdfDoc.status() != QPdfDocument::Status::Ready) {
+        // Log Load Result
+        CP_CLOG(PDF_DEBUG) << "Failed to load PDF. Status:" << static_cast<int>(pdfDoc.status());
+        
+        if (pdfDoc.status() == QPdfDocument::Status::Error) {
+            CP_CLOG(PDF_DEBUG) << "PDF Error:" << static_cast<int>(pdfDoc.error());
+        }
+
         // Failed to load PDF - return empty packet
         ExecutionToken token;
         token.data = output;
@@ -143,7 +171,7 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         return TokenList{token};
     }
 
-    // Step 4: Layout calculation - determine dimensions
+    // Step 5: Layout calculation - determine dimensions
     qreal totalHeight = 0.0;
     qreal maxWidth = 0.0;
 
@@ -155,7 +183,7 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         }
     }
 
-    // Step 5: Create the tall image for stitching
+    // Step 6: Create the tall image for stitching
     // Using a reasonable DPI for rendering (72 points = 1 inch, use 2x for better quality)
     const qreal scale = 2.0;
     const int imageWidth = static_cast<int>(maxWidth * scale);
@@ -164,7 +192,7 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
     QImage stitchedImage(imageWidth, imageHeight, QImage::Format_ARGB32);
     stitchedImage.fill(Qt::white);
 
-    // Step 6: Render and stitch pages
+    // Step 7: Render and stitch pages
     QPainter painter(&stitchedImage);
     qreal currentY = 0.0;
 
@@ -187,30 +215,31 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
 
     painter.end();
 
-    // Step 7: Save to temporary file (using persistent member variable)
+    // Step 8: Save to temporary file (using persistent member variable)
     if (!m_tempFile->open()) {
+        CP_CLOG(PDF_DEBUG) << "Failed to open temporary file:" << m_tempFile->errorString();
         ExecutionToken token;
         token.data = output;
         return TokenList{token};
     }
 
-    // Save the stitched image directly to the temp file
-    if (!stitchedImage.save(m_tempFile.get(), "PNG")) {
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
-    }
-
-    // Explicitly close the file to flush data and release the file handle
-    // This prevents race conditions where downstream nodes try to read before data is flushed
+    // Get the absolute path and close the handle so we can save by path as required
+    QString outputPath = m_tempFile->fileName();
     m_tempFile->close();
 
-    QString outputPath = m_tempFile->fileName();
+    // Log the fix as required by the Task
+    CP_CLOG(PDF_DEBUG) << "Successfully generated output path:" << outputPath;
 
-    // Step 8: Return output with image path (MUST use absolute path for downstream nodes)
+    // Save the stitched image directly to the absolute path
+    if (!stitchedImage.save(outputPath, "PNG")) {
+        ExecutionToken token;
+        token.data = output;
+        return TokenList{token};
+    }
+
+    // Step 9: Return output with image path (MUST use absolute path for downstream nodes)
     const QString imagePathPinId = QString::fromLatin1(kImagePathPinId);
-    QString absolutePath = QFileInfo(outputPath).absoluteFilePath();
-    output.insert(imagePathPinId, absolutePath);
+    output.insert(imagePathPinId, outputPath);
 
     ExecutionToken token;
     token.data = output;

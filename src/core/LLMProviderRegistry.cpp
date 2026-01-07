@@ -39,7 +39,7 @@
 #include <QJsonArray>
 #include <QSaveFile>
 #include <QTextStream>
-#include <QDebug>
+#include "Logger.h"
 
 LLMProviderRegistry& LLMProviderRegistry::instance() {
     // Thread-safe singleton using C++11 magic statics
@@ -59,14 +59,14 @@ LLMProviderRegistry& LLMProviderRegistry::instance() {
 
 void LLMProviderRegistry::registerBackend(std::shared_ptr<ILLMBackend> backend) {
     if (!backend) {
-        qWarning() << "LLMProviderRegistry::registerBackend: Attempted to register null backend";
+        CP_WARN << "LLMProviderRegistry::registerBackend: Attempted to register null backend";
         return;
     }
 
     QMutexLocker locker(&m_mutex);
     const QString id = backend->id();
     if (m_backends.contains(id)) {
-        qWarning() << "LLMProviderRegistry::registerBackend: Backend with id" << id << "already registered. Replacing.";
+        CP_WARN << "LLMProviderRegistry::registerBackend: Backend with id" << id << "already registered. Replacing.";
     }
     m_backends[id] = backend;
 }
@@ -104,7 +104,7 @@ bool LLMProviderRegistry::saveCredentials(const QMap<QString, QString>& credenti
 #endif
 
     if (baseDir.isEmpty()) {
-        qWarning() << "LLMProviderRegistry::saveCredentials: Base directory unavailable.";
+        CP_WARN << "LLMProviderRegistry::saveCredentials: Base directory unavailable.";
         return false;
     }
 
@@ -156,13 +156,13 @@ bool LLMProviderRegistry::saveCredentials(const QMap<QString, QString>& credenti
     // Atomic save
     QSaveFile sf(filePath);
     if (!sf.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        qWarning() << "LLMProviderRegistry::saveCredentials: Could not open for writing:" << filePath;
+        CP_WARN << "LLMProviderRegistry::saveCredentials: Could not open for writing:" << filePath;
         return false;
     }
 
     sf.write(QJsonDocument(root).toJson());
     if (!sf.commit()) {
-        qWarning() << "LLMProviderRegistry::saveCredentials: Failed to finalize save:" << filePath;
+        CP_WARN << "LLMProviderRegistry::saveCredentials: Failed to finalize save:" << filePath;
         return false;
     }
 
@@ -228,7 +228,7 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
     if (!baseDir.isEmpty()) {
         candidatePaths << QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/accounts.json"));
     } else {
-        qWarning() << "LLMProviderRegistry::getCredential: Base directory unavailable (QStandardPaths returned empty).";
+        CP_WARN << "LLMProviderRegistry::getCredential: Base directory unavailable (QStandardPaths returned empty).";
     }
 
     candidatePaths << QDir::current().filePath(QStringLiteral("accounts.json"));
@@ -250,7 +250,7 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
         }
 
         if (!f.open(QIODevice::ReadOnly)) {
-            qWarning() << "LLMProviderRegistry::getCredential: Failed to open" << path << ":" << f.errorString();
+            CP_WARN << "LLMProviderRegistry::getCredential: Failed to open" << path << ":" << f.errorString();
             continue;
         }
 
@@ -259,7 +259,7 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
 
         const QJsonDocument doc = QJsonDocument::fromJson(data);
         if (!doc.isObject()) {
-            qWarning() << "LLMProviderRegistry::getCredential: Invalid JSON in" << path;
+            CP_WARN << "LLMProviderRegistry::getCredential: Invalid JSON in" << path;
             continue;
         }
 

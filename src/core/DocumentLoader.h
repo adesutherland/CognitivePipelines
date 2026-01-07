@@ -34,7 +34,7 @@ public:
      * @param filePath The absolute path to the file to read
      * @return The file content as a QString (UTF-8 encoded), or empty string on error
      *
-     * If the file cannot be opened or read, a warning is logged via qWarning()
+     * If the file cannot be opened or read, a warning is logged
      * and an empty string is returned.
      */
     static QString readTextFile(const QString& filePath);

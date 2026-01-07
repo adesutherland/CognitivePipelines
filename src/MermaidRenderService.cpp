@@ -25,7 +25,7 @@
 #include "MermaidRenderService.h"
 
 #include <QCoreApplication>
-#include <QDebug>
+#include "Logger.h"
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -155,7 +155,7 @@ MermaidRenderService::RenderResult MermaidRenderService::renderMermaid(const QSt
     }
 
     if (!result.ok) {
-        qWarning() << "MermaidRenderService::renderMermaid failed for output" << outputPath << "error" << result.error;
+        CP_WARN << "MermaidRenderService::renderMermaid failed for output" << outputPath << "error" << result.error;
     }
 
     return result;
@@ -250,7 +250,7 @@ QString MermaidRenderService::formatClampDetail(double requestedScale,
 
 void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const QString& outputPath, double scaleFactor, RenderResult* result) {
     if (!result) {
-        qWarning() << "MermaidRenderService::renderOnMainThread called with null result pointer";
+        CP_WARN << "MermaidRenderService::renderOnMainThread called with null result pointer";
         return;
     }
 
@@ -550,7 +550,7 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
             artifactFile.write(postRenderHtml.toUtf8());
             artifactFile.close();
         } else {
-            qWarning() << logPrefix << "Failed to write post-render artifact" << artifactPath << artifactFile.errorString();
+            CP_WARN << logPrefix << "Failed to write post-render artifact" << artifactPath << artifactFile.errorString();
         }
     }
 
@@ -627,7 +627,7 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
                     }
 
                     if (logClock.elapsed() >= 1000) {
-                        qWarning() << "Waiting for resize: JS says" << jsWidth << "x" << jsHeight
+                        CP_WARN << "Waiting for resize: JS says" << jsWidth << "x" << jsHeight
                                    << "DPR" << jsDpr
                                    << "Expected" << expectedJsWidth << "x" << expectedJsHeight
                                    << "(View:" << viewWidth << "x" << viewHeight << "Zoom:" << zoomFactor << ")";
@@ -650,7 +650,7 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
 
         if (!matched) {
             if (lastJsWidth >= 0 && lastJsHeight >= 0) {
-                qWarning() << "Timed out waiting for viewport resize after clamping. Last JS" << lastJsWidth << "x" << lastJsHeight
+                CP_WARN << "Timed out waiting for viewport resize after clamping. Last JS" << lastJsWidth << "x" << lastJsHeight
                            << "DPR" << lastJsDpr
                            << "View" << view.width() << "x" << view.height()
                            << "Zoom" << page->zoomFactor();
@@ -723,7 +723,7 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         }
 
         if (attempts >= maxAttempts) {
-            qWarning() << "MermaidRenderService: Visual latch timed out, image may be blank.";
+            CP_WARN << "MermaidRenderService: Visual latch timed out, image may be blank.";
         }
 
         if (pix.isNull()) return false;

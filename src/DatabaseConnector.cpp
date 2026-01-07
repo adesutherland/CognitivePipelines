@@ -26,7 +26,7 @@
 #include "DatabaseConnectorPropertiesWidget.h"
 
 #include <QtConcurrent/QtConcurrent>
-#include <QDebug>
+#include "Logger.h"
 #include <QUuid>
 
 // QtSql
@@ -139,7 +139,7 @@ TokenList DatabaseConnector::execute(const TokenList& incomingTokens)
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
             packet.insert(QStringLiteral("database"), dbPath);
-            qWarning() << "DatabaseConnector:" << msg;
+            CP_WARN << "DatabaseConnector:" << msg;
             return packet;
         }
         if (sql.trimmed().isEmpty()) {
@@ -147,7 +147,7 @@ TokenList DatabaseConnector::execute(const TokenList& incomingTokens)
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
             packet.insert(QStringLiteral("database"), dbPath);
-            qWarning() << "DatabaseConnector:" << msg;
+            CP_WARN << "DatabaseConnector:" << msg;
             return packet;
         }
 
@@ -162,7 +162,7 @@ TokenList DatabaseConnector::execute(const TokenList& incomingTokens)
 
             if (!db.open()) {
                 stderrText = db.lastError().text();
-                qWarning() << "DatabaseConnector: failed to open DB" << dbPath << ":" << stderrText;
+                CP_WARN << "DatabaseConnector: failed to open DB" << dbPath << ":" << stderrText;
                 // Ensure close before leaving scope
                 if (db.isOpen()) db.close();
             } else {
@@ -172,7 +172,7 @@ TokenList DatabaseConnector::execute(const TokenList& incomingTokens)
                 // Start transaction for multi-statement execution
                 if (!db.transaction()) {
                     stderrText = QStringLiteral("Failed to start transaction: ") + db.lastError().text();
-                    qWarning() << "DatabaseConnector:" << stderrText;
+                    CP_WARN << "DatabaseConnector:" << stderrText;
                     db.close();
                 } else {
                     QSqlQuery query(db);
@@ -188,7 +188,7 @@ TokenList DatabaseConnector::execute(const TokenList& incomingTokens)
                         
                         if (!query.exec(trimmedStmt)) {
                             stderrText = QStringLiteral("Statement failed: ") + query.lastError().text();
-                            qWarning() << "DatabaseConnector: statement exec failed:" << stderrText;
+                            CP_WARN << "DatabaseConnector: statement exec failed:" << stderrText;
                             allSuccess = false;
                             break;
                         }
@@ -202,14 +202,14 @@ TokenList DatabaseConnector::execute(const TokenList& incomingTokens)
                         // Rollback on failure
                         if (!db.rollback()) {
                             stderrText += QStringLiteral(" (Rollback also failed: ") + db.lastError().text() + QStringLiteral(")");
-                            qWarning() << "DatabaseConnector: rollback failed:" << db.lastError().text();
+                            CP_WARN << "DatabaseConnector: rollback failed:" << db.lastError().text();
                         }
                         db.close();
                     } else {
                         // Commit on success
                         if (!db.commit()) {
                             stderrText = QStringLiteral("Failed to commit transaction: ") + db.lastError().text();
-                            qWarning() << "DatabaseConnector: commit failed:" << stderrText;
+                            CP_WARN << "DatabaseConnector: commit failed:" << stderrText;
                             db.close();
                         } else {
                             // Success: format results. If last query was a SELECT, show table

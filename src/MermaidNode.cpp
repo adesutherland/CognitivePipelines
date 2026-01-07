@@ -28,7 +28,7 @@
 
 #include <QDir>
 #include <QFileInfo>
-#include <QDebug>
+#include "Logger.h"
 #include <QMetaObject>
 #include <QStandardPaths>
 #include <QUuid>

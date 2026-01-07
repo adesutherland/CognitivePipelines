@@ -26,7 +26,7 @@
 
 #include <QJsonObject>
 #include <QtConcurrent/QtConcurrent>
-#include <QDebug>
+#include "Logger.h"
 
 #include <QProcess>
 
@@ -100,7 +100,7 @@ TokenList ProcessConnector::execute(const TokenList& incomingTokens)
             const QString msg = QStringLiteral("ERROR: Command is empty.");
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
-            qWarning() << "ProcessConnector:" << msg;
+            CP_WARN << "ProcessConnector:" << msg;
             return packet;
         }
 
@@ -114,7 +114,7 @@ TokenList ProcessConnector::execute(const TokenList& incomingTokens)
             const QString msg = QStringLiteral("ERROR: Invalid command: '") + command + QStringLiteral("'");
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
-            qWarning() << "ProcessConnector:" << msg;
+            CP_WARN << "ProcessConnector:" << msg;
             return packet;
         }
         const QString program = tokens.takeFirst();
@@ -126,7 +126,7 @@ TokenList ProcessConnector::execute(const TokenList& incomingTokens)
         proc.start();
         if (!proc.waitForStarted(10000)) { // 10s to start
             const QString err = QStringLiteral("Failed to start process: ") + proc.errorString();
-            qWarning() << "ProcessConnector:" << err
+            CP_WARN << "ProcessConnector:" << err
                        << ", qprocess error =" << static_cast<int>(proc.error())
                        << ", state =" << static_cast<int>(proc.state());
             packet.insert(outKey, QString());
@@ -143,7 +143,7 @@ TokenList ProcessConnector::execute(const TokenList& incomingTokens)
 
         // Wait for process to finish (60s default to mirror other connectors)
         if (!proc.waitForFinished(60000)) {
-            qWarning() << "ProcessConnector: process timeout, killing...";
+            CP_WARN << "ProcessConnector: process timeout, killing...";
             proc.kill();
             proc.waitForFinished();
             packet.insert(outKey, QString());

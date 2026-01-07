@@ -33,8 +33,7 @@
 #include <QDoubleSpinBox>
 #include <QSpinBox>
 #include <QSignalBlocker>
-#include <QDebug>
-#include <QLoggingCategory>
+#include "Logger.h"
 #include "logging_categories.h"
 
 UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
@@ -153,7 +152,7 @@ void UniversalLLMPropertiesWidget::onProviderChanged(int index)
 
     const QString providerId = m_providerCombo->itemData(index).toString();
     // Instrumentation: log provider selection from the UI (debug‑gated)
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] UI: providerChanged -> providerId=" << providerId;
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] UI: providerChanged -> providerId=" << providerId;
 
     m_pendingModelId.clear(); // Switching providers invalidates the pending model
 
@@ -167,7 +166,7 @@ void UniversalLLMPropertiesWidget::onProviderChanged(int index)
 
     // Kick off async fetch via backend
     if (ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId)) {
-        qCDebug(cp_discovery).noquote() << QStringLiteral("Requesting live Model List for Provider [%1]...")
+        CP_CLOG(cp_discovery).noquote() << QStringLiteral("Requesting live Model List for Provider [%1]...")
                                  .arg(backend->name());
         QFuture<QStringList> fut = backend->fetchModelList();
         m_modelFetcher.setFuture(fut);
@@ -185,7 +184,7 @@ void UniversalLLMPropertiesWidget::onModelChanged(int index)
 
     const QString modelId = m_modelCombo->itemData(index).toString();
     // Instrumentation: log model selection from the UI (debug‑gated)
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] UI: modelChanged -> modelId=" << modelId;
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] UI: modelChanged -> modelId=" << modelId;
     emit modelChanged(modelId);
 
     const QString providerId = m_providerCombo ? m_providerCombo->currentData().toString() : QString();
@@ -217,7 +216,7 @@ void UniversalLLMPropertiesWidget::onModelChanged(int index)
                  hasReasoning ? QStringLiteral("T") : QStringLiteral("F"),
                  tempConstraint);
 
-    qCDebug(cp_lifecycle).noquote() << logLine;
+    CP_CLOG(cp_lifecycle).noquote() << logLine;
 }
 
 void UniversalLLMPropertiesWidget::onModelsFetched()
@@ -228,7 +227,7 @@ void UniversalLLMPropertiesWidget::onModelsFetched()
 
     QStringList models = m_modelFetcher.result();
     if (models.isEmpty() && backend) {
-        qWarning().noquote() << QStringLiteral("Async fetch returned empty model list for provider [%1]; falling back to static list")
+        CP_WARN.noquote() << QStringLiteral("Async fetch returned empty model list for provider [%1]; falling back to static list")
                                     .arg(backend->name());
         models = backend->availableModels();
     }

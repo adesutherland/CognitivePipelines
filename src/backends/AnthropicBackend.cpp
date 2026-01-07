@@ -26,6 +26,7 @@
 #include "ModelCapsRegistry.h"
 #include "core/LLMProviderRegistry.h"
 #include "logging_categories.h"
+#include "Logger.h"
 #include <QtConcurrent>
 #include <cpr/cpr.h>
 #include <QJsonObject>
@@ -55,7 +56,7 @@ QFuture<QStringList> AnthropicBackend::fetchModelList() {
     return QtConcurrent::run([this]() -> QStringList {
         const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("anthropic"));
         if (apiKey.isEmpty()) {
-            qWarning() << "AnthropicBackend::fetchModelList: API key not found";
+            CP_WARN << "AnthropicBackend::fetchModelList: API key not found";
             return availableModels();
         }
 
@@ -70,13 +71,13 @@ QFuture<QStringList> AnthropicBackend::fetchModelList() {
         );
 
         if (response.status_code != 200) {
-            qWarning() << "AnthropicBackend::fetchModelList: Failed to fetch models. HTTP Status:" << response.status_code;
+            CP_WARN << "AnthropicBackend::fetchModelList: Failed to fetch models. HTTP Status:" << response.status_code;
             return availableModels();
         }
 
         QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(response.text));
         if (doc.isNull() || !doc.isObject()) {
-            qWarning() << "AnthropicBackend::fetchModelList: Invalid JSON response";
+            CP_WARN << "AnthropicBackend::fetchModelList: Invalid JSON response";
             return availableModels();
         }
 
@@ -129,7 +130,7 @@ LLMResult AnthropicBackend::sendPrompt(
     // Resolve alias to real ID for the API request
     const QString resolvedModel = ModelCapsRegistry::instance().resolveAlias(modelName, id());
     if (resolvedModel != modelName) {
-        qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
+        CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
     }
 
     // Resolve model caps for role normalization and capability-driven behavior

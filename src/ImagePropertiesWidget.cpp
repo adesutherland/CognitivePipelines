@@ -28,6 +28,7 @@
 #include <QEvent>
 #include <QResizeEvent>
 #include <QShowEvent>
+#include "Logger.h"
 
 ImagePropertiesWidget::ImagePropertiesWidget(QWidget* parent)
     : QWidget(parent)
@@ -112,7 +113,7 @@ void ImagePropertiesWidget::setImagePath(const QString& path)
         m_originalPixmap.load(path);
         // Verify that the pixmap loaded successfully
         if (m_originalPixmap.isNull()) {
-            qWarning() << "ImagePropertiesWidget::setImagePath: Failed to load image from path:" << path;
+            CP_WARN << "ImagePropertiesWidget::setImagePath: Failed to load image from path:" << path;
         }
     }
     
@@ -131,7 +132,7 @@ QString ImagePropertiesWidget::imagePath() const
 void ImagePropertiesWidget::updatePreview()
 {
     if (!m_previewLabel) {
-        qWarning() << "[ImagePropertiesWidget::updatePreview] Aborting: m_previewLabel is null";
+        CP_WARN << "[ImagePropertiesWidget::updatePreview] Aborting: m_previewLabel is null";
         return;
     }
     
@@ -143,7 +144,7 @@ void ImagePropertiesWidget::updatePreview()
         // Calculate available width by subtracting layout margins from widget width
         auto* layout = qobject_cast<QVBoxLayout*>(this->layout());
         if (!layout) {
-            qWarning() << "[ImagePropertiesWidget::updatePreview] Aborting: Could not cast layout to QVBoxLayout";
+            CP_WARN << "[ImagePropertiesWidget::updatePreview] Aborting: Could not cast layout to QVBoxLayout";
             return;
         }
         
@@ -152,7 +153,7 @@ void ImagePropertiesWidget::updatePreview()
         
         // Sanity check: Ensure we have positive width before scaling
         if (availableWidth <= 0) {
-            qWarning() << "[ImagePropertiesWidget::updatePreview] Aborting: availableWidth <= 0 (width =" << availableWidth << ")";
+            CP_WARN << "[ImagePropertiesWidget::updatePreview] Aborting: availableWidth <= 0 (width =" << availableWidth << ")";
             return;
         }
         
@@ -210,7 +211,7 @@ void ImagePropertiesWidget::onViewFullSize()
 {
     // Check if we have a valid image
     if (m_currentPath.isEmpty() || m_originalPixmap.isNull()) {
-        qWarning() << "ImagePropertiesWidget::onViewFullSize: No valid image to display";
+        CP_WARN << "ImagePropertiesWidget::onViewFullSize: No valid image to display";
         return;
     }
     

@@ -24,7 +24,7 @@
 
 #include "ExecutionEngine.h"
 
-#include <QDebug>
+#include "Logger.h"
 #include <QJsonDocument>
 #include <QtConcurrent/QtConcurrent>
 #include <QThread>
@@ -104,7 +104,7 @@ void ExecutionEngine::run()
 void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
 {
     if (!_graphModel) {
-        qWarning() << "ExecutionEngine: No graph model available.";
+        CP_WARN << "ExecutionEngine: No graph model available.";
         return;
     }
 

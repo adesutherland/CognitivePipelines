@@ -4,7 +4,7 @@
 #include <QFile>
 #include <QTextStream>
 #include <QFileInfo>
-#include <QDebug>
+#include "Logger.h"
 
 QStringList DocumentLoader::scanDirectory(const QString& rootPath, const QStringList& nameFilters)
 {
@@ -47,7 +47,7 @@ QString DocumentLoader::readTextFile(const QString& filePath)
     
     // Try to open the file for reading
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning() << "DocumentLoader: Failed to open file:" << filePath 
+        CP_WARN << "DocumentLoader: Failed to open file:" << filePath 
                    << "Error:" << file.errorString();
         return QString();
     }

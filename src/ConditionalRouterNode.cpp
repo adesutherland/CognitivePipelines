@@ -26,7 +26,7 @@
 #include "ConditionalRouterPropertiesWidget.h"
 
 #include <QJsonObject>
-#include <QDebug>
+#include "Logger.h"
 #include <QtNodes/internal/Definitions.hpp>
 
 // Thread-local execution context provided by ExecutionEngine
@@ -133,13 +133,13 @@ TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
     // Inspect input data before evaluation to prevent phantom execution.
     const QString inputDataKey = QString::fromLatin1(kInputDataId);
     if (!inputs.contains(inputDataKey)) {
-        qWarning() << "ConditionalRouterNode: Skipping execution due to missing input data.";
+        CP_WARN << "ConditionalRouterNode: Skipping execution due to missing input data.";
         return TokenList{};
     }
 
     const QVariant inputData = inputs.value(inputDataKey);
     if (inputData.isNull()) {
-        qWarning() << "ConditionalRouterNode: Skipping execution due to null input data.";
+        CP_WARN << "ConditionalRouterNode: Skipping execution due to null input data.";
         return TokenList{};
     }
 
@@ -158,7 +158,7 @@ TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
                                 .arg(QString::number(g_CurrentNodeId))
                                 .arg(raw)
                                 .arg(routeTrue ? QStringLiteral("TRUE") : QStringLiteral("FALSE"));
-            qDebug().noquote() << msg;
+            CP_LOG.noquote() << msg;
         }
     } else {
         // No condition provided
@@ -168,7 +168,7 @@ TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
             routeTrue = true;
         } else {
             // m_routerMode == 2 (Wait for Signal) should have been gated by isReady
-            qWarning() << "ConditionalRouterNode: execute called without condition in Wait-for-Signal mode; skipping output";
+            CP_WARN << "ConditionalRouterNode: execute called without condition in Wait-for-Signal mode; skipping output";
             return TokenList{};
         }
         // Control-flow decision trace when using default mode
@@ -178,7 +178,7 @@ TokenList ConditionalRouterNode::execute(const TokenList& incomingTokens)
                                 .arg(QString::number(g_CurrentNodeId))
                                 .arg(raw)
                                 .arg(routeTrue ? QStringLiteral("TRUE") : QStringLiteral("FALSE"));
-            qDebug().noquote() << msg;
+            CP_LOG.noquote() << msg;
         }
     }
 

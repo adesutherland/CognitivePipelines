@@ -71,9 +71,13 @@
 
 #include "CredentialsDialog.h"
 #include "UserInputDialog.h"
+#include "Logger.h"
+
+static MainWindow* s_instance = nullptr;
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent) {
+    s_instance = this;
     setWindowTitle("CognitivePipelines");
     resize(1100, 700);
 
@@ -251,7 +255,10 @@ void MainWindow::createActions() {
     // Pipeline menu action to enable/disable debug logging
     enableDebugLoggingAction_ = new QAction(tr("Enable Debug Logging"), this);
     enableDebugLoggingAction_->setCheckable(true);
-    enableDebugLoggingAction_->setChecked(false);
+    enableDebugLoggingAction_->setChecked(AppLogHelper::isGlobalDebugEnabled());
+    connect(enableDebugLoggingAction_, &QAction::toggled, this, [](bool enabled) {
+        AppLogHelper::setGlobalDebugEnabled(enabled);
+    });
 
     // Slow Motion Mode toggle
     slowMotionAction_ = new QAction(tr("Slow Motion Mode"), this);
@@ -715,6 +722,19 @@ void MainWindow::onNodeLog(const QString& message)
     }
 }
 
+void MainWindow::logMessage(const QString& message)
+{
+    if (s_instance) {
+        QMetaObject::invokeMethod(s_instance, "onNodeLog", Qt::QueuedConnection,
+                                  Q_ARG(QString, message));
+    }
+}
+
+bool MainWindow::instanceExists()
+{
+    return s_instance != nullptr;
+}
+
 bool MainWindow::requestUserInput(const QString& prompt, QString& outText)
 {
     UserInputDialog dialog(prompt, this);
@@ -729,6 +749,7 @@ bool MainWindow::requestUserInput(const QString& prompt, QString& outText)
 
 MainWindow::~MainWindow()
 {
+    s_instance = nullptr;
     // Ensure properties panel does not hold onto any widget
     setPropertiesWidget(nullptr);
 

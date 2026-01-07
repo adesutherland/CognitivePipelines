@@ -38,6 +38,7 @@
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QUuid>
+#include "Logger.h"
 
 RagQueryNode::RagQueryNode(QObject* parent)
     : QObject(parent)
@@ -127,18 +128,18 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
         }
 
         if (queryText.isEmpty()) {
-            qWarning() << "RagQueryNode: Query text is empty";
+            CP_WARN << "RagQueryNode: Query text is empty";
             return output;
         }
 
         if (dbPath.isEmpty()) {
-            qWarning() << "RagQueryNode: Database path is empty";
+            CP_WARN << "RagQueryNode: Database path is empty";
             return output;
         }
 
         QFileInfo fi(dbPath);
         if (!fi.exists() || !fi.isFile()) {
-            qWarning() << "RagQueryNode: Database file does not exist:" << dbPath;
+            CP_WARN << "RagQueryNode: Database file does not exist:" << dbPath;
             return output;
         }
 
@@ -146,37 +147,37 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
         try {
             indexCfg = RagUtils::getIndexConfig(dbPath);
         } catch (const std::exception& ex) {
-            qWarning() << "RagQueryNode: Failed to inspect index config:" << ex.what();
+            CP_WARN << "RagQueryNode: Failed to inspect index config:" << ex.what();
             return output;
         }
 
         if (indexCfg.providerId.isEmpty() || indexCfg.modelId.isEmpty()) {
-            qWarning() << "RagQueryNode: Index configuration returned empty provider/model";
+            CP_WARN << "RagQueryNode: Index configuration returned empty provider/model";
             return output;
         }
 
         // Resolve credentials and backend via LLMProviderRegistry
         QString apiKey = LLMProviderRegistry::instance().getCredential(indexCfg.providerId);
         if (apiKey.isEmpty()) {
-            qWarning() << "RagQueryNode: No API key found for provider:" << indexCfg.providerId;
+            CP_WARN << "RagQueryNode: No API key found for provider:" << indexCfg.providerId;
             return output;
         }
 
         ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(indexCfg.providerId);
         if (!backend) {
-            qWarning() << "RagQueryNode: Backend not found for provider:" << indexCfg.providerId;
+            CP_WARN << "RagQueryNode: Backend not found for provider:" << indexCfg.providerId;
             return output;
         }
 
         // Vectorization
         EmbeddingResult embResult = backend->getEmbedding(apiKey, indexCfg.modelId, queryText);
         if (embResult.hasError) {
-            qWarning() << "RagQueryNode: Embedding error:" << embResult.errorMsg;
+            CP_WARN << "RagQueryNode: Embedding error:" << embResult.errorMsg;
             return output;
         }
 
         if (embResult.vector.empty()) {
-            qWarning() << "RagQueryNode: Empty embedding vector for query";
+            CP_WARN << "RagQueryNode: Empty embedding vector for query";
             return output;
         }
 
@@ -185,7 +186,7 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
         try {
             searchResults = RagUtils::findMostRelevantChunks(dbPath, embResult.vector, m_maxResults, m_minRelevance);
         } catch (const std::exception& ex) {
-            qWarning() << "RagQueryNode: Search error:" << ex.what();
+            CP_WARN << "RagQueryNode: Search error:" << ex.what();
             return output;
         }
 
@@ -199,7 +200,7 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
             QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
             db.setDatabaseName(dbPath);
             if (!db.open()) {
-                qWarning() << "RagQueryNode: Failed to open database for source resolution:" << db.lastError().text();
+                CP_WARN << "RagQueryNode: Failed to open database for source resolution:" << db.lastError().text();
             } else {
                 dbOpened = true;
                 QSqlQuery query(db);
@@ -212,7 +213,7 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
                     if (query.exec() && query.next()) {
                         filePathById.insert(r.fileId, query.value(0).toString());
                     } else if (query.lastError().isValid()) {
-                        qWarning() << "RagQueryNode: Failed to resolve file_path for id" << r.fileId
+                        CP_WARN << "RagQueryNode: Failed to resolve file_path for id" << r.fileId
                                    << ":" << query.lastError().text();
                     }
                 }

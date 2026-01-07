@@ -26,10 +26,9 @@
 #include "core/LLMProviderRegistry.h"
 #include "backends/ILLMBackend.h"
 #include "ModelCapsRegistry.h"
+#include "Logger.h"
 #include <QtConcurrent>
 #include <QJsonObject>
-#include <QDebug>
-#include <QLoggingCategory>
 #include "logging_categories.h"
 
 UniversalLLMNode::UniversalLLMNode(QObject* parent)
@@ -148,7 +147,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     const int maxTokens = m_maxTokens;
 
     // Instrumentation: log at the very start of execute() (debug‑gated)
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Node: execute() start"
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] Node: execute() start"
                        << " providerId=" << providerId
                        << " modelId=" << modelId;
 
@@ -176,7 +175,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     // Validate model id
     if (modelId.trimmed().isEmpty()) {
         const QString err = QStringLiteral("ERROR: Model id is empty.");
-        qWarning() << "UniversalLLMNode:" << err;
+        CP_WARN << "UniversalLLMNode:" << err;
         output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
         output.insert(QStringLiteral("__error"), err);
 
@@ -187,7 +186,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId);
     if (!backend) {
         const QString err = QStringLiteral("ERROR: Backend '%1' not found. Please check provider configuration.").arg(providerId);
-        qWarning() << "UniversalLLMNode:" << err;
+        CP_WARN << "UniversalLLMNode:" << err;
         output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
         output.insert(QStringLiteral("__error"), err);
 
@@ -198,7 +197,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     const QString apiKey = LLMProviderRegistry::instance().getCredential(providerId);
     if (apiKey.isEmpty()) {
         const QString err = QStringLiteral("ERROR: API key not found for provider '%1'. Please configure credentials in accounts.json.").arg(providerId);
-        qWarning() << "UniversalLLMNode:" << err;
+        CP_WARN << "UniversalLLMNode:" << err;
         output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
         output.insert(QStringLiteral("__error"), err);
 
@@ -209,7 +208,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     // Instrumentation: introspect potential double-quoting on the model id
     const auto firstChar = modelId.isEmpty() ? QStringLiteral("∅") : modelId.left(1);
     const auto lastChar = modelId.isEmpty() ? QStringLiteral("∅") : modelId.right(1);
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Validation: selected modelId='" << modelId
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] Validation: selected modelId='" << modelId
                        << "' len=" << modelId.size()
                        << " first='" << firstChar << "' last='" << lastChar << "'";
     QString validatedModelId = modelId;
@@ -222,7 +221,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
         // Emit a warning for visibility but pass through to backend.
         const QStringList availableModels = backend->availableModels();
         if (!availableModels.contains(modelId)) {
-            qWarning() << "UniversalLLMNode: Model not recognized by Registry and not found in backend list. Passing through selection unchanged: '"
+            CP_WARN << "UniversalLLMNode: Model not recognized by Registry and not found in backend list. Passing through selection unchanged: '"
                        << modelId << "' for provider '" << providerId << "'.";
         }
         validatedModelId = modelId;
@@ -233,7 +232,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     // Instrumentation: also introspect validated id
     const auto vFirstChar = validatedModelId.isEmpty() ? QStringLiteral("∅") : validatedModelId.left(1);
     const auto vLastChar = validatedModelId.isEmpty() ? QStringLiteral("∅") : validatedModelId.right(1);
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Node: pre-backend call"
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] Node: pre-backend call"
                        << " providerId=" << providerId
                        << " selectedModelId=" << modelId
                        << " validatedModelId=" << validatedModelId
@@ -246,14 +245,14 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
                                     systemPrompt, userPrompt, imageInput);
     } catch (const std::exception& e) {
         const QString err = QStringLiteral("ERROR: Exception during backend call: %1").arg(QString::fromUtf8(e.what()));
-        qWarning() << "UniversalLLMNode:" << err;
+        CP_WARN << "UniversalLLMNode:" << err;
         output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
         output.insert(QStringLiteral("__error"), err);
 
         ExecutionToken token; token.data = output; return TokenList{token};
     } catch (...) {
         const QString err = QStringLiteral("ERROR: Unknown exception during backend call.");
-        qWarning() << "UniversalLLMNode:" << err;
+        CP_WARN << "UniversalLLMNode:" << err;
         output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
         output.insert(QStringLiteral("__error"), err);
 
@@ -305,7 +304,7 @@ void UniversalLLMNode::loadState(const QJsonObject& data)
     {
         const auto firstChar = loadedModel.isEmpty() ? QStringLiteral("∅") : loadedModel.left(1);
         const auto lastChar = loadedModel.isEmpty() ? QStringLiteral("∅") : loadedModel.right(1);
-        qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] LoadState -> provider='" << m_providerId
+        CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] LoadState -> provider='" << m_providerId
                            << "' model='" << loadedModel << "' len=" << loadedModel.size()
                            << " first='" << firstChar << "' last='" << lastChar << "'";
     }
@@ -366,7 +365,7 @@ void UniversalLLMNode::updateCapabilities(const ModelCapsTypes::ModelCaps& caps)
 void UniversalLLMNode::onProviderChanged(const QString& providerId)
 {
     // Instrumentation: log when node receives provider updates from the widget (debug‑gated)
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Node: onProviderChanged -> providerId=" << providerId;
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] Node: onProviderChanged -> providerId=" << providerId;
     m_providerId = providerId;
 }
 
@@ -375,7 +374,7 @@ void UniversalLLMNode::onModelChanged(const QString& modelId)
     // Instrumentation: log when node receives model updates from the widget (debug‑gated)
     const auto firstChar = modelId.isEmpty() ? QStringLiteral("∅") : modelId.left(1);
     const auto lastChar = modelId.isEmpty() ? QStringLiteral("∅") : modelId.right(1);
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Node: onModelChanged -> modelId='" << modelId
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] Node: onModelChanged -> modelId='" << modelId
                        << "' len=" << modelId.size()
                        << " first='" << firstChar << "' last='" << lastChar << "'";
     m_modelId = modelId;

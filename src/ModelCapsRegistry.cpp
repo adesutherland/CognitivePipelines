@@ -23,8 +23,7 @@
 //
 #include "ModelCapsRegistry.h"
 
-#include <QDebug>
-#include <QLoggingCategory>
+#include "Logger.h"
 #include "logging_categories.h"
 #include <QFile>
 #include <QJsonArray>
@@ -125,7 +124,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
     QWriteLocker writeLocker(&lock_);
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        qWarning() << "ModelCapsRegistry: unable to open file" << path;
+        CP_WARN << "ModelCapsRegistry: unable to open file" << path;
         return false;
     }
 
@@ -134,12 +133,12 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
     QJsonParseError parseError;
     const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
     if (parseError.error != QJsonParseError::NoError) {
-        qWarning() << "ModelCapsRegistry: failed to parse JSON" << parseError.errorString();
+        CP_WARN << "ModelCapsRegistry: failed to parse JSON" << parseError.errorString();
         return false;
     }
 
     if (!doc.isObject()) {
-        qWarning() << "ModelCapsRegistry: root JSON is not an object";
+        CP_WARN << "ModelCapsRegistry: root JSON is not an object";
         return false;
     }
 
@@ -147,7 +146,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
     const QJsonValue rulesValue = root.value(QStringLiteral("rules"));
 
     if (!rulesValue.isArray()) {
-        qWarning() << "ModelCapsRegistry: 'rules' is missing or not an array";
+        CP_WARN << "ModelCapsRegistry: 'rules' is missing or not an array";
         return false;
     }
 
@@ -157,7 +156,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
 
     for (const auto& ruleValue : rulesArray) {
         if (!ruleValue.isObject()) {
-            qWarning() << "ModelCapsRegistry: skipping non-object rule entry";
+            CP_WARN << "ModelCapsRegistry: skipping non-object rule entry";
             continue;
         }
 
@@ -165,14 +164,14 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
 
         const QJsonValue patternValue = ruleObj.value(QStringLiteral("pattern"));
         if (!patternValue.isString()) {
-            qWarning() << "ModelCapsRegistry: skipping rule without string pattern";
+            CP_WARN << "ModelCapsRegistry: skipping rule without string pattern";
             continue;
         }
 
         const QString patternString = patternValue.toString();
         QRegularExpression regex(patternString);
         if (!regex.isValid()) {
-            qWarning() << "ModelCapsRegistry: invalid regex pattern" << patternString << "-" << regex.errorString();
+            CP_WARN << "ModelCapsRegistry: invalid regex pattern" << patternString << "-" << regex.errorString();
             continue;
         }
 
@@ -182,7 +181,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
             QRegularExpression negativeRegex(negativePatternText);
 
             if (!negativeRegex.isValid()) {
-                qWarning() << "ModelCapsRegistry: invalid trailing negative lookahead" << negativePatternText << "-" << negativeRegex.errorString();
+                CP_WARN << "ModelCapsRegistry: invalid trailing negative lookahead" << negativePatternText << "-" << negativeRegex.errorString();
             } else {
                 trailingNegativeLookahead = negativeRegex;
             }
@@ -202,7 +201,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
             if (const auto role = roleModeFromString(roleModeValue.toString())) {
                 caps.roleMode = *role;
             } else {
-                qWarning() << "ModelCapsRegistry: unknown roleMode" << roleModeValue.toString();
+                CP_WARN << "ModelCapsRegistry: unknown roleMode" << roleModeValue.toString();
             }
         }
 
@@ -216,8 +215,8 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
                 if (const auto cap = capabilityFromString(capVal.toString())) {
                     capabilitySet.insert(*cap);
                 } else {
-                    qWarning() << "ModelCapsRegistry: unknown capability" << capVal.toString();
-                    qWarning().noquote() << QStringLiteral("Unknown capability string: %1").arg(capVal.toString());
+                    CP_WARN << "ModelCapsRegistry: unknown capability" << capVal.toString();
+                    CP_WARN.noquote() << QStringLiteral("Unknown capability string: %1").arg(capVal.toString());
                 }
             }
 
@@ -233,8 +232,8 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
                 if (const auto cap = capabilityFromString(capVal.toString())) {
                     caps.capabilities.remove(*cap);
                 } else {
-                    qWarning() << "ModelCapsRegistry: unknown disabled capability" << capVal.toString();
-                    qWarning().noquote() << QStringLiteral("Unknown capability string: %1").arg(capVal.toString());
+                    CP_WARN << "ModelCapsRegistry: unknown disabled capability" << capVal.toString();
+                    CP_WARN.noquote() << QStringLiteral("Unknown capability string: %1").arg(capVal.toString());
                 }
             }
         }
@@ -345,7 +344,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
         const char* endpointStr = (caps.endpointMode == EndpointMode::Chat)
                                       ? "chat"
                                       : (caps.endpointMode == EndpointMode::Completion ? "completion" : "assistant");
-        qCDebug(cp_registry).noquote() << QStringLiteral("Loaded Rule [%1]: Pattern='%2', Backend='%3', Caps Count=%4, Endpoint=%5")
+        CP_CLOG(cp_registry).noquote() << QStringLiteral("Loaded Rule [%1]: Pattern='%2', Backend='%3', Caps Count=%4, Endpoint=%5")
                                  .arg(idForLog, patternString, backendForLog, QString::number(capsCount), QString::fromLatin1(endpointStr));
 
         parsedRules.push_back(std::move(rule));
@@ -367,7 +366,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
 
         for (const auto& vmValue : virtualModelsArray) {
             if (!vmValue.isObject()) {
-                qWarning() << "ModelCapsRegistry: skipping non-object virtual_model entry";
+                CP_WARN << "ModelCapsRegistry: skipping non-object virtual_model entry";
                 continue;
             }
 
@@ -377,7 +376,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
             const QJsonValue nameVal = vmObj.value(QStringLiteral("name"));
 
             if (!idVal.isString() || !targetVal.isString() || !nameVal.isString()) {
-                qWarning() << "ModelCapsRegistry: skipping virtual_model missing id, target, or name";
+                CP_WARN << "ModelCapsRegistry: skipping virtual_model missing id, target, or name";
                 continue;
             }
 
@@ -390,7 +389,7 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
                 vm.backend = backendVal.toString();
             }
 
-            qCDebug(cp_registry).noquote() << QStringLiteral("Loaded Virtual Model: Alias='%1', Target='%2', Backend='%3'")
+            CP_CLOG(cp_registry).noquote() << QStringLiteral("Loaded Virtual Model: Alias='%1', Target='%2', Backend='%3'")
                                      .arg(vm.id, vm.target, vm.backend.isEmpty() ? QStringLiteral("(any)") : vm.backend);
 
             parsedVirtualModels.push_back(std::move(vm));
@@ -422,7 +421,7 @@ std::optional<ModelCapsRegistry::ResolvedCaps> ModelCapsRegistry::resolveWithRul
     // Instrumentation: introspect modelId at resolve entry to detect quoting issues
     const auto firstChar = realModelId.isEmpty() ? QStringLiteral("∅") : realModelId.left(1);
     const auto lastChar = realModelId.isEmpty() ? QStringLiteral("∅") : realModelId.right(1);
-    qCDebug(cp_registry).noquote() << "[ModelLifecycle] Registry::resolve entry -> backend='" << (backendId.isEmpty()?QStringLiteral("(any)"):backendId)
+    CP_CLOG(cp_registry).noquote() << "[ModelLifecycle] Registry::resolve entry -> backend='" << (backendId.isEmpty()?QStringLiteral("(any)"):backendId)
                        << "' model='" << realModelId << "' len=" << realModelId.size()
                        << " first='" << firstChar << "' last='" << lastChar << "'";
     for (const auto& rule : rules_) {
@@ -440,7 +439,7 @@ std::optional<ModelCapsRegistry::ResolvedCaps> ModelCapsRegistry::resolveWithRul
             const bool hasVision = rule.caps.capabilities.contains(Capability::Vision);
             const bool hasReasoning = rule.caps.capabilities.contains(Capability::Reasoning);
             const QString idForLog = rule.id.isEmpty() ? QStringLiteral("(no-id)") : rule.id;
-            qCDebug(cp_registry).noquote() << QStringLiteral("RESOLVE: Model '%1' matched Rule '%2' (Priority %3). Capabilities: Vision=%4, Reasoning=%5")
+            CP_CLOG(cp_registry).noquote() << QStringLiteral("RESOLVE: Model '%1' matched Rule '%2' (Priority %3). Capabilities: Vision=%4, Reasoning=%5")
                                      .arg(realModelId, idForLog, QString::number(rule.priority),
                                           hasVision ? QStringLiteral("T") : QStringLiteral("F"),
                                           hasReasoning ? QStringLiteral("T") : QStringLiteral("F"));
@@ -448,7 +447,7 @@ std::optional<ModelCapsRegistry::ResolvedCaps> ModelCapsRegistry::resolveWithRul
             return rc;
         }
     }
-    qCDebug(cp_registry).noquote() << QStringLiteral("RESOLVE: Model '%1' hit FALLBACK.").arg(realModelId);
+    CP_CLOG(cp_registry).noquote() << QStringLiteral("RESOLVE: Model '%1' hit FALLBACK.").arg(realModelId);
     return std::nullopt;
 }
 
@@ -475,7 +474,7 @@ QString ModelCapsRegistry::resolveAlias(const QString& id, const QString& backen
     do {
         foundInPass = false;
         if (visited.contains(current)) {
-            qWarning() << "ModelCapsRegistry: cycle detected in virtual models for" << id;
+            CP_WARN << "ModelCapsRegistry: cycle detected in virtual models for" << id;
             break;
         }
         visited.insert(current);

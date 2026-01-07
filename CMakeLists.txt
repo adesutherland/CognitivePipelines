@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.12.7 LANGUAGES C CXX)
+project(CognitivePipelines VERSION 0.12.8 LANGUAGES C CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -43,7 +43,7 @@ if(APPLE)
     # Full path to the .icns and its base file name for CFBundleIconFile
     set(MACOSX_ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/CognitivePipelines.icns)
     get_filename_component(MACOSX_ICON_NAME "${MACOSX_ICON_FILE}" NAME)
-    set(MACOSX_ENTITLEMENTS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/resources/entitlements.plist)
+    set(MACOSX_ENTITLEMENTS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/hardened_runtime.entitlements)
     set(MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/QtWebEngineProcess.entitlements)
     set(MACOSX_INFO_PLIST_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in)
     set(MACOSX_QTWEBENGINE_CODESIGNER ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/codesign_qtwebengine_helpers.cmake)
@@ -151,6 +151,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/main.cpp
     ${SRC_DIR}/mainwindow.cpp
     ${SRC_DIR}/mainwindow.h
+    ${SRC_DIR}/Logger.cpp
+    ${SRC_DIR}/Logger.h
     ${SRC_DIR}/about_dialog.cpp
     ${SRC_DIR}/about_dialog.h
     ${SRC_DIR}/UserInputDialog.cpp
@@ -375,6 +377,8 @@ if(ENABLE_TESTING)
             ${INCLUDE_DIR}/string_utils.h
             # Test sources
             tests/test_app_init.cpp
+            src/Logger.cpp
+            src/Logger.h
             tests/test_main.cpp
             tests/test_nodes.cpp
             tests/test_execution_engine.cpp
@@ -558,12 +562,6 @@ if(ENABLE_TESTING)
     )
     # Add unit tests to CTest
     include(GoogleTest)
-    # Discover tests for the unit_tests target; working directory is project root (not used for credentials anymore)
-    gtest_discover_tests(unit_tests 
-        DISCOVERY_MODE=POST_BUILD 
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    )
-
     # Integration tests (Qt Test based, headless) - Definition looks okay
     add_executable(integration_tests
             # Core headers
@@ -572,6 +570,8 @@ if(ENABLE_TESTING)
             # Test sources and required implementations
             tests/test_integration.cpp
             tests/test_matrix.cpp
+            ${SRC_DIR}/Logger.cpp
+            ${SRC_DIR}/Logger.h
             ${SRC_DIR}/logging_categories.cpp
             ${SRC_DIR}/mainwindow.cpp
             ${SRC_DIR}/mainwindow.h
@@ -1213,6 +1213,15 @@ if(APPLE AND NOT XCODE)
     else()
         message(WARNING "codesign tool not found; macOS entitlements will not be applied by macos_deploy_all.")
     endif()
+endif()
+
+# Discover tests for the unit_tests target; working directory is project root (not used for credentials anymore)
+# We do this at the very end to ensure it runs AFTER all macOS POST_BUILD cleanup/codesign steps
+if(TARGET unit_tests)
+    gtest_discover_tests(unit_tests
+        DISCOVERY_MODE POST_BUILD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
 endif()
 
 include(CPack)

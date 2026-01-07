@@ -32,8 +32,7 @@
 #include <QJsonDocument>
 #include <QFile>
 #include <QFileInfo>
-#include <QDebug>
-#include <QLoggingCategory>
+#include "Logger.h"
 #include "logging_categories.h"
 #include <QDir>
 #include <QStandardPaths>
@@ -88,7 +87,7 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
         const QByteArray payload = rawFuture.result();
 
         if (payload.isEmpty()) {
-            qWarning() << "OpenAIBackend::fetchModelList: empty payload from raw fetch";
+            CP_WARN << "OpenAIBackend::fetchModelList: empty payload from raw fetch";
             return availableModels();
         }
 
@@ -96,19 +95,19 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
         QJsonParseError parseError;
         const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
         if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-            qWarning() << "OpenAIBackend::fetchModelList: JSON parse error:" << parseError.errorString();
+            CP_WARN << "OpenAIBackend::fetchModelList: JSON parse error:" << parseError.errorString();
             return availableModels();
         }
 
         const QJsonObject root = doc.object();
         const QJsonValue dataVal = root.value(QStringLiteral("data"));
         if (!dataVal.isArray()) {
-            qWarning() << "OpenAIBackend::fetchModelList: 'data' array missing";
+            CP_WARN << "OpenAIBackend::fetchModelList: 'data' array missing";
             return availableModels();
         }
 
         const QJsonArray dataArr = dataVal.toArray();
-        qCDebug(cp_discovery).noquote() << QStringLiteral("OpenAI Raw Model Count: [%1]").arg(dataArr.size());
+        CP_CLOG(cp_discovery).noquote() << QStringLiteral("OpenAI Raw Model Count: [%1]").arg(dataArr.size());
         QStringList filtered;
         filtered.reserve(dataArr.size());
 
@@ -126,7 +125,7 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
             }
         }
 
-        qCDebug(cp_discovery).noquote() << QStringLiteral("OpenAI Filtered Model Count: [%1]").arg(filtered.size());
+        CP_CLOG(cp_discovery).noquote() << QStringLiteral("OpenAI Filtered Model Count: [%1]").arg(filtered.size());
 
         // 3) Inject Virtual Models
         const auto virtualModels = ModelCapsRegistry::instance().virtualModelsForBackend(this->id());
@@ -136,7 +135,7 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
             virtualIds.insert(vm.id);
         }
 
-        qCDebug(cp_discovery).noquote() << QStringLiteral("OpenAI Final Model Count (with aliases): [%1]").arg(filtered.size());
+        CP_CLOG(cp_discovery).noquote() << QStringLiteral("OpenAI Final Model Count (with aliases): [%1]").arg(filtered.size());
 
         // Keep deterministic order for UX stability
         filtered.removeDuplicates();
@@ -164,7 +163,7 @@ QFuture<QByteArray> OpenAIBackend::fetchRawModelListJson()
     return QtConcurrent::run([]() -> QByteArray {
         const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
         if (apiKey.trimmed().isEmpty()) {
-            qWarning() << "OpenAIBackend::fetchRawModelListJson: missing API key";
+            CP_WARN << "OpenAIBackend::fetchRawModelListJson: missing API key";
             return QByteArray("{}");
         }
 
@@ -179,9 +178,9 @@ QFuture<QByteArray> OpenAIBackend::fetchRawModelListJson()
             );
 
             // Diagnostics: keep status (body dump removed for normal runs)
-            qCDebug(cp_discovery).noquote() << QStringLiteral("OpenAI Models HTTP Status: %1").arg(response.status_code);
+            CP_CLOG(cp_discovery).noquote() << QStringLiteral("OpenAI Models HTTP Status: %1").arg(response.status_code);
             if (response.status_code != 200) {
-                qWarning().noquote() << QStringLiteral("OpenAI Models Request Error: %1")
+                CP_WARN.noquote() << QStringLiteral("OpenAI Models Request Error: %1")
                                             .arg(QString::fromStdString(response.error.message));
             }
 
@@ -189,11 +188,11 @@ QFuture<QByteArray> OpenAIBackend::fetchRawModelListJson()
                 return QByteArray::fromStdString(response.text);
             }
 
-            qWarning() << "OpenAIBackend::fetchRawModelListJson: HTTP" << response.status_code
+            CP_WARN << "OpenAIBackend::fetchRawModelListJson: HTTP" << response.status_code
                        << "-" << QString::fromStdString(response.error.message);
             return QByteArray("{}");
         } catch (const std::exception& ex) {
-            qWarning() << "OpenAIBackend::fetchRawModelListJson: exception:" << ex.what();
+            CP_WARN << "OpenAIBackend::fetchRawModelListJson: exception:" << ex.what();
             return QByteArray("{}");
         }
     });
@@ -213,13 +212,13 @@ LLMResult OpenAIBackend::sendPrompt(
     // Resolve alias to real ID for the API request
     const QString resolvedModel = ModelCapsRegistry::instance().resolveAlias(modelName, id());
     if (resolvedModel != modelName) {
-        qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
+        CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
     }
 
     // Instrumentation: log the final model ID used for the API request (debug‑gated)
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] OpenAIBackend::sendPrompt using model=" << resolvedModel;
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] OpenAIBackend::sendPrompt using model=" << resolvedModel;
 
-    qCDebug(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << resolvedModel
+    CP_CLOG(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << resolvedModel
              << ": Role Mode=system (hardcoded chat messages), Vision="
              << (imagePath.trimmed().isEmpty()
                      ? "disabled (no imagePath provided; no model gating)"
@@ -249,7 +248,7 @@ LLMResult OpenAIBackend::sendPrompt(
     // Instrumentation: log decision inputs for temperature handling
     const bool looksLikeGpt5 = resolvedModel.startsWith(QStringLiteral("gpt-5"));
     const bool looksLikeOSeries = resolvedModel.startsWith(QStringLiteral("o")); // e.g., o3, o4
-    qCDebug(cp_params).noquote() << "[ParamBehavior] TemperatureDecision -> model='" << resolvedModel
+    CP_CLOG(cp_params).noquote() << "[ParamBehavior] TemperatureDecision -> model='" << resolvedModel
                        << "' family=" << (looksLikeGpt5 ? QStringLiteral("gpt-5") : (looksLikeOSeries ? QStringLiteral("o-series") : QStringLiteral("other")))
                        << " hasTempConstraint=" << (hasTempConstraint ? "T" : "F")
                        << " omitByCaps=" << (omitTemperatureByCaps ? "T" : "F")
@@ -342,10 +341,10 @@ LLMResult OpenAIBackend::sendPrompt(
     QJsonObject root;
     root.insert(QStringLiteral("model"), resolvedModel);
     if (temperatureSupported) {
-        qCDebug(cp_params).noquote() << "[ParamBehavior] Inserting temperature field (value=" << temperature << ")";
+        CP_CLOG(cp_params).noquote() << "[ParamBehavior] Inserting temperature field (value=" << temperature << ")";
         root.insert(QStringLiteral("temperature"), temperature);
     } else {
-        qCDebug(cp_params).noquote() << "[ParamBehavior] NOT inserting temperature field";
+        CP_CLOG(cp_params).noquote() << "[ParamBehavior] NOT inserting temperature field";
     }
 
     // Token field name selection via caps; default to current behavior for compatibility
@@ -360,7 +359,7 @@ LLMResult OpenAIBackend::sendPrompt(
         // For legacy Completions API, the field is max_tokens regardless of chat-era hints
         usedTokenField = QStringLiteral("max_tokens");
     }
-    qCDebug(cp_params).noquote() << "[ParamBehavior] TokenField -> expected='" << expectedTokenField
+    CP_CLOG(cp_params).noquote() << "[ParamBehavior] TokenField -> expected='" << expectedTokenField
                        << "' used='" << usedTokenField << "' value=" << maxTokens;
     root.insert(usedTokenField, maxTokens);
 
@@ -395,7 +394,7 @@ LLMResult OpenAIBackend::sendPrompt(
     // This avoids hard 404s on legacy payloads while we implement full Assistant threads/runs.
     if (endpointMode == ModelCapsTypes::EndpointMode::Assistant) {
         const std::string pingUrl = std::string("https://api.openai.com/v1/assistants?limit=1");
-        qCDebug(cp_endpoint).noquote() << "[EndpointRouting] OpenAI assistant probe =>" << QString::fromStdString(pingUrl);
+        CP_CLOG(cp_endpoint).noquote() << "[EndpointRouting] OpenAI assistant probe =>" << QString::fromStdString(pingUrl);
 
         auto ping = cpr::Get(
             cpr::Url{pingUrl},
@@ -408,11 +407,11 @@ LLMResult OpenAIBackend::sendPrompt(
             result.hasError = true;
             if (ping.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
                 result.errorMsg = QStringLiteral("OpenAI API Timeout");
-                qWarning() << "OpenAIBackend::sendPrompt assistant probe timeout:" << QString::fromStdString(ping.error.message);
+                CP_WARN << "OpenAIBackend::sendPrompt assistant probe timeout:" << QString::fromStdString(ping.error.message);
             } else {
                 const QString msg = QString::fromStdString(ping.error.message);
                 result.errorMsg = QStringLiteral("OpenAI network error: %1").arg(msg);
-                qWarning() << "OpenAIBackend::sendPrompt assistant probe network error:" << msg;
+                CP_WARN << "OpenAIBackend::sendPrompt assistant probe network error:" << msg;
             }
             result.content = result.errorMsg;
             result.rawResponse = QString::fromStdString(ping.text);
@@ -428,7 +427,7 @@ LLMResult OpenAIBackend::sendPrompt(
 
         // Surface HTTP status as an error to let tests report HTTP ERROR.
         result.hasError = true;
-        qWarning() << "OpenAIBackend::sendPrompt assistant probe HTTP error" << ping.status_code
+        CP_WARN << "OpenAIBackend::sendPrompt assistant probe HTTP error" << ping.status_code
                    << "body:" << result.rawResponse;
         // Try parse message or fallback to HTTP <code>
         QJsonParseError parseError;
@@ -453,7 +452,7 @@ LLMResult OpenAIBackend::sendPrompt(
     const char* emode = (endpointMode == ModelCapsTypes::EndpointMode::Chat)
                             ? "chat"
                             : (endpointMode == ModelCapsTypes::EndpointMode::Completion ? "completion" : "assistant");
-    qCDebug(cp_endpoint).noquote() << "[EndpointRouting] OpenAI target URL =>" << QString::fromStdString(url)
+    CP_CLOG(cp_endpoint).noquote() << "[EndpointRouting] OpenAI target URL =>" << QString::fromStdString(url)
                        << "mode=" << emode;
 
     // Perform POST synchronously with explicit timeouts to avoid hanging indefinitely
@@ -470,11 +469,11 @@ LLMResult OpenAIBackend::sendPrompt(
 
         if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
             result.errorMsg = QStringLiteral("OpenAI API Timeout");
-            qWarning() << "OpenAIBackend::sendPrompt timeout:" << QString::fromStdString(response.error.message);
+            CP_WARN << "OpenAIBackend::sendPrompt timeout:" << QString::fromStdString(response.error.message);
         } else {
             const QString msg = QString::fromStdString(response.error.message);
             result.errorMsg = QStringLiteral("OpenAI network error: %1").arg(msg);
-            qWarning() << "OpenAIBackend::sendPrompt network error:" << msg;
+            CP_WARN << "OpenAIBackend::sendPrompt network error:" << msg;
         }
 
         result.content = result.errorMsg;
@@ -487,7 +486,7 @@ LLMResult OpenAIBackend::sendPrompt(
     if (response.status_code != 200) {
         result.hasError = true;
 
-        qWarning() << "OpenAIBackend::sendPrompt HTTP error" << response.status_code
+        CP_WARN << "OpenAIBackend::sendPrompt HTTP error" << response.status_code
                    << "body:" << result.rawResponse;
 
         // Try to parse error from JSON
@@ -590,7 +589,7 @@ EmbeddingResult OpenAIBackend::getEmbedding(
             selectedModel = QStringLiteral("text-embedding-3-small");
         }
     }
-    qCDebug(cp_params).noquote() << "[RAG] OpenAI getEmbedding selecting model=" << selectedModel << " (requested=" << modelName << ")";
+    CP_CLOG(cp_params).noquote() << "[RAG] OpenAI getEmbedding selecting model=" << selectedModel << " (requested=" << modelName << ")";
 
     // Build request payload
     QJsonObject root;
@@ -618,11 +617,11 @@ EmbeddingResult OpenAIBackend::getEmbedding(
 
         if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
             result.errorMsg = QStringLiteral("OpenAI API Timeout");
-            qWarning() << "OpenAIBackend::getEmbedding timeout:" << QString::fromStdString(response.error.message);
+            CP_WARN << "OpenAIBackend::getEmbedding timeout:" << QString::fromStdString(response.error.message);
         } else {
             const QString msg = QString::fromStdString(response.error.message);
             result.errorMsg = QStringLiteral("OpenAI network error: %1").arg(msg);
-            qWarning() << "OpenAIBackend::getEmbedding network error:" << msg;
+            CP_WARN << "OpenAIBackend::getEmbedding network error:" << msg;
         }
 
         return result;
@@ -631,7 +630,7 @@ EmbeddingResult OpenAIBackend::getEmbedding(
     if (response.status_code != 200) {
         result.hasError = true;
 
-        qWarning() << "OpenAIBackend::getEmbedding HTTP error" << response.status_code
+        CP_WARN << "OpenAIBackend::getEmbedding HTTP error" << response.status_code
                    << "body:" << QString::fromStdString(response.text);
 
         // Try to parse error from JSON
@@ -720,7 +719,7 @@ QFuture<QString> OpenAIBackend::generateImage(
         const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
         if (apiKey.trimmed().isEmpty()) {
             const QString msg = QStringLiteral("Missing OpenAI API key");
-            qWarning() << "OpenAIBackend::generateImage" << msg;
+            CP_WARN << "OpenAIBackend::generateImage" << msg;
             return msg;
         }
 
@@ -761,10 +760,10 @@ QFuture<QString> OpenAIBackend::generateImage(
 
             if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
                 errorMsg = QStringLiteral("OpenAI API Timeout");
-                qWarning() << "OpenAIBackend::generateImage timeout:" << QString::fromStdString(response.error.message);
+                CP_WARN << "OpenAIBackend::generateImage timeout:" << QString::fromStdString(response.error.message);
             } else {
                 errorMsg = QString::fromStdString(response.error.message);
-                qWarning() << "OpenAIBackend::generateImage network error:" << errorMsg;
+                CP_WARN << "OpenAIBackend::generateImage network error:" << errorMsg;
                 errorMsg = QStringLiteral("OpenAI network error: %1").arg(errorMsg);
             }
 
@@ -776,7 +775,7 @@ QFuture<QString> OpenAIBackend::generateImage(
         if (response.status_code != 200) {
             QString errorMsg;
 
-            qWarning() << "OpenAIBackend::generateImage HTTP error" << response.status_code
+            CP_WARN << "OpenAIBackend::generateImage HTTP error" << response.status_code
                        << "body:" << rawResponse;
 
             QJsonParseError parseError;
@@ -829,7 +828,7 @@ QFuture<QString> OpenAIBackend::generateImage(
         }
 
         if (b64Image.isEmpty()) {
-            qWarning() << "OpenAIBackend::generateImage missing b64_json field" << rawResponse;
+            CP_WARN << "OpenAIBackend::generateImage missing b64_json field" << rawResponse;
             return QStringLiteral("OpenAI image response missing data");
         }
 
@@ -845,7 +844,7 @@ QFuture<QString> OpenAIBackend::generateImage(
 
         QDir cacheDir(cacheBase);
         if (!cacheDir.mkpath(QStringLiteral("generated_images"))) {
-            qWarning() << "OpenAIBackend::generateImage failed to create cache dir" << cacheBase;
+            CP_WARN << "OpenAIBackend::generateImage failed to create cache dir" << cacheBase;
             return QStringLiteral("Failed to create cache directory");
         }
 
@@ -856,7 +855,7 @@ QFuture<QString> OpenAIBackend::generateImage(
 
         QFile outFile(filePath);
         if (!outFile.open(QIODevice::WriteOnly)) {
-            qWarning() << "OpenAIBackend::generateImage failed to open file" << filePath
+            CP_WARN << "OpenAIBackend::generateImage failed to open file" << filePath
                        << "error" << outFile.errorString();
             return QStringLiteral("Failed to write generated image");
         }
@@ -865,7 +864,7 @@ QFuture<QString> OpenAIBackend::generateImage(
         outFile.close();
 
         if (bytesWritten != imageData.size()) {
-            qWarning() << "OpenAIBackend::generateImage incomplete write" << filePath;
+            CP_WARN << "OpenAIBackend::generateImage incomplete write" << filePath;
             return QStringLiteral("Failed to save generated image");
         }
 

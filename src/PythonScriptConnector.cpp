@@ -30,7 +30,7 @@
 #include <QtConcurrent/QtConcurrent>
 #include <QProcess>
 #include <QTemporaryFile>
-#include <QDebug>
+#include "Logger.h"
 
 PythonScriptConnector::PythonScriptConnector(QObject* parent)
     : QObject(parent)
@@ -131,7 +131,7 @@ TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
         const QString msg = QStringLiteral("ERROR: Python executable/command is empty.");
         packet.insert(outKey, QString());
         packet.insert(errKey, msg);
-        qWarning() << "PythonScriptConnector:" << msg;
+        CP_WARN << "PythonScriptConnector:" << msg;
     } else {
         // Create a temporary file for the script content
         QTemporaryFile tempFile;
@@ -139,7 +139,7 @@ TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
             const QString msg = QStringLiteral("Failed to create temporary file for script: ") + tempFile.errorString();
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
-            qWarning() << "PythonScriptConnector:" << msg;
+            CP_WARN << "PythonScriptConnector:" << msg;
         } else {
             // Write script content to temp file
             const QByteArray scriptBytes = scriptContent.toUtf8();
@@ -147,7 +147,7 @@ TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
                 const QString msg = QStringLiteral("Failed to write script to temporary file: ") + tempFile.errorString();
                 packet.insert(outKey, QString());
                 packet.insert(errKey, msg);
-                qWarning() << "PythonScriptConnector:" << msg;
+                CP_WARN << "PythonScriptConnector:" << msg;
             } else {
                 tempFile.flush();
                 tempFile.close();
@@ -165,7 +165,7 @@ TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
                     const QString msg = QStringLiteral("ERROR: Invalid Python executable/command: '") + executable + QStringLiteral("'");
                     packet.insert(outKey, QString());
                     packet.insert(errKey, msg);
-                    qWarning() << "PythonScriptConnector:" << msg;
+                    CP_WARN << "PythonScriptConnector:" << msg;
                 } else {
                     const QString program = tokens.takeFirst();
                     QStringList args = tokens;
@@ -178,7 +178,7 @@ TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
                     const bool started = proc.waitForStarted(10000); // 10s to start
                     if (!started) {
                         const QString err = QStringLiteral("Failed to start process: ") + proc.errorString();
-                        qWarning() << "PythonScriptConnector:" << err
+                        CP_WARN << "PythonScriptConnector:" << err
                                    << ", qprocess error =" << static_cast<int>(proc.error())
                                    << ", state =" << static_cast<int>(proc.state());
                         packet.insert(outKey, QString());
@@ -193,7 +193,7 @@ TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
 
                         // Wait for finish with timeout (60s)
                         if (!proc.waitForFinished(60000)) {
-                            qWarning() << "PythonScriptConnector: process timeout, killing...";
+                            CP_WARN << "PythonScriptConnector: process timeout, killing...";
                             proc.kill();
                             proc.waitForFinished();
                             packet.insert(outKey, QString());

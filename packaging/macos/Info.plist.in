@@ -40,5 +40,12 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
+
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Cognitive Pipelines needs access to the Desktop to load and save files.</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Cognitive Pipelines needs access to Documents to load and save files.</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Cognitive Pipelines needs access to Downloads to load and save files.</string>
 </dict>
 </plist>

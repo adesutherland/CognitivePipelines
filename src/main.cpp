@@ -25,7 +25,7 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QIcon>
-#include <QDebug>
+#include "Logger.h"
 #include <QLoggingCategory>
 #include "logging_categories.h"
 #include "mainwindow.h"
@@ -35,6 +35,16 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setOrganizationName(QStringLiteral("CognitivePipelines"));
     QCoreApplication::setOrganizationDomain(QStringLiteral("cognitivepipelines.com"));
     QCoreApplication::setApplicationName(QStringLiteral("CognitivePipelines"));
+
+    // Parse command line arguments
+    bool debugEnabled = false;
+    for (int i = 1; i < argc; ++i) {
+        if (QString::fromLocal8Bit(argv[i]) == QStringLiteral("-d")) {
+            debugEnabled = true;
+            break;
+        }
+    }
+    AppLogHelper::setGlobalDebugEnabled(debugEnabled);
 
     // By default, silence debug-level logs for our app categories unless the user
     // explicitly opts in via QT_LOGGING_RULES. This keeps the main app console clean
@@ -64,7 +74,7 @@ int main(int argc, char* argv[]) {
         ));
     }
 
-    qCDebug(cp_registry) << "Initializing Model Capabilities Registry...";
+    CP_CLOG(cp_registry) << "Initializing Model Capabilities Registry...";
     ModelCapsRegistry::instance().loadFromFile(":/resources/model_caps.json");
 
     // Set application icon (cross-platform)

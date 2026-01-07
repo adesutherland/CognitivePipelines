@@ -11,7 +11,7 @@
 #include "ExecutionToken.h"
 
 #include <QJsonObject>
-#include <QDebug>
+#include "Logger.h"
 #include <memory>
 
 UniversalScriptConnector::UniversalScriptConnector(QObject* parent)
@@ -74,7 +74,7 @@ TokenList UniversalScriptConnector::execute(const TokenList& incomingTokens)
     std::unique_ptr<IScriptEngine> engine = ScriptEngineRegistry::instance().createEngine(m_engineId);
 
     if (!engine) {
-        qWarning() << "Engine not found:" << m_engineId;
+        CP_WARN << "Engine not found:" << m_engineId;
         // Optionally log error via output if appropriate, but following instructions
         return {};
     }
@@ -86,7 +86,7 @@ TokenList UniversalScriptConnector::execute(const TokenList& incomingTokens)
     bool success = engine->execute(m_scriptCode, &host);
 
     if (!success) {
-        qWarning() << "Script execution failed";
+        CP_WARN << "Script execution failed";
     }
 
     // Prepare output tokens

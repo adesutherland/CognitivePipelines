@@ -30,8 +30,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QDebug>
-#include <QLoggingCategory>
+#include "Logger.h"
 #include "../logging_categories.h"
 #include <QtConcurrent>
 
@@ -72,7 +71,7 @@ QFuture<QStringList> GoogleBackend::fetchModelList()
     return QtConcurrent::run([this]() -> QStringList {
         const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("google"));
         if (apiKey.trimmed().isEmpty()) {
-            qWarning() << "GoogleBackend::fetchModelList: missing API key";
+            CP_WARN << "GoogleBackend::fetchModelList: missing API key";
             return availableModels();
         }
 
@@ -87,7 +86,7 @@ QFuture<QStringList> GoogleBackend::fetchModelList()
             );
 
             if (response.status_code != 200) {
-                qWarning() << "GoogleBackend::fetchModelList: HTTP" << response.status_code
+                CP_WARN << "GoogleBackend::fetchModelList: HTTP" << response.status_code
                            << "-" << QString::fromStdString(response.error.message);
                 return availableModels();
             }
@@ -96,14 +95,14 @@ QFuture<QStringList> GoogleBackend::fetchModelList()
             QJsonParseError parseError;
             const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
             if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
-                qWarning() << "GoogleBackend::fetchModelList: JSON parse error:" << parseError.errorString();
+                CP_WARN << "GoogleBackend::fetchModelList: JSON parse error:" << parseError.errorString();
                 return availableModels();
             }
 
             const QJsonObject root = doc.object();
             const QJsonValue modelsVal = root.value(QStringLiteral("models"));
             if (!modelsVal.isArray()) {
-                qWarning() << "GoogleBackend::fetchModelList: 'models' array missing";
+                CP_WARN << "GoogleBackend::fetchModelList: 'models' array missing";
                 return availableModels();
             }
 
@@ -161,7 +160,7 @@ QFuture<QStringList> GoogleBackend::fetchModelList()
 
             return filtered;
         } catch (const std::exception& ex) {
-            qWarning() << "GoogleBackend::fetchModelList: exception:" << ex.what();
+            CP_WARN << "GoogleBackend::fetchModelList: exception:" << ex.what();
             return availableModels();
         }
     });
@@ -181,13 +180,13 @@ LLMResult GoogleBackend::sendPrompt(
     // Resolve alias to real ID for the API request
     const QString resolvedModel = ModelCapsRegistry::instance().resolveAlias(modelName, id());
     if (resolvedModel != modelName) {
-        qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
+        CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] Resolving alias" << modelName << "to" << resolvedModel;
     }
 
     // Instrumentation: log the final model ID used for the API request (debug‑gated)
-    qCDebug(cp_lifecycle).noquote() << "[ModelLifecycle] GoogleBackend::sendPrompt using model=" << resolvedModel;
+    CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] GoogleBackend::sendPrompt using model=" << resolvedModel;
 
-    qCDebug(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << resolvedModel
+    CP_CLOG(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << resolvedModel
              << ": Role Mode=system (system prompt as first content entry; no developer role), Vision="
              << (imagePath.trimmed().isEmpty()
                      ? "disabled (no imagePath provided; no model gating)"
@@ -333,11 +332,11 @@ LLMResult GoogleBackend::sendPrompt(
 
         if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
             result.errorMsg = QStringLiteral("Google Gemini API Timeout");
-            qWarning() << "GoogleBackend::sendPrompt timeout:" << QString::fromStdString(response.error.message);
+            CP_WARN << "GoogleBackend::sendPrompt timeout:" << QString::fromStdString(response.error.message);
         } else {
             const QString msg = QString::fromStdString(response.error.message);
             result.errorMsg = QStringLiteral("Google Gemini network error: %1").arg(msg);
-            qWarning() << "GoogleBackend::sendPrompt network error:" << msg;
+            CP_WARN << "GoogleBackend::sendPrompt network error:" << msg;
         }
 
         result.content = result.errorMsg;
@@ -350,7 +349,7 @@ LLMResult GoogleBackend::sendPrompt(
     if (response.status_code != 200) {
         result.hasError = true;
 
-        qWarning() << "GoogleBackend::sendPrompt HTTP error" << response.status_code
+        CP_WARN << "GoogleBackend::sendPrompt HTTP error" << response.status_code
                    << "body:" << result.rawResponse;
 
         // Try to parse error from JSON
