@@ -40,6 +40,18 @@ else
     exit 1
 fi
 
+# Check if the signature is a Developer ID (required for notarization)
+if codesign -dvvv "${APP_PATH}" 2>&1 | grep -q "Authority=Developer ID Application"; then
+    echo "✅ Signed with Developer ID Application."
+else
+    echo "❌ Error: App is NOT signed with a Developer ID Application certificate."
+    echo "   Notarization requires a Developer ID Application certificate."
+    echo "   Current signature details:"
+    codesign -dvvv "${APP_PATH}" 2>&1 | grep "Authority" || echo "   (Ad-Hoc or unsigned)"
+    echo "   Check your MACOS_SIGNING_IDENTITY in CMake or environment."
+    exit 1
+fi
+
 # ==============================================================================
 # 2. ZIP FOR NOTARIZATION
 # ==============================================================================
@@ -54,11 +66,24 @@ echo "📤 Uploading to Apple for Notarization..."
 echo "   (This usually takes 1-5 minutes. Please wait...)"
 
 # Submits and waits for the result automatically
-xcrun notarytool submit "${ZIP_PATH}" \
+# We capture the output to check the status
+submission_out=$(xcrun notarytool submit "${ZIP_PATH}" \
     --keychain-profile "${KEYCHAIN_PROFILE}" \
-    --wait
+    --wait 2>&1)
 
-echo "✅ Notarization Approved!"
+echo "${submission_out}"
+
+if echo "${submission_out}" | grep -q "status: Accepted"; then
+    echo "✅ Notarization Approved!"
+else
+    echo "❌ Error: Notarization Failed."
+    submission_id=$(echo "${submission_out}" | grep "id:" | awk '{print $2}')
+    if [ -n "${submission_id}" ]; then
+        echo "🔍 Fetching log for submission ID: ${submission_id}..."
+        xcrun notarytool log "${submission_id}" --keychain-profile "${KEYCHAIN_PROFILE}"
+    fi
+    exit 1
+fi
 
 # ==============================================================================
 # 4. STAPLE TICKET

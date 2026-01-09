@@ -837,21 +837,15 @@ QFuture<QString> OpenAIBackend::generateImage(
             return QStringLiteral("Failed to decode image data");
         }
 
-        QString cacheBase = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-        if (cacheBase.isEmpty()) {
-            cacheBase = QDir::tempPath();
+        QString tempBase = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        if (tempBase.isEmpty()) {
+            tempBase = QDir::tempPath();
         }
 
-        QDir cacheDir(cacheBase);
-        if (!cacheDir.mkpath(QStringLiteral("generated_images"))) {
-            CP_WARN << "OpenAIBackend::generateImage failed to create cache dir" << cacheBase;
-            return QStringLiteral("Failed to create cache directory");
-        }
-
-        QDir imagesDir(cacheDir.filePath(QStringLiteral("generated_images")));
-        const QString fileName = QStringLiteral("img_%1.png").arg(
+        QDir tempDir(tempBase);
+        const QString fileName = QStringLiteral("openai_gen_%1.png").arg(
             QUuid::createUuid().toString(QUuid::WithoutBraces));
-        const QString filePath = imagesDir.filePath(fileName);
+        const QString filePath = tempDir.filePath(fileName);
 
         QFile outFile(filePath);
         if (!outFile.open(QIODevice::WriteOnly)) {

@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.12.8 LANGUAGES C CXX)
+project(CognitivePipelines VERSION 0.12.10 LANGUAGES C CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -25,6 +25,11 @@ endif()
 # CMake's option() handles the cache, but since we might have forced it above, 
 # we need to be careful. Actually, the requirement says "force RELEASE_BUILD to ON if...".
 set(MACOS_SIGNING_IDENTITY "" CACHE STRING "macOS Code Signing Identity")
+# Prioritize environment variable if cache is empty or set to ad-hoc "-"
+if((NOT MACOS_SIGNING_IDENTITY OR MACOS_SIGNING_IDENTITY STREQUAL "-") AND DEFINED ENV{MACOS_SIGNING_IDENTITY})
+    set(MACOS_SIGNING_IDENTITY "$ENV{MACOS_SIGNING_IDENTITY}" CACHE STRING "macOS Code Signing Identity" FORCE)
+endif()
+
 if(RELEASE_BUILD)
     if(NOT MACOS_SIGNING_IDENTITY)
         set(APPLE_SIGN_IDENTITY "-")
@@ -125,7 +130,7 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 # Dependencies resolved from the system (no FetchContent)
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql Pdf WebChannel Positioning WebEngineWidgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network Concurrent Test Sql Pdf WebChannel Positioning WebEngineWidgets DBus)
 find_package(Boost 1.70 REQUIRED)
 find_package(cpr REQUIRED)
 find_package(GTest REQUIRED)
@@ -299,6 +304,7 @@ target_link_libraries(CognitivePipelines PRIVATE
     Qt6::Concurrent
     Qt6::Sql
     Qt6::Pdf
+    Qt6::DBus
     QtNodes::QtNodes
     Boost::boost
     cpr::cpr
@@ -556,6 +562,7 @@ if(ENABLE_TESTING)
             Qt6::Sql
             Qt6::Pdf
             Qt6::WebEngineWidgets
+            Qt6::DBus
             QtNodes::QtNodes
             Boost::boost
             quickjs
@@ -570,6 +577,7 @@ if(ENABLE_TESTING)
             # Test sources and required implementations
             tests/test_integration.cpp
             tests/test_matrix.cpp
+            tests/integration/MermaidRenderTest.cpp
             ${SRC_DIR}/Logger.cpp
             ${SRC_DIR}/Logger.h
             ${SRC_DIR}/logging_categories.cpp
@@ -711,6 +719,7 @@ if(ENABLE_TESTING)
             Qt6::Sql
             Qt6::Pdf
             Qt6::WebEngineWidgets
+            Qt6::DBus
             QtNodes::QtNodes
             Boost::boost
             cpr::cpr
@@ -910,9 +919,19 @@ if(APPLE)
                                             /opt/homebrew/opt/qt@6/bin)
                         if(MACDEPLOYQT_EXECUTABLE)
                             add_custom_command(TARGET ${tgt} POST_BUILD
-                                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" -always-overwrite -codesign=-
-                                    COMMENT "Running macdeployqt on $<TARGET_BUNDLE_DIR:${tgt}>"
+                                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" "-executable=$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess"
+                                    COMMENT "Running macdeployqt on $<TARGET_BUNDLE_DIR:${tgt}> (including helper process)"
                                     VERBATIM)
+
+                            # Bundling and patching frameworks for QtWebEngineProcess helper
+                            add_custom_command(TARGET ${tgt} POST_BUILD
+                                # Create the Frameworks directory in the Helper app
+                                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks"
+                                # Copy all frameworks and dylibs from Main App bundle to Helper App bundle (use rsync to preserve symlinks)
+                                # We exclude QtWebEngineCore.framework to avoid recursion.
+                                COMMAND /usr/bin/rsync -a --delete --exclude "QtWebEngineCore.framework" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks/"
+                                COMMENT "Bundling all frameworks for QtWebEngineProcess in ${tgt}.app"
+                                VERBATIM)
                         else()
                             message(WARNING "macdeployqt not found; Qt frameworks may be missing from ${tgt}.app")
                         endif()
@@ -1036,33 +1055,11 @@ if(APPLE)
                                 -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:${tgt}>
                                 -DCODESIGN_EXECUTABLE=${CODESIGN_EXECUTABLE}
                                 -DENTITLEMENTS=${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}
+                                -DMAIN_ENTITLEMENTS=${MACOSX_ENTITLEMENTS_FILE}
+                                -DIS_DEBUG_BUILD=${IS_DEBUG_BUILD}
                                 -DSIGN_IDENTITY=${APPLE_SIGN_IDENTITY}
                                 -P ${MACOSX_QTWEBENGINE_CODESIGNER}
-                            COMMENT "Codesigning QtWebEngine helpers for ${tgt}.app"
-                            VERBATIM)
-                    endif()
-
-                    if(IS_DEBUG_BUILD)
-                        add_custom_command(TARGET ${tgt} POST_BUILD
-                            COMMAND /bin/sh -c "bundle=\"$1\"; fwdir=\"$bundle/Contents/Frameworks\"; if [ -d \"$fwdir\" ]; then for f in \"$fwdir\"/*.dylib; do [ -e \"$f\" ] || continue; ${CODESIGN_EXECUTABLE} --force --sign - \"$f\"; done; fi" _ "$<TARGET_BUNDLE_DIR:${tgt}>"
-                            COMMENT "Fast Debug: signing bundled dylibs in ${tgt}.app"
-                            VERBATIM)
-                    endif()
-
-                    # Ad-hoc sign the resulting bundle; avoid --deep in Debug to preserve helper entitlements
-                    if(IS_DEBUG_BUILD)
-                        add_custom_command(TARGET ${tgt} POST_BUILD
-                            COMMAND ${CODESIGN_EXECUTABLE} --force --preserve-metadata=entitlements
-                                    --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                                    --sign "${APPLE_SIGN_IDENTITY}" "$<TARGET_BUNDLE_DIR:${tgt}>"
-                            COMMENT "Ad-hoc codesigning ${tgt}.app with entitlements (Fast Debug)"
-                            VERBATIM)
-                    else()
-                        add_custom_command(TARGET ${tgt} POST_BUILD
-                            COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime --preserve-metadata=entitlements
-                                    --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                                    --sign "${APPLE_SIGN_IDENTITY}" "$<TARGET_BUNDLE_DIR:${tgt}>"
-                            COMMENT "Ad-hoc codesigning ${tgt}.app with entitlements"
+                            COMMENT "Codesigning and patching ${tgt}.app"
                             VERBATIM)
                     endif()
                 endif()
@@ -1098,25 +1095,20 @@ if(APPLE AND NOT XCODE)
         if(TARGET CognitivePipelines)
             add_dependencies(macos_deploy_all CognitivePipelines)
 
-
-            if(MACDEPLOYQT_EXECUTABLE AND NOT IS_DEBUG_BUILD)
-                add_custom_command(TARGET CognitivePipelines POST_BUILD
-                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" -always-overwrite
-                    COMMENT "Running macdeployqt on CognitivePipelines.app"
-                    VERBATIM)
-
-                add_custom_command(TARGET CognitivePipelines POST_BUILD
-                    COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime
-                            --entitlements "${MACOSX_ENTITLEMENTS_FILE}"
-                            --sign "${APPLE_SIGN_IDENTITY}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>"
-                    COMMENT "Codesigning CognitivePipelines.app with identity: ${APPLE_SIGN_IDENTITY}"
-                    VERBATIM)
-            endif()
-
             if(MACDEPLOYQT_EXECUTABLE)
                 add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" -always-overwrite -codesign=${APPLE_SIGN_IDENTITY}
-                    COMMENT "macdeployqt CognitivePipelines.app (Targeted via macos_deploy_all)"
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:CognitivePipelines>" "-executable=$<TARGET_BUNDLE_DIR:CognitivePipelines>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess"
+                    COMMENT "macdeployqt CognitivePipelines.app (Targeted via macos_deploy_all, including helper process)"
+                    VERBATIM)
+
+                # Bundling and patching frameworks for QtWebEngineProcess helper
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    # Create the Frameworks directory in the Helper app
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:CognitivePipelines>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks"
+                    # Copy all frameworks and dylibs from Main App bundle to Helper App bundle (use rsync to preserve symlinks)
+                    # We exclude QtWebEngineCore.framework to avoid recursion.
+                    COMMAND /usr/bin/rsync -a --delete --exclude "QtWebEngineCore.framework" "$<TARGET_BUNDLE_DIR:CognitivePipelines>/Contents/Frameworks/" "$<TARGET_BUNDLE_DIR:CognitivePipelines>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks/"
+                    COMMENT "Bundling all frameworks for QtWebEngineProcess in CognitivePipelines.app"
                     VERBATIM)
             endif()
             add_custom_command(TARGET macos_deploy_all POST_BUILD
@@ -1124,32 +1116,29 @@ if(APPLE AND NOT XCODE)
                     -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:CognitivePipelines>
                     -DCODESIGN_EXECUTABLE=${CODESIGN_EXECUTABLE}
                     -DENTITLEMENTS=${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}
+                    -DMAIN_ENTITLEMENTS=${MACOSX_ENTITLEMENTS_FILE}
+                    -DIS_DEBUG_BUILD=${IS_DEBUG_BUILD}
                     -DSIGN_IDENTITY=${APPLE_SIGN_IDENTITY}
                     -P ${MACOSX_QTWEBENGINE_CODESIGNER}
-                COMMENT "Codesigning QtWebEngine helpers for CognitivePipelines.app"
+                COMMENT "Codesigning and patching CognitivePipelines.app"
                 VERBATIM)
-            if(IS_DEBUG_BUILD)
-                add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND ${CODESIGN_EXECUTABLE} --force --preserve-metadata=entitlements
-                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                            --sign - "$<TARGET_BUNDLE_DIR:CognitivePipelines>"
-                    COMMENT "Ad-hoc codesigning CognitivePipelines.app with entitlements (Fast Debug macos_deploy_all)"
-                    VERBATIM)
-            else()
-                add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime --preserve-metadata=entitlements
-                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                            --sign - "$<TARGET_BUNDLE_DIR:CognitivePipelines>"
-                    COMMENT "Ad-hoc codesigning CognitivePipelines.app with entitlements"
-                    VERBATIM)
-            endif()
         endif()
         if(TARGET unit_tests)
             add_dependencies(macos_deploy_all unit_tests)
             if(MACDEPLOYQT_EXECUTABLE)
                 add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:unit_tests>" -always-overwrite -codesign=-
-                    COMMENT "macdeployqt unit_tests.app"
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:unit_tests>" "-executable=$<TARGET_BUNDLE_DIR:unit_tests>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess"
+                    COMMENT "macdeployqt unit_tests.app (including helper process)"
+                    VERBATIM)
+
+                # Bundling and patching frameworks for QtWebEngineProcess helper
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    # Create the Frameworks directory in the Helper app
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:unit_tests>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks"
+                    # Copy all frameworks and dylibs from Main App bundle to Helper App bundle (use rsync to preserve symlinks)
+                    # We exclude QtWebEngineCore.framework to avoid recursion.
+                    COMMAND /usr/bin/rsync -a --delete --exclude "QtWebEngineCore.framework" "$<TARGET_BUNDLE_DIR:unit_tests>/Contents/Frameworks/" "$<TARGET_BUNDLE_DIR:unit_tests>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks/"
+                    COMMENT "Bundling all frameworks for QtWebEngineProcess in unit_tests.app"
                     VERBATIM)
             endif()
             add_custom_command(TARGET macos_deploy_all POST_BUILD
@@ -1157,32 +1146,29 @@ if(APPLE AND NOT XCODE)
                     -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:unit_tests>
                     -DCODESIGN_EXECUTABLE=${CODESIGN_EXECUTABLE}
                     -DENTITLEMENTS=${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}
+                    -DMAIN_ENTITLEMENTS=${MACOSX_ENTITLEMENTS_FILE}
+                    -DIS_DEBUG_BUILD=${IS_DEBUG_BUILD}
                     -DSIGN_IDENTITY=${APPLE_SIGN_IDENTITY}
                     -P ${MACOSX_QTWEBENGINE_CODESIGNER}
-                COMMENT "Codesigning QtWebEngine helpers for unit_tests.app"
+                COMMENT "Codesigning and patching unit_tests.app"
                 VERBATIM)
-            if(IS_DEBUG_BUILD)
-                add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND ${CODESIGN_EXECUTABLE} --force --preserve-metadata=entitlements
-                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                            --sign - "$<TARGET_BUNDLE_DIR:unit_tests>"
-                    COMMENT "Ad-hoc codesigning unit_tests.app with entitlements (Fast Debug macos_deploy_all)"
-                    VERBATIM)
-            else()
-                add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime --preserve-metadata=entitlements
-                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                            --sign - "$<TARGET_BUNDLE_DIR:unit_tests>"
-                    COMMENT "Ad-hoc codesigning unit_tests.app with entitlements"
-                    VERBATIM)
-            endif()
         endif()
         if(TARGET integration_tests)
             add_dependencies(macos_deploy_all integration_tests)
             if(MACDEPLOYQT_EXECUTABLE)
                 add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:integration_tests>" -always-overwrite -codesign=-
-                    COMMENT "macdeployqt integration_tests.app"
+                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:integration_tests>" "-executable=$<TARGET_BUNDLE_DIR:integration_tests>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess"
+                    COMMENT "macdeployqt integration_tests.app (including helper process)"
+                    VERBATIM)
+
+                # Bundling and patching frameworks for QtWebEngineProcess helper
+                add_custom_command(TARGET macos_deploy_all POST_BUILD
+                    # Create the Frameworks directory in the Helper app
+                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:integration_tests>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks"
+                    # Copy all frameworks and dylibs from Main App bundle to Helper App bundle (use rsync to preserve symlinks)
+                    # We exclude QtWebEngineCore.framework to avoid recursion.
+                    COMMAND /usr/bin/rsync -a --delete --exclude "QtWebEngineCore.framework" "$<TARGET_BUNDLE_DIR:integration_tests>/Contents/Frameworks/" "$<TARGET_BUNDLE_DIR:integration_tests>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks/"
+                    COMMENT "Bundling all frameworks for QtWebEngineProcess in integration_tests.app"
                     VERBATIM)
             endif()
             add_custom_command(TARGET macos_deploy_all POST_BUILD
@@ -1190,25 +1176,12 @@ if(APPLE AND NOT XCODE)
                     -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:integration_tests>
                     -DCODESIGN_EXECUTABLE=${CODESIGN_EXECUTABLE}
                     -DENTITLEMENTS=${MACOSX_QTWEBENGINE_PROCESS_ENTITLEMENTS}
+                    -DMAIN_ENTITLEMENTS=${MACOSX_ENTITLEMENTS_FILE}
+                    -DIS_DEBUG_BUILD=${IS_DEBUG_BUILD}
                     -DSIGN_IDENTITY=${APPLE_SIGN_IDENTITY}
                     -P ${MACOSX_QTWEBENGINE_CODESIGNER}
-                COMMENT "Codesigning QtWebEngine helpers for integration_tests.app"
+                COMMENT "Codesigning and patching integration_tests.app"
                 VERBATIM)
-            if(IS_DEBUG_BUILD)
-                add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND ${CODESIGN_EXECUTABLE} --force --preserve-metadata=entitlements
-                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                            --sign - "$<TARGET_BUNDLE_DIR:integration_tests>"
-                    COMMENT "Ad-hoc codesigning integration_tests.app with entitlements (Fast Debug macos_deploy_all)"
-                    VERBATIM)
-            else()
-                add_custom_command(TARGET macos_deploy_all POST_BUILD
-                    COMMAND ${CODESIGN_EXECUTABLE} --force --deep --options runtime --preserve-metadata=entitlements
-                            --entitlements ${MACOSX_ENTITLEMENTS_FILE}
-                            --sign - "$<TARGET_BUNDLE_DIR:integration_tests>"
-                    COMMENT "Ad-hoc codesigning integration_tests.app with entitlements"
-                    VERBATIM)
-            endif()
         endif()
     else()
         message(WARNING "codesign tool not found; macOS entitlements will not be applied by macos_deploy_all.")
@@ -1221,6 +1194,7 @@ if(TARGET unit_tests)
     gtest_discover_tests(unit_tests
         DISCOVERY_MODE POST_BUILD
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        DISCOVERY_TIMEOUT 300
     )
 endif()
 

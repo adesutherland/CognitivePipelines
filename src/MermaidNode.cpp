@@ -34,16 +34,6 @@
 #include <QUuid>
 
 namespace {
-QString normalizeCachePath(const QString& path)
-{
-    const QFileInfo info(path);
-    const QString base = info.fileName();
-    const QString parent = info.dir().dirName();
-    if (!path.isEmpty() && !base.isEmpty() && base == parent) {
-        return info.dir().absolutePath();
-    }
-    return path;
-}
 }
 
 MermaidNode::MermaidNode(QObject* parent)
@@ -113,18 +103,26 @@ TokenList MermaidNode::execute(const TokenList& incomingTokens)
         return TokenList{token};
     }
 
-    QString cacheDir = normalizeCachePath(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
-    if (cacheDir.isEmpty()) {
-        cacheDir = QDir::tempPath();
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (tempDir.isEmpty()) {
+        tempDir = QDir::tempPath();
     }
+    QString templatePath = tempDir + QDir::separator() + QStringLiteral("mermaid_render_XXXXXX.png");
 
-    QDir dir(cacheDir);
-    if (!dir.exists()) {
-        dir.mkpath(QStringLiteral("."));
+    m_tempFile = std::make_unique<QTemporaryFile>(templatePath);
+    m_tempFile->setAutoRemove(true);
+    if (!m_tempFile->open()) {
+        const QString err = QStringLiteral("ERROR: Could not create temporary file for Mermaid render.");
+        output.insert(outputPinId, err);
+        output.insert(QStringLiteral("__error"), err);
+        ExecutionToken token;
+        token.data = output;
+        return TokenList{token};
     }
+    const QString outputPath = m_tempFile->fileName();
+    m_tempFile->close();
 
-    const QString fileName = QStringLiteral("mermaid_%1.png").arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
-    const QString outputPath = dir.filePath(fileName);
+    CP_CLOG(MERMAID_DEBUG) << "Successfully generated output path:" << outputPath;
 
     if (m_scaleFactor < 0.1) {
         m_scaleFactor = 0.1;
@@ -153,6 +151,7 @@ TokenList MermaidNode::execute(const TokenList& incomingTokens)
 
     ExecutionToken token;
     token.data = output;
+    emit finished();
     return TokenList{token};
 }
 

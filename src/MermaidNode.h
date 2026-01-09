@@ -25,6 +25,8 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QTemporaryFile>
+#include <memory>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
@@ -49,6 +51,9 @@ public:
     static constexpr const char* kInputCode = "code";
     static constexpr const char* kOutputImage = "image";
 
+signals:
+    void finished();
+
 private:
     void updatePropertiesWidget(const QString& code);
 
@@ -56,4 +61,5 @@ private:
     QPointer<MermaidPropertiesWidget> m_propertiesWidget;
     QString m_lastCode;
     double m_scaleFactor {1.0};
+    std::unique_ptr<QTemporaryFile> m_tempFile;
 };

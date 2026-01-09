@@ -280,6 +280,12 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         return;
     }
 
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (tempDir.isEmpty()) {
+        tempDir = QDir::tempPath();
+    }
+    QDir systemTempDir(tempDir);
+
     const QString templateResource = QStringLiteral(":/mermaid/template.html");
     const QString jsResource = QStringLiteral(":/mermaid/mermaid.min.js");
 
@@ -332,7 +338,7 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     }
 
     const QString runNonce = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const QString codePath = outputDir.filePath(QStringLiteral("mermaid_input_%1.mmd").arg(runNonce));
+    const QString codePath = systemTempDir.filePath(QStringLiteral("mermaid_input_%1.mmd").arg(runNonce));
     {
         QFile codeFile(codePath);
         if (codeFile.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
@@ -348,7 +354,8 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         }
     }
 
-    const QString artifactPath = outputDir.filePath(QStringLiteral("mermaid_debug_%1.html").arg(runNonce));
+    const QString artifactPath = systemTempDir.filePath(QStringLiteral("mermaid_debug_%1.html").arg(runNonce));
+    CP_CLOG(MERMAID_DEBUG) << "Generated temp file:" << artifactPath;
     const QString logPrefix = QStringLiteral("[MermaidRender %1]").arg(runNonce);
 
     QWebEngineView view;

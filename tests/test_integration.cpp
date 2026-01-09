@@ -219,6 +219,9 @@ void ciMessageHandler(QtMsgType type, const QMessageLogContext &context, const Q
 // Forward declaration from tests/test_matrix.cpp
 int run_provider_matrix_probe(int argc, char** argv);
 
+// Forward declaration from tests/integration/MermaidRenderTest.cpp
+int runMermaidRenderTest(int argc, char** argv);
+
 // Custom main to ensure QApplication is created and logging is captured in CI
 int main(int argc, char** argv)
 {
@@ -234,6 +237,9 @@ int main(int argc, char** argv)
 
     IntegrationTests tc;
     exitCode |= QTest::qExec(&tc, argc, argv);
+
+    // Run Mermaid Render Test
+    exitCode |= runMermaidRenderTest(argc, argv);
 
     // Run the Provider Compatibility Matrix Probe (headless informational)
     exitCode |= run_provider_matrix_probe(argc, argv);
