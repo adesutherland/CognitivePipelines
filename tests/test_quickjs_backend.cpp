@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <QString>
 #include <QVariant>
+#include <QDateTime>
 #include <map>
 #include <vector>
 #include "IScriptHost.h"
@@ -75,4 +76,61 @@ TEST(QuickJSBackendTest, SyntaxError) {
     
     EXPECT_FALSE(success);
     EXPECT_FALSE(host.errors.empty());
+}
+
+TEST(QuickJSBackendTest, StandardModulesImport) {
+    QuickJSRuntime runtime;
+    MockScriptHost host;
+    QString script = "import * as std from 'std';\n"
+                     "import * as os from 'os';\n"
+                     "if (typeof std.gc === 'function' && typeof os.open === 'function') {\n"
+                     "  console.log('Modules loaded correctly');\n"
+                     "} else {\n"
+                     "  console.log('Module content missing');\n"
+                     "}";
+    
+    bool success = runtime.execute(script, &host);
+    
+    EXPECT_TRUE(success);
+    ASSERT_FALSE(host.logs.empty());
+    EXPECT_EQ(host.logs[0], "Modules loaded correctly");
+}
+
+TEST(QuickJSBackendTest, SqliteIntegration) {
+    QuickJSRuntime runtime;
+    MockScriptHost host;
+    
+    // Test basic SELECT without table
+    QString script = 
+        "var res = sqlite.exec(\"SELECT 'test' as col\");\n"
+        "if (Array.isArray(res) && res.length > 0 && res[0].col === 'test') {\n"
+        "  pipeline.setOutput(\"result\", \"success\");\n"
+        "} else {\n"
+        "  pipeline.setOutput(\"result\", \"failure\");\n"
+        "  console.log(\"Actual result: \" + JSON.stringify(res));\n"
+        "}";
+    
+    bool success = runtime.execute(script, &host);
+    
+    EXPECT_TRUE(success);
+    EXPECT_EQ(host.outputs["result"].toString(), "success");
+}
+
+TEST(QuickJSBackendTest, SqliteFullWorkflow) {
+    QuickJSRuntime runtime;
+    MockScriptHost host;
+    
+    // Use a unique table name to avoid conflicts between test runs if scripts.db persists
+    QString tableName = "js_test_" + QString::number(QDateTime::currentMSecsSinceEpoch());
+
+    QString script = 
+        "sqlite.exec(\"CREATE TABLE " + tableName + " (val TEXT)\");\n"
+        "sqlite.exec(\"INSERT INTO " + tableName + " (val) VALUES ('hello')\");\n"
+        "var res = sqlite.exec(\"SELECT val FROM " + tableName + "\");\n"
+        "pipeline.setOutput(\"val\", res[0].val);";
+    
+    bool success = runtime.execute(script, &host);
+    
+    EXPECT_TRUE(success);
+    EXPECT_EQ(host.outputs["val"].toString(), "hello");
 }

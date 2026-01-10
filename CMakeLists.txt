@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.12.10 LANGUAGES C CXX)
+project(CognitivePipelines VERSION 0.12.11 LANGUAGES C CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -244,6 +244,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
     ${SRC_DIR}/QuickJSRuntime.cpp
     ${SRC_DIR}/QuickJSRuntime.h
+    ${SRC_DIR}/ScriptDatabaseBridge.cpp
+    ${SRC_DIR}/ScriptDatabaseBridge.h
     ${SRC_DIR}/RagIndexerNode.cpp
     ${SRC_DIR}/RagIndexerNode.h
     ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
@@ -422,6 +424,8 @@ if(ENABLE_TESTING)
             tests/test_anthropic_chat.cpp
             tests/test_execution_host.cpp
             tests/test_quickjs_backend.cpp
+            tests/ScriptDatabaseBridgeTest.cpp
+            tests/ScriptNodeIntegrationTest.cpp
             # Sources required by the unit tests
             ${SRC_DIR}/ExecutionScriptHost.cpp
             ${SRC_DIR}/ExecutionScriptHost.h
@@ -490,6 +494,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
             ${SRC_DIR}/QuickJSRuntime.cpp
             ${SRC_DIR}/QuickJSRuntime.h
+            ${SRC_DIR}/ScriptDatabaseBridge.cpp
+            ${SRC_DIR}/ScriptDatabaseBridge.h
             ${SRC_DIR}/UniversalScriptConnector.cpp
             ${SRC_DIR}/UniversalScriptConnector.h
             ${SRC_DIR}/ScriptPropertiesWidget.cpp
@@ -660,6 +666,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/HumanInputPropertiesWidget.h
             ${SRC_DIR}/QuickJSRuntime.cpp
             ${SRC_DIR}/QuickJSRuntime.h
+            ${SRC_DIR}/ScriptDatabaseBridge.cpp
+            ${SRC_DIR}/ScriptDatabaseBridge.h
             ${SRC_DIR}/UniversalScriptConnector.cpp
             ${SRC_DIR}/UniversalScriptConnector.h
             ${SRC_DIR}/ScriptPropertiesWidget.cpp

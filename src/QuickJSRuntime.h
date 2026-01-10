@@ -27,6 +27,10 @@
 #include "IScriptHost.h"
 #include "quickjs.h"
 #include <QString>
+#include <QJsonValue>
+#include <memory>
+
+class ScriptDatabaseBridge;
 
 /**
  * @brief Implementation of IScriptEngine using the QuickJS engine.
@@ -46,11 +50,15 @@ private:
     static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
     static JSValue js_pipeline_get_input(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
     static JSValue js_pipeline_set_output(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+    static JSValue js_sqlite_exec(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
     // Conversion helpers
     static QVariant jsToVariant(JSContext* ctx, JSValueConst val);
     static JSValue variantToJs(JSContext* ctx, const QVariant& var);
+    static JSValue qJsonToJSValue(JSContext* ctx, const QJsonValue& value);
 
     JSRuntime* m_rt;
     JSContext* m_ctx;
+    IScriptHost* m_currentHost = nullptr;
+    std::unique_ptr<ScriptDatabaseBridge> m_dbBridge;
 };
