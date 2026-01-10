@@ -264,7 +264,7 @@ jobs:
         run: cmake --build build --config Release --target CognitivePipelines unit_tests integration_tests -j 2
 
       - name: Deploy and Ad-hoc Sign (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && !startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: cmake --build build --target macos_deploy_all --config Release
 

@@ -51,9 +51,10 @@ runs:
 
     - name: "Step 3: Sign"
       shell: bash
+      env:
+        MACOS_SIGNING_IDENTITY: ${{ env.MACOS_CERT_ID }}
       run: |
         # Re-run deploy with the real identity. We assume build is already done.
-        cmake -S . -B build -DMACOS_SIGNING_IDENTITY="${{ env.MACOS_CERT_ID }}" -DRELEASE_BUILD=ON
         cmake --build build --target macos_deploy_all --config Release
 
     - name: "Step 4: Notarization"

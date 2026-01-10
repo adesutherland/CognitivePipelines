@@ -9,10 +9,9 @@ runs:
   using: "composite"
   steps:
     - name: Package (Windows)
-      shell: bash
+      shell: pwsh
       run: |
-        cd deploy/windows
-        zip -r "../../${{ inputs.artifact_name }}.zip" .
+        Compress-Archive -Path "deploy/windows/*" -DestinationPath "${{ inputs.artifact_name }}.zip"
     - name: Release Upload (Windows)
       shell: bash
       run: |

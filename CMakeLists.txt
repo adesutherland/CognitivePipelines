@@ -25,8 +25,7 @@ endif()
 # CMake's option() handles the cache, but since we might have forced it above, 
 # we need to be careful. Actually, the requirement says "force RELEASE_BUILD to ON if...".
 set(MACOS_SIGNING_IDENTITY "" CACHE STRING "macOS Code Signing Identity")
-# Prioritize environment variable if cache is empty or set to ad-hoc "-"
-if((NOT MACOS_SIGNING_IDENTITY OR MACOS_SIGNING_IDENTITY STREQUAL "-") AND DEFINED ENV{MACOS_SIGNING_IDENTITY})
+if(DEFINED ENV{MACOS_SIGNING_IDENTITY})
     set(MACOS_SIGNING_IDENTITY "$ENV{MACOS_SIGNING_IDENTITY}" CACHE STRING "macOS Code Signing Identity" FORCE)
 endif()
 

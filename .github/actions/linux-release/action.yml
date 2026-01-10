@@ -13,7 +13,9 @@ runs:
       run: |
         # In build.yml, the zip is created as cognitive-pipelines-ubuntu-bundle.zip
         if [ -f "cognitive-pipelines-ubuntu-bundle.zip" ]; then
-          mv "cognitive-pipelines-ubuntu-bundle.zip" "${{ inputs.artifact_name }}.zip"
+          if [[ "cognitive-pipelines-ubuntu-bundle.zip" != "${{ inputs.artifact_name }}.zip" ]]; then
+            mv "cognitive-pipelines-ubuntu-bundle.zip" "${{ inputs.artifact_name }}.zip"
+          fi
         fi
         gh release create ${{ github.ref_name }} --generate-notes || true
         gh release upload ${{ github.ref_name }} "${{ inputs.artifact_name }}.zip" --clobber
