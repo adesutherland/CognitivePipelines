@@ -105,9 +105,10 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
     }
     QString templatePath = tempDir + QDir::separator() + QStringLiteral("pdf_stitched_XXXXXX.png");
 
-    // Reset the temporary file for this execution (destroys previous file if any)
-    m_tempFile = std::make_unique<QTemporaryFile>(templatePath);
-    m_tempFile->setAutoRemove(true); // Will be removed when node is destroyed or re-run
+    // Create a local temporary file for this execution.
+    // setAutoRemove(false) ensures it persists for downstream nodes.
+    QTemporaryFile tempFile(templatePath);
+    tempFile.setAutoRemove(false);
 
     // Capture m_pdfPath for use during this execution
     const QString configuredPath = m_pdfPath;
@@ -215,17 +216,17 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
 
     painter.end();
 
-    // Step 8: Save to temporary file (using persistent member variable)
-    if (!m_tempFile->open()) {
-        CP_CLOG(PDF_DEBUG) << "Failed to open temporary file:" << m_tempFile->errorString();
+    // Step 8: Save to temporary file
+    if (!tempFile.open()) {
+        CP_CLOG(PDF_DEBUG) << "Failed to open temporary file:" << tempFile.errorString();
         ExecutionToken token;
         token.data = output;
         return TokenList{token};
     }
 
     // Get the absolute path and close the handle so we can save by path as required
-    QString outputPath = m_tempFile->fileName();
-    m_tempFile->close();
+    QString outputPath = tempFile.fileName();
+    tempFile.close();
 
     // Log the fix as required by the Task
     CP_CLOG(PDF_DEBUG) << "Successfully generated output path:" << outputPath;
