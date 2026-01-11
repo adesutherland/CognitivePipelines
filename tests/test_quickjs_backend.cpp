@@ -67,6 +67,39 @@ TEST(QuickJSBackendTest, DataExchange) {
     EXPECT_EQ(host.outputs["out_key"].toString(), "Hello world");
 }
 
+TEST(QuickJSBackendTest, ArrayOutput) {
+    QuickJSRuntime runtime;
+    MockScriptHost host;
+    
+    QString script = "pipeline.setOutput(\"out_key\", [\"a\", \"b\"]);";
+    
+    bool success = runtime.execute(script, &host);
+    
+    EXPECT_TRUE(success);
+    QVariant val = host.outputs["out_key"];
+    EXPECT_EQ(val.typeId(), QMetaType::QVariantList);
+    QVariantList list = val.toList();
+    ASSERT_EQ(list.size(), 2);
+    EXPECT_EQ(list[0].toString(), "a");
+    EXPECT_EQ(list[1].toString(), "b");
+}
+
+TEST(QuickJSBackendTest, ObjectOutput) {
+    QuickJSRuntime runtime;
+    MockScriptHost host;
+    
+    QString script = "pipeline.setOutput(\"out_key\", { \"x\": 1, \"y\": \"two\" });";
+    
+    bool success = runtime.execute(script, &host);
+    
+    EXPECT_TRUE(success);
+    QVariant val = host.outputs["out_key"];
+    EXPECT_EQ(val.typeId(), QMetaType::QVariantMap);
+    QVariantMap map = val.toMap();
+    EXPECT_EQ(map["x"].toInt(), 1);
+    EXPECT_EQ(map["y"].toString(), "two");
+}
+
 TEST(QuickJSBackendTest, SyntaxError) {
     QuickJSRuntime runtime;
     MockScriptHost host;

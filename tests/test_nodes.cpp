@@ -164,6 +164,44 @@ TEST(TextOutputNodeTest, UpdatesWidgetOnExecute)
     delete w;
 }
 
+TEST(TextOutputNodeTest, FormatsComplexDataAsJson)
+{
+    ensureApp();
+
+    TextOutputNode node;
+
+    QWidget* w = node.createConfigurationWidget(nullptr);
+    ASSERT_NE(w, nullptr);
+    auto* props = dynamic_cast<TextOutputPropertiesWidget*>(w);
+    ASSERT_NE(props, nullptr);
+
+    // Prepare input packet with list
+    QVariantList list;
+    list << QStringLiteral("A") << QStringLiteral("B");
+    DataPacket in;
+    in.insert(QString::fromLatin1(TextOutputNode::kInputId), list);
+
+    ExecutionToken token;
+    token.data = in;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    (void)node.execute(tokens);
+
+    // Allow the event loop to process the queued UI update
+    QTest::qWait(100);
+
+    // Find the QTextEdit inside the properties widget and verify contents
+    auto* edit = w->findChild<QTextEdit*>();
+    ASSERT_NE(edit, nullptr);
+    QString plainText = edit->toPlainText();
+    // Since setMarkdown is used, markers are stripped in plainText
+    EXPECT_TRUE(plainText.contains(QLatin1String("\"A\""))) << plainText.toStdString();
+    EXPECT_TRUE(plainText.contains(QLatin1String("\"B\""))) << plainText.toStdString();
+
+    delete w;
+}
+
 
 TEST(PythonScriptConnectorTest, ExecutesScriptAndHandlesIO)
 {

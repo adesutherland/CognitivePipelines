@@ -388,8 +388,8 @@ if(ENABLE_TESTING)
             src/Logger.h
             tests/test_main.cpp
             tests/test_nodes.cpp
-            tests/test_execution_engine.cpp
             tests/test_text_output_fanout.cpp
+            tests/test_execution_engine.cpp
             tests/test_text_output_save.cpp
             tests/test_invalid_model_pipeline.cpp
             tests/test_process_connector.cpp

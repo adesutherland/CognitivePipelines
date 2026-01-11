@@ -837,13 +837,39 @@ void MainWindow::refreshStageOutput()
 
     // Format the packet as Markdown
     QStringList lines;
+    QString logs;
     for (auto it = packet.cbegin(); it != packet.cend(); ++it) {
         const QString key = it.key();
-        const QString value = it.value().toString();
-        lines << QStringLiteral("**%1**: %2").arg(key, value);
+        if (key == QStringLiteral("logs")) {
+            logs = it.value().toString();
+            continue;
+        }
+
+        // Hidden internal fields
+        if (key.startsWith(QLatin1Char('_'))) {
+            continue;
+        }
+
+        QVariant val = it.value();
+        QString valueStr;
+        if (val.typeId() == QMetaType::QVariantList || val.typeId() == QMetaType::QStringList || val.typeId() == QMetaType::QVariantMap) {
+            valueStr = QJsonDocument::fromVariant(val).toJson(QJsonDocument::Indented).trimmed();
+            // Wrap in code block for better formatting in the dock
+            valueStr = QStringLiteral("\n```json\n%1\n```").arg(valueStr);
+        } else {
+            valueStr = val.toString();
+        }
+        lines << QStringLiteral("**%1**: %2").arg(key, valueStr);
     }
     
-    const QString markdown = lines.join(QStringLiteral("\n\n"));
+    QString markdown;
+    if (!logs.isEmpty()) {
+        markdown = logs;
+        if (!lines.isEmpty()) {
+            markdown += QStringLiteral("\n\n---\n\n");
+        }
+    }
+    markdown += lines.join(QStringLiteral("\n\n"));
     stageOutputText_->setMarkdown(markdown);
 }
 

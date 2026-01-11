@@ -153,4 +153,7 @@ private:
 
     // Deduplication helper: produces a signature for a target node's input snapshot
     QByteArray computeInputSignature(const QVariantMap& inputPayload) const;
+
+    // Helper to stringify QVariant for logging, truncating long strings and escaping newlines
+    static QString truncateAndEscape(const QVariant& v);
 };

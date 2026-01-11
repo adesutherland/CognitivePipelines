@@ -25,6 +25,8 @@
 #include "TextOutputPropertiesWidget.h"
 
 #include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QMetaObject>
 #include <QTextEdit>
 #include <QThread>
@@ -84,7 +86,21 @@ TokenList TextOutputNode::execute(const TokenList& incomingTokens)
         }
     }
 
-    const QString text = inputs.value(QString::fromLatin1(kInputId)).toString();
+    QVariant val = inputs.value(QString::fromLatin1(kInputId));
+    QString text;
+    if (val.typeId() == QMetaType::QVariantList || val.typeId() == QMetaType::QStringList) {
+        text = QJsonDocument(QJsonArray::fromVariantList(val.toList())).toJson(QJsonDocument::Indented);
+        text = QStringLiteral("```json\n%1\n```").arg(text);
+    } else if (val.typeId() == QMetaType::QVariantMap) {
+        text = QJsonDocument(QJsonObject::fromVariantMap(val.toMap())).toJson(QJsonDocument::Indented);
+        text = QStringLiteral("```json\n%1\n```").arg(text);
+    } else {
+        text = val.toString();
+        // If it looks like it has multiple lines, ensure newlines are preserved in Markdown
+        if (text.contains(QLatin1Char('\n'))) {
+            text.replace(QStringLiteral("\n"), QStringLiteral("  \n"));
+        }
+    }
     // Remember the last text even if the widget is not created yet (fan-out first run case)
     m_lastText = text;
     m_hasPendingText = (m_propertiesWidget == nullptr);

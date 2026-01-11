@@ -28,7 +28,6 @@
 #include "ScriptDatabaseBridge.h"
 #include <QJsonObject>
 #include <QJsonArray>
-#include <QJsonDocument>
 
 QuickJSRuntime::QuickJSRuntime() {
     m_rt = JS_NewRuntime();
@@ -200,32 +199,48 @@ JSValue QuickJSRuntime::js_sqlite_exec(JSContext* ctx, JSValueConst this_val, in
 }
 
 QVariant QuickJSRuntime::jsToVariant(JSContext* ctx, JSValueConst val) {
-    if (JS_IsString(val)) {
-        const char* str = JS_ToCString(ctx, val);
-        QString qstr = QString::fromUtf8(str);
-        JS_FreeCString(ctx, str);
-        return qstr;
+    if (JS_IsNull(val) || JS_IsUndefined(val)) {
+        return QVariant();
+    } else if (JS_IsBool(val)) {
+        return (bool)JS_ToBool(ctx, val);
     } else if (JS_IsNumber(val)) {
         double d;
         JS_ToFloat64(ctx, &d, val);
         return d;
-    } else if (JS_IsBool(val)) {
-        return (bool)JS_ToBool(ctx, val);
-    } else if (JS_IsObject(val)) {
-        // Use JSON stringify to convert complex objects/arrays to QVariant
-        JSValue jsonStrVal = JS_JSONStringify(ctx, val, JS_UNDEFINED, JS_UNDEFINED);
-        if (!JS_IsException(jsonStrVal)) {
-            const char* str = JS_ToCString(ctx, jsonStrVal);
-            if (str) {
-                QJsonDocument doc = QJsonDocument::fromJson(QByteArray(str));
-                JS_FreeCString(ctx, str);
-                JS_FreeValue(ctx, jsonStrVal);
-                if (doc.isArray()) return doc.array().toVariantList();
-                if (doc.isObject()) return doc.object().toVariantMap();
-            } else {
-                JS_FreeValue(ctx, jsonStrVal);
-            }
+    } else if (JS_IsString(val)) {
+        const char* str = JS_ToCString(ctx, val);
+        QString qstr = QString::fromUtf8(str);
+        JS_FreeCString(ctx, str);
+        return qstr;
+    } else if (JS_IsArray(val)) {
+        QVariantList list;
+        JSValue lenVal = JS_GetPropertyStr(ctx, val, "length");
+        uint32_t len = 0;
+        JS_ToUint32(ctx, &len, lenVal);
+        JS_FreeValue(ctx, lenVal);
+        for (uint32_t i = 0; i < len; i++) {
+            JSValue element = JS_GetPropertyUint32(ctx, val, i);
+            list.append(jsToVariant(ctx, element));
+            JS_FreeValue(ctx, element);
         }
+        return list;
+    } else if (JS_IsObject(val)) {
+        QVariantMap map;
+        JSPropertyEnum *ptab = nullptr;
+        uint32_t plen = 0;
+        if (JS_GetOwnPropertyNames(ctx, &ptab, &plen, val, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) >= 0) {
+            for (uint32_t i = 0; i < plen; i++) {
+                JSValue propVal = JS_GetProperty(ctx, val, ptab[i].atom);
+                const char *key = JS_AtomToCString(ctx, ptab[i].atom);
+                if (key) {
+                    map.insert(QString::fromUtf8(key), jsToVariant(ctx, propVal));
+                    JS_FreeCString(ctx, key);
+                }
+                JS_FreeValue(ctx, propVal);
+            }
+            JS_FreePropertyEnum(ctx, ptab, plen);
+        }
+        return map;
     }
     return QVariant();
 }

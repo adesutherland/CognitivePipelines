@@ -56,6 +56,11 @@ public:
     {
         engine.handleTaskCompleted(nodeId, nodeUuid, outputs, runId);
     }
+
+    static QString truncateAndEscape(const QVariant& v)
+    {
+        return ExecutionEngine::truncateAndEscape(v);
+    }
 };
 
 TEST(ExecutionEngineTest, LinearTwoNodes_DataFlowsAndOrderIsCorrect)
@@ -157,6 +162,20 @@ TEST(ExecutionEngineTest, ClearsDedupSignatureWhenNodeEmitsNoOutput)
     ExecutionEngineSignatureFriend::invokeHandle(engine, /*nodeId*/1, nodeUuid, TokenList{}, runId);
 
     EXPECT_TRUE(ExecutionEngineSignatureFriend::lastSignature(engine, nodeUuid).isEmpty());
+}
+
+TEST(ExecutionEngineTest, LogsComplexTypesAsJson)
+{
+    QVariantList list;
+    list << QStringLiteral("A") << QStringLiteral("B");
+    
+    QString result = ExecutionEngineSignatureFriend::truncateAndEscape(list);
+    EXPECT_TRUE(result.contains(QLatin1String("[\"A\",\"B\"]"))) << "Result was: " << result.toStdString();
+    
+    QVariantMap map;
+    map.insert(QStringLiteral("key"), QStringLiteral("value"));
+    result = ExecutionEngineSignatureFriend::truncateAndEscape(map);
+    EXPECT_TRUE(result.contains(QLatin1String("{\"key\":\"value\"}"))) << "Result was: " << result.toStdString();
 }
 
 TEST(ExecutionEngineTest, SlowMotionDelaysFirstDownstreamDispatch)

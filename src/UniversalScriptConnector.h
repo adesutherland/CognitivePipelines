@@ -34,8 +34,10 @@ public:
 private slots:
     void onScriptChanged(const QString& script);
     void onEngineChanged(const QString& engineId);
+    void onFanOutChanged(bool enabled);
 
 private:
     QString m_scriptCode;
     QString m_engineId{QStringLiteral("quickjs")};
+    bool m_enableFanOut = false;
 };

@@ -26,6 +26,8 @@
 
 #include "Logger.h"
 #include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QtConcurrent/QtConcurrent>
 #include <QThread>
 #include <QTimer>
@@ -70,9 +72,14 @@ thread_local QtNodes::NodeId g_CurrentNodeId = QtNodes::InvalidNodeId;
 thread_local QUuid g_CurrentNodeUuid = QUuid();
 
 // Helper to stringify QVariant for logging, truncating long strings and escaping newlines
-static QString truncateAndEscape(const QVariant& v)
+QString ExecutionEngine::truncateAndEscape(const QVariant& v)
 {
-    QString s = v.toString();
+    QString s;
+    if (v.typeId() == QMetaType::QVariantList || v.typeId() == QMetaType::QStringList || v.typeId() == QMetaType::QVariantMap) {
+        s = QJsonDocument::fromVariant(v).toJson(QJsonDocument::Compact);
+    } else {
+        s = v.toString();
+    }
     s.replace('\n', QStringLiteral("\\n"));
     if (s.size() > 100) {
         s = s.left(100) + QStringLiteral("…(truncated)");
@@ -404,7 +411,7 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
         for (const auto& tok : outputTokens) {
             for (auto it = tok.data.cbegin(); it != tok.data.cend(); ++it) {
                 const QString key = it.key();
-                const QString val = truncateAndEscape(it.value());
+                const QString val = ExecutionEngine::truncateAndEscape(it.value());
                 emit nodeLog(QString::fromLatin1("  Output[%1] %2 = \"%3\"")
                                  .arg(QString::number(tokenIndex))
                                  .arg(key)

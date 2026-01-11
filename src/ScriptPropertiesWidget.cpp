@@ -11,6 +11,7 @@
 #include <QFormLayout>
 #include <QComboBox>
 #include <QPlainTextEdit>
+#include <QCheckBox>
 #include <QFontDatabase>
 #include <QLabel>
 
@@ -22,6 +23,10 @@ ScriptPropertiesWidget::ScriptPropertiesWidget(QWidget* parent)
     auto* formLayout = new QFormLayout();
     m_engineCombo = new QComboBox();
     formLayout->addRow(tr("Engine"), m_engineCombo);
+
+    m_fanOutCheck = new QCheckBox();
+    formLayout->addRow(tr("Enable Fan-Out"), m_fanOutCheck);
+
     mainLayout->addLayout(formLayout);
 
     m_scriptEditor = new QPlainTextEdit();
@@ -41,6 +46,7 @@ ScriptPropertiesWidget::ScriptPropertiesWidget(QWidget* parent)
     // Connections
     connect(m_scriptEditor, &QPlainTextEdit::textChanged, this, &ScriptPropertiesWidget::onScriptTextChanged);
     connect(m_engineCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &ScriptPropertiesWidget::onEngineIndexChanged);
+    connect(m_fanOutCheck, &QCheckBox::toggled, this, &ScriptPropertiesWidget::fanOutChanged);
 }
 
 void ScriptPropertiesWidget::setScript(const QString& script)
@@ -57,6 +63,14 @@ void ScriptPropertiesWidget::setEngineId(const QString& engineId)
     if (index != -1 && m_engineCombo->currentIndex() != index) {
         QSignalBlocker blocker(m_engineCombo);
         m_engineCombo->setCurrentIndex(index);
+    }
+}
+
+void ScriptPropertiesWidget::setFanOut(bool enabled)
+{
+    if (m_fanOutCheck->isChecked() != enabled) {
+        QSignalBlocker blocker(m_fanOutCheck);
+        m_fanOutCheck->setChecked(enabled);
     }
 }
 

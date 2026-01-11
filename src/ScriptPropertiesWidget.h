@@ -11,6 +11,7 @@
 
 class QComboBox;
 class QPlainTextEdit;
+class QCheckBox;
 
 /**
  * @brief Properties widget for the Universal Script Node.
@@ -34,6 +35,11 @@ public:
     void setEngineId(const QString& engineId);
 
     /**
+     * @brief Sets the fan-out state.
+     */
+    void setFanOut(bool enabled);
+
+    /**
      * @brief Returns the current script content.
      */
     QString script() const;
@@ -54,11 +60,17 @@ signals:
      */
     void engineChanged(const QString& engineId);
 
+    /**
+     * @brief Emitted when the fan-out state is changed.
+     */
+    void fanOutChanged(bool enabled);
+
 private slots:
     void onScriptTextChanged();
     void onEngineIndexChanged(int index);
 
 private:
     QComboBox* m_engineCombo;
+    QCheckBox* m_fanOutCheck;
     QPlainTextEdit* m_scriptEditor;
 };

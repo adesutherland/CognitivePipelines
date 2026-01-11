@@ -10,20 +10,25 @@
 #include "ExecutionToken.h"
 #include "QuickJSRuntime.h"
 
-TEST(ScriptNodeIntegrationTest, SqliteIntegration)
-{
-    // Need QApplication for some components
-    if (!qApp) {
-        static int argc = 1;
-        static char* argv[] = {(char*)"test"};
-        new QApplication(argc, argv);
+class ScriptNodeIntegrationTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        // Need QApplication for some components
+        if (!qApp) {
+            static int argc = 1;
+            static char* argv[] = {(char*)"test"};
+            new QApplication(argc, argv);
+        }
+
+        // Register quickjs engine (normally done in NodeGraphModel)
+        ScriptEngineRegistry::instance().registerEngine(QStringLiteral("quickjs"), []() {
+            return std::make_unique<QuickJSRuntime>();
+        });
     }
+};
 
-    // Register quickjs engine (normally done in NodeGraphModel)
-    ScriptEngineRegistry::instance().registerEngine(QStringLiteral("quickjs"), []() {
-        return std::make_unique<QuickJSRuntime>();
-    });
-
+TEST_F(ScriptNodeIntegrationTest, SqliteIntegration)
+{
     // 1. Setup temporary database
     QTemporaryFile tempFile;
     ASSERT_TRUE(tempFile.open());
@@ -72,4 +77,125 @@ TEST(ScriptNodeIntegrationTest, SqliteIntegration)
 
     // Cleanup env var
     qunsetenv("CP_QUICKJS_DB_PATH");
+}
+
+TEST_F(ScriptNodeIntegrationTest, ArrayPassThrough)
+{
+    UniversalScriptConnector node;
+    QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+
+    QJsonObject state;
+    state.insert(QStringLiteral("scriptCode"), script);
+    state.insert(QStringLiteral("engineId"), QStringLiteral("quickjs"));
+    state.insert(QStringLiteral("enableFanOut"), false);
+    node.loadState(state);
+
+    TokenList outTokens = node.execute({});
+
+    ASSERT_EQ(outTokens.size(), 1);
+    QVariant outVal = outTokens.front().data.value(QStringLiteral("out"));
+    ASSERT_EQ(outVal.typeId(), QMetaType::QVariantList);
+    QVariantList list = outVal.toList();
+    ASSERT_EQ(list.size(), 2);
+    EXPECT_EQ(list.at(0).toString(), QStringLiteral("A"));
+    EXPECT_EQ(list.at(1).toString(), QStringLiteral("B"));
+}
+
+TEST_F(ScriptNodeIntegrationTest, ArrayFanOut)
+{
+    UniversalScriptConnector node;
+    QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+
+    QJsonObject state;
+    state.insert(QStringLiteral("scriptCode"), script);
+    state.insert(QStringLiteral("engineId"), QStringLiteral("quickjs"));
+    state.insert(QStringLiteral("enableFanOut"), true);
+    node.loadState(state);
+
+    TokenList outTokens = node.execute({});
+
+    ASSERT_EQ(outTokens.size(), 2);
+    auto it = outTokens.begin();
+    EXPECT_EQ(it->data.value(QStringLiteral("out")).toString(), QStringLiteral("A"));
+    ++it;
+    EXPECT_EQ(it->data.value(QStringLiteral("out")).toString(), QStringLiteral("B"));
+}
+
+TEST_F(ScriptNodeIntegrationTest, MixedTypes)
+{
+    UniversalScriptConnector node;
+    QString script = "pipeline.setOutput(\"out\", \"SingleString\");";
+
+    QJsonObject state;
+    state.insert(QStringLiteral("scriptCode"), script);
+    state.insert(QStringLiteral("engineId"), QStringLiteral("quickjs"));
+    state.insert(QStringLiteral("enableFanOut"), true);
+    node.loadState(state);
+
+    TokenList outTokens = node.execute({});
+
+    ASSERT_EQ(outTokens.size(), 1);
+    EXPECT_EQ(outTokens.front().data.value(QStringLiteral("out")).toString(), QStringLiteral("SingleString"));
+}
+
+TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)
+{
+    UniversalScriptConnector node;
+    QString script = "console.log(\"Log 1\");\n"
+                     "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+
+    QJsonObject state;
+    state.insert(QStringLiteral("scriptCode"), script);
+    state.insert(QStringLiteral("engineId"), QStringLiteral("quickjs"));
+    state.insert(QStringLiteral("enableFanOut"), true);
+    node.loadState(state);
+
+    TokenList outTokens = node.execute({});
+
+    ASSERT_EQ(outTokens.size(), 2);
+    for (const auto& token : outTokens) {
+        EXPECT_TRUE(token.data.contains(QStringLiteral("logs")));
+        EXPECT_TRUE(token.data.value(QStringLiteral("logs")).toString().contains(QStringLiteral("Log 1")));
+    }
+}
+
+TEST_F(ScriptNodeIntegrationTest, InjectsFanOutSummaryIntoLogs)
+{
+    UniversalScriptConnector node;
+    QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+
+    QJsonObject state;
+    state.insert(QStringLiteral("scriptCode"), script);
+    state.insert(QStringLiteral("engineId"), QStringLiteral("quickjs"));
+    state.insert(QStringLiteral("enableFanOut"), true);
+    node.loadState(state);
+
+    TokenList outTokens = node.execute({});
+
+    ASSERT_EQ(outTokens.size(), 2);
+    for (const auto& token : outTokens) {
+        QString logs = token.data.value(QStringLiteral("logs")).toString();
+        EXPECT_TRUE(logs.contains(QStringLiteral("out[1]: A")));
+        EXPECT_TRUE(logs.contains(QStringLiteral("out[2]: B")));
+        EXPECT_FALSE(logs.contains(QStringLiteral("[0]:")));
+    }
+}
+
+TEST_F(ScriptNodeIntegrationTest, NoSummaryInSingleMode)
+{
+    UniversalScriptConnector node;
+    QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+
+    QJsonObject state;
+    state.insert(QStringLiteral("scriptCode"), script);
+    state.insert(QStringLiteral("engineId"), QStringLiteral("quickjs"));
+    state.insert(QStringLiteral("enableFanOut"), false);
+    node.loadState(state);
+
+    TokenList outTokens = node.execute({});
+
+    ASSERT_EQ(outTokens.size(), 1);
+    QString logs = outTokens.front().data.value(QStringLiteral("logs")).toString();
+    EXPECT_FALSE(logs.contains(QStringLiteral("--- Output Data ---")));
+    EXPECT_FALSE(logs.contains(QStringLiteral("out:")));
 }
