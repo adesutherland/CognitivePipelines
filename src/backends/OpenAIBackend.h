@@ -68,7 +68,8 @@ public:
         const QString& model,
         const QString& size,
         const QString& quality,
-        const QString& style
+        const QString& style,
+        const QString& targetDir = QString()
     ) override;
 
 protected:

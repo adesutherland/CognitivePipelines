@@ -71,7 +71,7 @@ public slots:
     // the engine discovers all source nodes (no incoming connections) and schedules them.
     void runPipeline(const QList<QUuid>& specificEntryPoints = {});
     void setExecutionDelay(int ms);
-    void setDebugKeepTempFiles(bool keep) { m_keepTempFiles = keep; }
+    void setProjectName(const QString& name);
 
 public:
     // Thread-safe accessor to retrieve output data for a specific node
@@ -152,11 +152,10 @@ private:
     QTimer* m_finalizeTimer {nullptr};
     qint64  m_lastActivityMs {0};
 
-    // Run-specific temporary directory
-    QString m_runTempDir;
-    bool m_keepTempFiles = false;
+    QString m_projectName = QStringLiteral("Untitled");
+    QMap<QString, int> m_nodeRunCounters;
 
-    void cleanupTempDir();
+    QString getNodeOutputDir(const QString& nodeId, int runIndex) const;
 
     // Deduplication helper: produces a signature for a target node's input snapshot
     QByteArray computeInputSignature(const QVariantMap& inputPayload) const;

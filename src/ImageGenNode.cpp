@@ -112,6 +112,7 @@ TokenList ImageGenNode::execute(const TokenList& incomingTokens)
         : m_style.trimmed();
 
     const QString prompt = inputs.value(QString::fromLatin1(kInputPromptPinId)).toString().trimmed();
+    const QString outputDir = inputs.value(QStringLiteral("_sys_node_output_dir")).toString();
 
     DataPacket output;
     const QString outputPinId = QString::fromLatin1(kOutputImagePathPinId);
@@ -136,7 +137,7 @@ TokenList ImageGenNode::execute(const TokenList& incomingTokens)
 
     QString imagePath;
     try {
-        QFuture<QString> future = backend->generateImage(prompt, model, size, quality, style);
+        QFuture<QString> future = backend->generateImage(prompt, model, size, quality, style, outputDir);
         imagePath = future.result();
     } catch (const std::exception& e) {
         imagePath = QStringLiteral("ERROR: Exception during image generation: %1").arg(QString::fromUtf8(e.what()));

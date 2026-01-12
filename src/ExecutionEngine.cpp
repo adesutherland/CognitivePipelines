@@ -34,6 +34,7 @@
 #include <QDateTime>
 #include <QStandardPaths>
 #include <QDir>
+#include <QRegularExpression>
 #include <algorithm>
 
 #include <QtNodes/DataFlowGraphModel>
@@ -89,41 +90,33 @@ QString ExecutionEngine::truncateAndEscape(const QVariant& v)
     return s;
 }
 
-void ExecutionEngine::cleanupTempDir() {
-    // SAFETY GUARD 1: Empty Check
-    if (m_runTempDir.isEmpty()) {
-        CP_WARN << "Safety Stop: Attempted to cleanup empty temp dir path.";
-        return;
+void ExecutionEngine::setProjectName(const QString& name)
+{
+    m_projectName = name;
+}
+
+QString ExecutionEngine::getNodeOutputDir(const QString& nodeId, int runIndex) const
+{
+    QString sanitizedProject = m_projectName;
+    // Sanitization: replace spaces/special chars with underscores
+    // Valid characters: alphanumeric, underscore, hyphen
+    static const QRegularExpression re("[^a-zA-Z0-9_-]");
+    sanitizedProject.replace(re, QStringLiteral("_"));
+    if (sanitizedProject.isEmpty()) {
+        sanitizedProject = QStringLiteral("Untitled");
     }
 
-    // SAFETY GUARD 2: Location Check (Must be in system temp)
-    const QString systemTemp = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    if (!m_runTempDir.startsWith(systemTemp)) {
-        CP_WARN << "CRITICAL SAFETY STOP: Attempted to delete a directory outside system temp:" << m_runTempDir;
-        return;
+    QString base = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    if (base.isEmpty()) {
+        base = QDir::homePath() + QStringLiteral("/Documents");
     }
-
-    // SAFETY GUARD 3: Signature Check (Must have our app prefix)
-    if (!m_runTempDir.contains("CP_Run_")) {
-        CP_WARN << "CRITICAL SAFETY STOP: Path does not look like a Cognitive Pipeline temp folder:" << m_runTempDir;
-        return;
-    }
-
-    if (m_keepTempFiles) {
-        emit nodeLog(QStringLiteral("ExecutionEngine: Keeping temp files as requested: %1").arg(m_runTempDir));
-        m_runTempDir.clear();
-        return;
-    }
-
-    QDir dir(m_runTempDir);
-    if (dir.exists()) {
-        if (dir.removeRecursively()) {
-            emit nodeLog(QStringLiteral("ExecutionEngine: Cleaned up run-specific temp directory: %1").arg(m_runTempDir));
-        } else {
-            emit nodeLog(QStringLiteral("ExecutionEngine: FAILED to clean up run-specific temp directory: %1").arg(m_runTempDir));
-        }
-    }
-    m_runTempDir.clear();
+    
+    QString path = base + QStringLiteral("/CognitivePipelineOutput/") 
+                 + sanitizedProject + QStringLiteral("/")
+                 + QStringLiteral("Node_") + nodeId + QStringLiteral("/")
+                 + QStringLiteral("Run_") + QString::number(runIndex) + QStringLiteral("/");
+    
+    return QDir::cleanPath(path);
 }
 
 ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
@@ -144,7 +137,6 @@ ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
 
 ExecutionEngine::~ExecutionEngine()
 {
-    cleanupTempDir();
 }
 
 void ExecutionEngine::run()
@@ -181,17 +173,8 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
     // New Run ID for this pipeline execution to guard against zombie threads
     m_currentRunId = QUuid::createUuid();
 
-    // Create run-specific temporary directory
-    QString tempBase = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    if (tempBase.isEmpty()) {
-        tempBase = QDir::tempPath();
-    }
-    m_runTempDir = tempBase + "/CP_Run_" + m_currentRunId.toString(QUuid::WithoutBraces);
-    if (QDir().mkpath(m_runTempDir)) {
-        emit nodeLog(QStringLiteral("Created run-specific temp directory: %1").arg(m_runTempDir));
-    } else {
-        emit nodeLog(QStringLiteral("FAILED to create run-specific temp directory: %1").arg(m_runTempDir));
-    }
+    // Reset node run counters for this session/run
+    m_nodeRunCounters.clear();
 
     emit executionStarted();
 
@@ -295,15 +278,25 @@ void ExecutionEngine::dispatchTask(const ExecutionTask& task)
 
 void ExecutionEngine::launchTask(const ExecutionTask& task)
 {
+    QString outputDir;
     {
         QMutexLocker locker(&m_queueMutex);
         if (m_hardError) return;
         ++m_activeTasks;
+
+        const QString nodeIdStr = QString::number(task.nodeId);
+        int runIndex = m_nodeRunCounters.value(nodeIdStr, 0);
+        m_nodeRunCounters.insert(nodeIdStr, runIndex + 1);
+
+        outputDir = getNodeOutputDir(nodeIdStr, runIndex);
+        if (!QDir().mkpath(outputDir)) {
+            emit nodeLog(QStringLiteral("FAILED to create output directory: %1").arg(outputDir));
+        }
     }
 
     QPointer<NodeGraphModel> graphModel(_graphModel);
     // Launch concurrently (discard the QFuture as we don't need to track it)
-    (void)QtConcurrent::run([this, task, graphModel]() {
+    (void)QtConcurrent::run([this, task, graphModel, outputDir]() {
         // Update last activity time when a task actually begins its work
         m_lastActivityMs = QDateTime::currentMSecsSinceEpoch();
         // Worker Guard: if runId is stale, abandon work immediately
@@ -398,11 +391,11 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
             g_CurrentNodeId = task.nodeId;
             g_CurrentNodeUuid = task.nodeUuid;
 
-            // Inject system tokens (e.g., run-specific temp directory)
+            // Inject system tokens (e.g., persistent node-specific output directory)
             TokenList effectiveInputs = task.inputs;
-            if (!m_runTempDir.isEmpty()) {
+            if (!outputDir.isEmpty()) {
                 ExecutionToken sysToken;
-                sysToken.data.insert(QStringLiteral("_sys_run_temp_dir"), m_runTempDir);
+                sysToken.data.insert(QStringLiteral("_sys_node_output_dir"), outputDir);
                 effectiveInputs.push_back(std::move(sysToken));
             }
 
@@ -584,7 +577,6 @@ void ExecutionEngine::tryFinalize()
     emit nodeLog(QStringLiteral("ExecutionEngine: Chain finished."));
     emit pipelineFinished(finalPacket);
     emit executionFinished();
-    cleanupTempDir();
 }
 
 QByteArray ExecutionEngine::computeInputSignature(const QVariantMap& inputPayload) const

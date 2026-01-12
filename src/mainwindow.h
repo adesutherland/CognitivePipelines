@@ -145,4 +145,6 @@ private:
 
     // Global running status indicator in the status bar
     QLabel* m_statusLabel {nullptr};
+
+    QString m_currentFileName;
 };

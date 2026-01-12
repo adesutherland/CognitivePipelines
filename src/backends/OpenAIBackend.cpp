@@ -713,9 +713,10 @@ QFuture<QString> OpenAIBackend::generateImage(
     const QString& model,
     const QString& size,
     const QString& quality,
-    const QString& style
+    const QString& style,
+    const QString& targetDir
 ) {
-    return QtConcurrent::run([prompt, model, size, quality, style]() -> QString {
+    return QtConcurrent::run([prompt, model, size, quality, style, targetDir]() -> QString {
         const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("openai"));
         if (apiKey.trimmed().isEmpty()) {
             const QString msg = QStringLiteral("Missing OpenAI API key");
@@ -837,15 +838,23 @@ QFuture<QString> OpenAIBackend::generateImage(
             return QStringLiteral("Failed to decode image data");
         }
 
-        QString tempBase = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-        if (tempBase.isEmpty()) {
-            tempBase = QDir::tempPath();
-        }
+        QString filePath;
+        if (!targetDir.isEmpty()) {
+            // Case A: Persistent Output
+            filePath = targetDir + QDir::separator() + QStringLiteral("generated_image.png");
+            CP_CLOG(cp_lifecycle).noquote() << "Saved DALL-E image to persistent path:" << filePath;
+        } else {
+            // Case B: Fallback to temporary directory
+            QString tempBase = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+            if (tempBase.isEmpty()) {
+                tempBase = QDir::tempPath();
+            }
 
-        QDir tempDir(tempBase);
-        const QString fileName = QStringLiteral("openai_gen_%1.png").arg(
-            QUuid::createUuid().toString(QUuid::WithoutBraces));
-        const QString filePath = tempDir.filePath(fileName);
+            QDir tempDir(tempBase);
+            const QString fileName = QStringLiteral("openai_gen_%1.png").arg(
+                QUuid::createUuid().toString(QUuid::WithoutBraces));
+            filePath = tempDir.filePath(fileName);
+        }
 
         QFile outFile(filePath);
         if (!outFile.open(QIODevice::WriteOnly)) {

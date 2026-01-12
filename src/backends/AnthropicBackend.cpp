@@ -297,13 +297,15 @@ QFuture<QString> AnthropicBackend::generateImage(
     const QString& model,
     const QString& size,
     const QString& quality,
-    const QString& style
+    const QString& style,
+    const QString& targetDir
 ) {
     Q_UNUSED(prompt)
     Q_UNUSED(model)
     Q_UNUSED(size)
     Q_UNUSED(quality)
     Q_UNUSED(style)
+    Q_UNUSED(targetDir)
     
     return QtConcurrent::run([]() {
         return QStringLiteral("Anthropic does not support image generation");

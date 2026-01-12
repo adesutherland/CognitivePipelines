@@ -65,7 +65,7 @@ void ExecutionScriptHost::setError(const QString& message)
 
 QString ExecutionScriptHost::getTempDir() const
 {
-    const QString sysKey = QStringLiteral("_sys_run_temp_dir");
+    const QString sysKey = QStringLiteral("_sys_node_output_dir");
     if (m_inputPacket.contains(sysKey)) {
         return m_inputPacket.value(sysKey).toString();
     }

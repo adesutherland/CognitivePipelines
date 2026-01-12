@@ -466,8 +466,10 @@ void MainWindow::onSaveAs()
         stageOutputText_->clear();
     }
 
-    // Clear all TextOutputNode displays after saving (UI cleanup)
+    // Clear all TextOutputNode displays after UI cleanup
     clearAllTextOutputNodes();
+
+    m_currentFileName = fileName;
 
     statusBar()->showMessage(tr("Saved to %1").arg(QFileInfo(fileName).fileName()), 3000);
 }
@@ -484,6 +486,11 @@ void MainWindow::onRunPipeline()
     
     // Execute the pipeline
     if (execEngine_) {
+        if (m_currentFileName.isEmpty()) {
+            execEngine_->setProjectName(QStringLiteral("Untitled"));
+        } else {
+            execEngine_->setProjectName(QFileInfo(m_currentFileName).baseName());
+        }
         execEngine_->run();
     }
 }
@@ -513,7 +520,14 @@ void MainWindow::populateRunMenu()
             // clear stage output and text output nodes before run
             if (stageOutputText_) stageOutputText_->clear();
             clearAllTextOutputNodes();
-            if (execEngine_) execEngine_->runPipeline({ uuid });
+            if (execEngine_) {
+                if (m_currentFileName.isEmpty()) {
+                    execEngine_->setProjectName(QStringLiteral("Untitled"));
+                } else {
+                    execEngine_->setProjectName(QFileInfo(m_currentFileName).baseName());
+                }
+                execEngine_->runPipeline({ uuid });
+            }
         });
     }
 }
@@ -626,6 +640,8 @@ void MainWindow::onOpen()
 
     // Clear all TextOutputNode instances after loading
     clearAllTextOutputNodes();
+
+    m_currentFileName = fileName;
 
     // Zoom to fit the entire pipeline in view
     if (_graphView && _graphView->scene()) {

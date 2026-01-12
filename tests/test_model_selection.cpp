@@ -124,7 +124,8 @@ public:
         const QString& /*model*/,
         const QString& /*size*/,
         const QString& /*quality*/,
-        const QString& /*style*/
+        const QString& /*style*/,
+        const QString& /*targetDir*/ = QString()
     ) override {
         return QtConcurrent::run([](){ return QString("/tmp/dummy.png"); });
     }

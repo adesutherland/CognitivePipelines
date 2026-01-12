@@ -133,31 +133,34 @@ TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
         packet.insert(errKey, msg);
         CP_WARN << "PythonScriptConnector:" << msg;
     } else {
-        // Create a temporary file for the script content
-        QString tempDir = inputs.value(QStringLiteral("_sys_run_temp_dir")).toString();
-        QTemporaryFile tempFile;
-        if (!tempDir.isEmpty()) {
-            tempFile.setFileTemplate(tempDir + QDir::separator() + QStringLiteral("python_script_XXXXXX.py"));
+        // Create a script file in the node-specific output directory
+        QString outDir = inputs.value(QStringLiteral("_sys_node_output_dir")).toString();
+        if (outDir.isEmpty()) {
+            outDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+            if (outDir.isEmpty()) {
+                outDir = QDir::tempPath();
+            }
         }
+        
+        QString scriptPath = outDir + QDir::separator() + QStringLiteral("script.py");
+        QFile scriptFile(scriptPath);
 
-        if (!tempFile.open()) {
-            const QString msg = QStringLiteral("Failed to create temporary file for script: ") + tempFile.errorString();
+        if (!scriptFile.open(QIODevice::WriteOnly)) {
+            const QString msg = QStringLiteral("Failed to create script file: ") + scriptFile.errorString();
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
             CP_WARN << "PythonScriptConnector:" << msg;
         } else {
-            // Write script content to temp file
+            // Write script content to file
             const QByteArray scriptBytes = scriptContent.toUtf8();
-            if (tempFile.write(scriptBytes) != scriptBytes.size()) {
-                const QString msg = QStringLiteral("Failed to write script to temporary file: ") + tempFile.errorString();
+            if (scriptFile.write(scriptBytes) != scriptBytes.size()) {
+                const QString msg = QStringLiteral("Failed to write script to file: ") + scriptFile.errorString();
                 packet.insert(outKey, QString());
                 packet.insert(errKey, msg);
                 CP_WARN << "PythonScriptConnector:" << msg;
             } else {
-                tempFile.flush();
-                tempFile.close();
-
-                const QString scriptPath = tempFile.fileName();
+                scriptFile.flush();
+                scriptFile.close();
 
                 // Prepare process
                 QProcess proc;

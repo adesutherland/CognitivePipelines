@@ -29,8 +29,10 @@
 #include <QDir>
 #include <QFileInfo>
 #include "Logger.h"
+#include <QFile>
 #include <QMetaObject>
 #include <QStandardPaths>
+#include <QTemporaryFile>
 #include <QUuid>
 
 namespace {
@@ -103,29 +105,43 @@ TokenList MermaidNode::execute(const TokenList& incomingTokens)
         return TokenList{token};
     }
 
-    QString tempDir = inputs.value(QStringLiteral("_sys_run_temp_dir")).toString();
-    if (tempDir.isEmpty()) {
-        tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-        if (tempDir.isEmpty()) {
-            tempDir = QDir::tempPath();
+    // Step 1: Resolve Output Path
+    QString sysOutDir = inputs.value(QStringLiteral("_sys_node_output_dir")).toString();
+    QString outputPath;
+    bool isPersistent = !sysOutDir.isEmpty();
+    std::unique_ptr<QTemporaryFile> tempFile;
+
+    if (isPersistent) {
+        // Case A: Persistent Output
+        outputPath = sysOutDir + QDir::separator() + QStringLiteral("diagram.png");
+
+        // Bonus: Write source to file for debugging
+        QString sourcePath = sysOutDir + QDir::separator() + QStringLiteral("source.mmd");
+        QFile sourceFile(sourcePath);
+        if (sourceFile.open(QIODevice::WriteOnly)) {
+            sourceFile.write(code.toUtf8());
+            sourceFile.close();
         }
-    }
-    QString templatePath = tempDir + QDir::separator() + QStringLiteral("mermaid_render_XXXXXX.png");
+        CP_CLOG(MERMAID_DEBUG) << "Saved persistent output to:" << outputPath;
+    } else {
+        // Case B: Fallback to QTemporaryFile (System Temp)
+        QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        if (tempDir.isEmpty()) tempDir = QDir::tempPath();
 
-    m_tempFile = std::make_unique<QTemporaryFile>(templatePath);
-    m_tempFile->setAutoRemove(true);
-    if (!m_tempFile->open()) {
-        const QString err = QStringLiteral("ERROR: Could not create temporary file for Mermaid render.");
-        output.insert(outputPinId, err);
-        output.insert(QStringLiteral("__error"), err);
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        tempFile = std::make_unique<QTemporaryFile>(tempDir + QDir::separator() + QStringLiteral("mermaid_render_XXXXXX.png"));
+        tempFile->setAutoRemove(false);
+        if (!tempFile->open()) {
+            const QString err = QStringLiteral("ERROR: Could not create temporary file for Mermaid render.");
+            output.insert(outputPinId, err);
+            output.insert(QStringLiteral("__error"), err);
+            ExecutionToken token;
+            token.data = output;
+            return TokenList{token};
+        }
+        outputPath = tempFile->fileName();
+        tempFile->close();
+        CP_CLOG(MERMAID_DEBUG) << "Successfully generated output path:" << outputPath;
     }
-    const QString outputPath = m_tempFile->fileName();
-    m_tempFile->close();
-
-    CP_CLOG(MERMAID_DEBUG) << "Successfully generated output path:" << outputPath;
 
     if (m_scaleFactor < 0.1) {
         m_scaleFactor = 0.1;

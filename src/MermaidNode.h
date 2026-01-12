@@ -61,5 +61,4 @@ private:
     QPointer<MermaidPropertiesWidget> m_propertiesWidget;
     QString m_lastCode;
     double m_scaleFactor {1.0};
-    std::unique_ptr<QTemporaryFile> m_tempFile;
 };
