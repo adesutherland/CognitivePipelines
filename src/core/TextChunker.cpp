@@ -1,4 +1,4 @@
-﻿#include "TextChunker.h"
+#include "TextChunker.h"
 
 #include "chunkingstrategies/MarkdownChunker.h"
 #include "chunkingstrategies/StandardCodeChunker.h"

@@ -103,9 +103,12 @@ TokenList MermaidNode::execute(const TokenList& incomingTokens)
         return TokenList{token};
     }
 
-    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    QString tempDir = inputs.value(QStringLiteral("_sys_run_temp_dir")).toString();
     if (tempDir.isEmpty()) {
-        tempDir = QDir::tempPath();
+        tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        if (tempDir.isEmpty()) {
+            tempDir = QDir::tempPath();
+        }
     }
     QString templatePath = tempDir + QDir::separator() + QStringLiteral("mermaid_render_XXXXXX.png");
 

@@ -59,6 +59,11 @@ public:
      * @brief Signals a runtime error during script execution.
      */
     virtual void setError(const QString& message) = 0;
+
+    /**
+     * @brief Returns a temporary directory available for the script's use.
+     */
+    virtual QString getTempDir() const = 0;
 };
 
 /**

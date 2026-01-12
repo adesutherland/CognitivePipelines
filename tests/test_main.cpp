@@ -20,15 +20,9 @@ void configureQtPlatform()
                               + QStringLiteral("/platforms");
 
 #ifdef Q_OS_MAC
-    const QString offscreenPlugin = QStringLiteral("libqoffscreen.dylib");
-    const QString candidate = pluginDir + QLatin1Char('/') + offscreenPlugin;
-    if (QFileInfo::exists(candidate)) {
-        qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("offscreen"));
-    } else {
-        // Homebrew Qt on macOS may ship only the cocoa plugin; fall back to it
-        // instead of crashing when offscreen is unavailable.
-        qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("cocoa"));
-    }
+    // On macOS, QWebEngine (used by MermaidRenderService) requires the 'cocoa' platform 
+    // to render correctly. The 'offscreen' platform results in blank images.
+    qputenv("QT_QPA_PLATFORM", QByteArrayLiteral("cocoa"));
 #elif defined(Q_OS_WIN)
     const QString offscreenPlugin = QStringLiteral("qoffscreen.dll");
     const QString candidate = pluginDir + QLatin1Char('/') + offscreenPlugin;

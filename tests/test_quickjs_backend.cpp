@@ -28,6 +28,10 @@ public:
         errors.push_back(message);
     }
 
+    QString getTempDir() const override {
+        return "/tmp";
+    }
+
     std::vector<QString> logs;
     std::vector<QString> errors;
     std::map<QString, QVariant> inputs;

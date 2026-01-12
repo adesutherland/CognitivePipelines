@@ -50,7 +50,7 @@ Notes:
   - Boost::boost (headers)
   - cpr::cpr
   - ZLIB, OpenSSL (explicit/transitive finds)
-- Tests (optional): GoogleTest discovered with find_package(GTest) when ENABLE_TESTING=ON; tests registered with CTest
+- Tests: GoogleTest discovered with find_package(GTest) (enabled by default, controlled via ENABLE_TESTING); tests registered with CTest
 
 CI/CD (GitHub Actions):
 - Matrix on ubuntu-latest, macos-latest, windows-latest

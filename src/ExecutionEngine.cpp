@@ -32,6 +32,8 @@
 #include <QThread>
 #include <QTimer>
 #include <QDateTime>
+#include <QStandardPaths>
+#include <QDir>
 #include <algorithm>
 
 #include <QtNodes/DataFlowGraphModel>
@@ -87,6 +89,27 @@ QString ExecutionEngine::truncateAndEscape(const QVariant& v)
     return s;
 }
 
+void ExecutionEngine::cleanupTempDir()
+{
+    if (m_runTempDir.isEmpty()) return;
+
+    if (m_keepTempFiles) {
+        emit nodeLog(QStringLiteral("ExecutionEngine: Keeping temp files as requested: %1").arg(m_runTempDir));
+        m_runTempDir.clear();
+        return;
+    }
+
+    QDir dir(m_runTempDir);
+    if (dir.exists()) {
+        if (dir.removeRecursively()) {
+            emit nodeLog(QStringLiteral("ExecutionEngine: Cleaned up run-specific temp directory: %1").arg(m_runTempDir));
+        } else {
+            emit nodeLog(QStringLiteral("ExecutionEngine: FAILED to clean up run-specific temp directory: %1").arg(m_runTempDir));
+        }
+    }
+    m_runTempDir.clear();
+}
+
 ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
     : QObject(parent)
     , _graphModel(model)
@@ -101,6 +124,11 @@ ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
     m_finalizeTimer = new QTimer(this);
     m_finalizeTimer->setSingleShot(true);
     connect(m_finalizeTimer, &QTimer::timeout, this, &ExecutionEngine::onFinalizeTimeout);
+}
+
+ExecutionEngine::~ExecutionEngine()
+{
+    cleanupTempDir();
 }
 
 void ExecutionEngine::run()
@@ -136,6 +164,18 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
 
     // New Run ID for this pipeline execution to guard against zombie threads
     m_currentRunId = QUuid::createUuid();
+
+    // Create run-specific temporary directory
+    QString tempBase = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (tempBase.isEmpty()) {
+        tempBase = QDir::tempPath();
+    }
+    m_runTempDir = tempBase + "/CP_Run_" + m_currentRunId.toString(QUuid::WithoutBraces);
+    if (QDir().mkpath(m_runTempDir)) {
+        emit nodeLog(QStringLiteral("Created run-specific temp directory: %1").arg(m_runTempDir));
+    } else {
+        emit nodeLog(QStringLiteral("FAILED to create run-specific temp directory: %1").arg(m_runTempDir));
+    }
 
     emit executionStarted();
 
@@ -341,7 +381,16 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
             // Set thread-local context for node-level logging
             g_CurrentNodeId = task.nodeId;
             g_CurrentNodeUuid = task.nodeUuid;
-            outputTokens = connector->execute(task.inputs);
+
+            // Inject system tokens (e.g., run-specific temp directory)
+            TokenList effectiveInputs = task.inputs;
+            if (!m_runTempDir.isEmpty()) {
+                ExecutionToken sysToken;
+                sysToken.data.insert(QStringLiteral("_sys_run_temp_dir"), m_runTempDir);
+                effectiveInputs.push_back(std::move(sysToken));
+            }
+
+            outputTokens = connector->execute(effectiveInputs);
         } catch (const std::exception& ex) {
             if (task.runId != m_currentRunId) {
                 if (ragIndexer) QObject::disconnect(progressConn);
@@ -519,6 +568,7 @@ void ExecutionEngine::tryFinalize()
     emit nodeLog(QStringLiteral("ExecutionEngine: Chain finished."));
     emit pipelineFinished(finalPacket);
     emit executionFinished();
+    cleanupTempDir();
 }
 
 QByteArray ExecutionEngine::computeInputSignature(const QVariantMap& inputPayload) const

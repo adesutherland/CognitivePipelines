@@ -23,6 +23,8 @@
 //
 
 #include "ExecutionScriptHost.h"
+#include <QStandardPaths>
+#include <QDir>
 
 ExecutionScriptHost::ExecutionScriptHost(const DataPacket& inputPacket, DataPacket& outputPacket, QList<QString>& logs)
     : m_inputPacket(inputPacket), m_outputPacket(outputPacket), m_logs(logs)
@@ -59,4 +61,18 @@ void ExecutionScriptHost::setOutput(const QString& key, const QVariant& value)
 void ExecutionScriptHost::setError(const QString& message)
 {
     m_logs.append(QString("Error: %1").arg(message));
+}
+
+QString ExecutionScriptHost::getTempDir() const
+{
+    const QString sysKey = QStringLiteral("_sys_run_temp_dir");
+    if (m_inputPacket.contains(sysKey)) {
+        return m_inputPacket.value(sysKey).toString();
+    }
+
+    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (tempDir.isEmpty()) {
+        tempDir = QDir::tempPath();
+    }
+    return tempDir;
 }

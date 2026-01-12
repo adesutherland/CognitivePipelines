@@ -134,7 +134,12 @@ TokenList PythonScriptConnector::execute(const TokenList& incomingTokens)
         CP_WARN << "PythonScriptConnector:" << msg;
     } else {
         // Create a temporary file for the script content
+        QString tempDir = inputs.value(QStringLiteral("_sys_run_temp_dir")).toString();
         QTemporaryFile tempFile;
+        if (!tempDir.isEmpty()) {
+            tempFile.setFileTemplate(tempDir + QDir::separator() + QStringLiteral("python_script_XXXXXX.py"));
+        }
+
         if (!tempFile.open()) {
             const QString msg = QStringLiteral("Failed to create temporary file for script: ") + tempFile.errorString();
             packet.insert(outKey, QString());

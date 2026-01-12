@@ -49,6 +49,7 @@ public:
     QVariant getInput(const QString& key) override;
     void setOutput(const QString& key, const QVariant& value) override;
     void setError(const QString& message) override;
+    QString getTempDir() const override;
 
 private:
     const DataPacket& m_inputPacket;

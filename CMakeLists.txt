@@ -2,7 +2,7 @@
 # brew install googletest
 #
 # To build and run the tests with CTest:
-# cmake -DENABLE_TESTING=ON -S . -B <build_dir>
+# cmake -DENABLE_TESTING=OFF -S . -B <build_dir> (to disable)
 # cmake --build <build_dir> --target unit_tests
 # ctest --test-dir <build_dir> -V
 
@@ -368,8 +368,8 @@ elseif(APPLE)
     list(APPEND CPACK_GENERATOR DragNDrop)
 endif()
 
-# --- Testing setup (optional, off by default) ---
-option(ENABLE_TESTING "Build unit/integration tests" OFF)
+# --- Testing setup (optional, on by default) ---
+option(ENABLE_TESTING "Build unit/integration tests" ON)
 
 if(ENABLE_TESTING)
     message(STATUS "ENABLE_TESTING=ON: building test suite")

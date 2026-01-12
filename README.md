@@ -14,7 +14,7 @@ Cognitive Pipelines is a Qt 6 desktop application for composing and running node
 - Run action that executes the graph in topological order; work is performed asynchronously per node via QtConcurrent
 - Pipeline Output dock and optional Debug Log dock
 - About dialog (version, git hash, build date/time, Qt runtime)
-- Optional GoogleTest‑based test target (unit_tests) for API integration testing (disabled by default)
+- GoogleTest‑based test target (unit_tests) for API integration testing (enabled by default)
 
 ## Dependencies (definitive)
 From CMakeLists.txt and vcpkg manifest:
@@ -24,7 +24,7 @@ From CMakeLists.txt and vcpkg manifest:
 - cpr (HTTP/HTTPS client)
 - OpenSSL (TLS, transitive for cpr)
 - Zlib (transitive)
-- GoogleTest (tests only, optional when ENABLE_TESTING=ON)
+- GoogleTest (tests only, enabled by default, optional via ENABLE_TESTING=OFF)
 
 Installation methods by environment:
 - CI (GitHub Actions):
@@ -53,8 +53,8 @@ Using vcpkg (recommended on Windows or cross‑platform):
 - cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
 - cmake --build build --target CognitivePipelines -j 2
 
-Enable tests (optional):
-- cmake -S . -B build -DENABLE_TESTING=ON [ -DCMAKE_TOOLCHAIN_FILE=... ]
+Enable tests (on by default):
+- cmake -S . -B build [ -DENABLE_TESTING=OFF to disable ]
 - cmake --build build --target unit_tests
 - ctest --test-dir build -V
 

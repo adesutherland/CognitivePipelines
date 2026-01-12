@@ -48,7 +48,7 @@ class ExecutionEngine : public QObject {
     Q_OBJECT
 public:
     explicit ExecutionEngine(NodeGraphModel* model, QObject* parent = nullptr);
-    ~ExecutionEngine() override = default;
+    ~ExecutionEngine() override;
 
 signals:
     // Emitted once at the very end of a successful run containing only the final DataPacket
@@ -71,6 +71,7 @@ public slots:
     // the engine discovers all source nodes (no incoming connections) and schedules them.
     void runPipeline(const QList<QUuid>& specificEntryPoints = {});
     void setExecutionDelay(int ms);
+    void setDebugKeepTempFiles(bool keep) { m_keepTempFiles = keep; }
 
 public:
     // Thread-safe accessor to retrieve output data for a specific node
@@ -150,6 +151,12 @@ private:
     // Finalization delay to satisfy slow-motion elapsed timing semantics
     QTimer* m_finalizeTimer {nullptr};
     qint64  m_lastActivityMs {0};
+
+    // Run-specific temporary directory
+    QString m_runTempDir;
+    bool m_keepTempFiles = false;
+
+    void cleanupTempDir();
 
     // Deduplication helper: produces a signature for a target node's input snapshot
     QByteArray computeInputSignature(const QVariantMap& inputPayload) const;

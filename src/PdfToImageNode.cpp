@@ -99,9 +99,12 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
     }
 
     // Step 1: Resolve Temp Directory and Construct Template
-    QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    QString tempDir = inputs.value(QStringLiteral("_sys_run_temp_dir")).toString();
     if (tempDir.isEmpty()) {
-        tempDir = QDir::tempPath();
+        tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        if (tempDir.isEmpty()) {
+            tempDir = QDir::tempPath();
+        }
     }
     QString templatePath = tempDir + QDir::separator() + QStringLiteral("pdf_stitched_XXXXXX.png");
 

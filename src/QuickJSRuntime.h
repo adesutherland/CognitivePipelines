@@ -50,6 +50,7 @@ private:
     static JSValue js_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
     static JSValue js_pipeline_get_input(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
     static JSValue js_pipeline_set_output(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+    static JSValue js_pipeline_get_temp_dir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
     static JSValue js_sqlite_exec(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
     // Conversion helpers

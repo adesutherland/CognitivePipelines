@@ -45,6 +45,7 @@
 #include <QWebEngineLoadingInfo>
 #include <QWebEnginePage>
 #include <QWebEngineProfile>
+#include <QWebEngineSettings>
 #include <QWebEngineView>
 #include <QUuid>
 #include <algorithm>
@@ -362,8 +363,13 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     view.setAttribute(Qt::WA_DontShowOnScreen, true);
     auto* page = view.page();
 
+    // Enable local file access and remote resources if needed.
+    // fetch() on file:// URLs often requires these settings.
+    auto* settings = page->settings();
+    settings->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, true);
+    settings->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, true);
+
     QUrl inputUrl = QUrl::fromLocalFile(codePath);
-    inputUrl.setQuery(runNonce);
     const QString inlineInputPath = inputUrl.toString(QUrl::FullyEncoded).replace(QStringLiteral("'"), QStringLiteral("\\'"));
 
     const QString fullHtml = templateHtml + QStringLiteral(R"(
@@ -409,7 +415,6 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
     });
 
     QUrl artifactUrl = QUrl::fromLocalFile(artifactPath);
-    artifactUrl.setQuery(runNonce);
     view.load(artifactUrl);
     loop.exec();
 
@@ -684,7 +689,7 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
         return;
     }
 
-    const auto grabAndEstimate = [&view](QPixmap& pix, qint64& pixelWidth, qint64& pixelHeight, qint64& estimatedBytes, qreal& pixDpr) {
+    const auto grabAndEstimate = [&](QPixmap& pix, qint64& pixelWidth, qint64& pixelHeight, qint64& estimatedBytes, qreal& pixDpr) {
         auto isBlank = [](const QPixmap& p) {
             if (p.isNull()) return true;
             const QImage img = p.toImage();
@@ -694,21 +699,17 @@ void MermaidRenderService::renderOnMainThread(const QString& mermaidCode, const 
             const int h = img.height();
             if (w == 0 || h == 0) return true;
 
-            // Sample a few points to see if it's all white or transparent
-            const QVector<QPoint> samples = {
-                {w / 2, h / 2},
-                {w / 4, h / 4},
-                {3 * w / 4, 3 * w / 4},
-                {w / 4, 3 * h / 4},
-                {3 * w / 4, h / 4}
-            };
-
-            for (const QPoint& pt : samples) {
-                if (pt.x() >= w || pt.y() >= h) continue;
-                const QColor c = img.pixelColor(pt);
-                // "Ink" is anything not fully transparent and not "almost white"
-                if (c.alpha() > 0 && (c.red() < 250 || c.green() < 250 || c.blue() < 250)) {
-                    return false;
+            // Sample more points for wide diagrams to see if it's all white or transparent
+            // We check a few vertical spans to be sure we don't miss thin lines
+            for (int i = 1; i < 10; ++i) {
+                int x = i * w / 10;
+                for (int y = 0; y < h; y += std::max(1, h / 5)) {
+                    if (x >= w || y >= h) continue;
+                    const QColor c = img.pixelColor(x, y);
+                    // "Ink" is anything not fully transparent and not "almost white"
+                    if (c.alpha() > 0 && (c.red() < 250 || c.green() < 250 || c.blue() < 250)) {
+                        return false;
+                    }
                 }
             }
             return true;

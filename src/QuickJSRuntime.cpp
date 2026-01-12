@@ -130,6 +130,7 @@ void QuickJSRuntime::setupGlobalEnv(IScriptHost* host) {
     JSValue pipeline = JS_NewObject(m_ctx);
     JS_SetPropertyStr(m_ctx, pipeline, "getInput", JS_NewCFunction(m_ctx, js_pipeline_get_input, "getInput", 1));
     JS_SetPropertyStr(m_ctx, pipeline, "setOutput", JS_NewCFunction(m_ctx, js_pipeline_set_output, "setOutput", 2));
+    JS_SetPropertyStr(m_ctx, pipeline, "getTempDir", JS_NewCFunction(m_ctx, js_pipeline_get_temp_dir, "getTempDir", 0));
     JS_SetPropertyStr(m_ctx, global_obj, "pipeline", pipeline);
 
     // sqlite object
@@ -181,6 +182,19 @@ JSValue QuickJSRuntime::js_pipeline_set_output(JSContext* ctx, JSValueConst this
             host->setOutput(QString::fromUtf8(key), val);
             JS_FreeCString(ctx, key);
         }
+    }
+    return JS_UNDEFINED;
+}
+
+JSValue QuickJSRuntime::js_pipeline_get_temp_dir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    Q_UNUSED(this_val);
+    Q_UNUSED(argc);
+    Q_UNUSED(argv);
+    QuickJSRuntime* self = static_cast<QuickJSRuntime*>(JS_GetContextOpaque(ctx));
+    IScriptHost* host = self ? self->m_currentHost : nullptr;
+    if (host) {
+        QString tempDir = host->getTempDir();
+        return JS_NewString(ctx, tempDir.toUtf8().constData());
     }
     return JS_UNDEFINED;
 }
