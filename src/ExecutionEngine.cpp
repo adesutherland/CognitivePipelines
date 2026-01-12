@@ -89,9 +89,25 @@ QString ExecutionEngine::truncateAndEscape(const QVariant& v)
     return s;
 }
 
-void ExecutionEngine::cleanupTempDir()
-{
-    if (m_runTempDir.isEmpty()) return;
+void ExecutionEngine::cleanupTempDir() {
+    // SAFETY GUARD 1: Empty Check
+    if (m_runTempDir.isEmpty()) {
+        CP_WARN << "Safety Stop: Attempted to cleanup empty temp dir path.";
+        return;
+    }
+
+    // SAFETY GUARD 2: Location Check (Must be in system temp)
+    const QString systemTemp = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+    if (!m_runTempDir.startsWith(systemTemp)) {
+        CP_WARN << "CRITICAL SAFETY STOP: Attempted to delete a directory outside system temp:" << m_runTempDir;
+        return;
+    }
+
+    // SAFETY GUARD 3: Signature Check (Must have our app prefix)
+    if (!m_runTempDir.contains("CP_Run_")) {
+        CP_WARN << "CRITICAL SAFETY STOP: Path does not look like a Cognitive Pipeline temp folder:" << m_runTempDir;
+        return;
+    }
 
     if (m_keepTempFiles) {
         emit nodeLog(QStringLiteral("ExecutionEngine: Keeping temp files as requested: %1").arg(m_runTempDir));
