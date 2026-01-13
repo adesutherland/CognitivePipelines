@@ -106,15 +106,16 @@ TokenList TextOutputNode::execute(const TokenList& incomingTokens)
     m_hasPendingText = (m_propertiesWidget == nullptr);
 
     // Forward to properties widget on the UI thread safely
-    if (m_propertiesWidget) {
+    auto* widget = m_propertiesWidget.data();
+    if (widget) {
         // Block the worker thread until the UI has processed the update to avoid
         // a race where the displayed text lags behind by one execution step.
         // Use a direct call if we're already on the same thread to avoid deadlocks.
-        const bool crossThread = QThread::currentThread() != m_propertiesWidget->thread();
+        const bool crossThread = QThread::currentThread() != widget->thread();
         const Qt::ConnectionType type = crossThread
                                         ? Qt::BlockingQueuedConnection
                                         : Qt::DirectConnection;
-        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", type,
+        QMetaObject::invokeMethod(widget, "onSetText", type,
                                   Q_ARG(QString, text));
     }
 
@@ -142,8 +143,9 @@ void TextOutputNode::loadState(const QJsonObject& data)
 {
     m_loadedText = data.value(QStringLiteral("text")).toString();
 
-    if (m_propertiesWidget) {
-        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", Qt::QueuedConnection,
+    auto* widget = m_propertiesWidget.data();
+    if (widget) {
+        QMetaObject::invokeMethod(widget, "onSetText", Qt::QueuedConnection,
                                   Q_ARG(QString, m_loadedText));
     }
 }
@@ -157,12 +159,13 @@ void TextOutputNode::clearOutput()
 
     // Clear the widget display if it exists
     // Use immediate invocation to ensure the widget is cleared before saveState() is called
-    if (m_propertiesWidget) {
-        const bool crossThread = QThread::currentThread() != m_propertiesWidget->thread();
+    auto* widget = m_propertiesWidget.data();
+    if (widget) {
+        const bool crossThread = QThread::currentThread() != widget->thread();
         const Qt::ConnectionType type = crossThread
                                         ? Qt::BlockingQueuedConnection
                                         : Qt::DirectConnection;
-        QMetaObject::invokeMethod(m_propertiesWidget, "onSetText", type,
+        QMetaObject::invokeMethod(widget, "onSetText", type,
                                   Q_ARG(QString, QString()));
     }
 }

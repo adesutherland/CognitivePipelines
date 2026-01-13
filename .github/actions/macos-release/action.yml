@@ -62,10 +62,10 @@ runs:
       env:
         APPLE_ID: ${{ inputs.notarization_apple_id }}
         TEAM_ID: ${{ inputs.notarization_team_id }}
-        PWD: ${{ inputs.notarization_pwd }}
+        NOTARY_PWD: ${{ inputs.notarization_pwd }}
       run: |
         ditto -c -k --keepParent build/bin/CognitivePipelines.app app.zip
-        xcrun notarytool submit app.zip --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$PWD" --wait
+        xcrun notarytool submit app.zip --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$NOTARY_PWD" --wait
 
     - name: "Step 5: Staple & Package"
       shell: bash

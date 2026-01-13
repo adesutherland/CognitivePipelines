@@ -26,6 +26,7 @@
 #include <QObject>
 #include <QWidget>
 #include <QString>
+#include <QPointer>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
@@ -53,7 +54,7 @@ public:
     static constexpr const char* kInputId = "text";
 
 private:
-    TextOutputPropertiesWidget* m_propertiesWidget = nullptr; // cached UI widget
+    QPointer<TextOutputPropertiesWidget> m_propertiesWidget; // cached UI widget
     QString m_loadedText; // cached text from loaded state to apply on widget creation
     // Cache the last value received via Execute so that if the widget wasn't yet created,
     // we can display it immediately upon widget creation (fixes first-run fan-out cases).

@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QtTest>
+#include <QFile>
 #include <QFileInfo>
 #include <QLibraryInfo>
 #include <QString>
@@ -57,5 +58,10 @@ int main(int argc, char** argv)
     QApplication app(argc, argv);
 
     ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    int result = RUN_ALL_TESTS();
+    
+    // Clean up database file created during tests
+    QFile::remove(QStringLiteral("scripts.db"));
+    
+    return result;
 }

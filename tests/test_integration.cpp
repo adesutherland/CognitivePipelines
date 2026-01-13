@@ -244,6 +244,9 @@ int main(int argc, char** argv)
     // Run the Provider Compatibility Matrix Probe (headless informational)
     exitCode |= run_provider_matrix_probe(argc, argv);
 
+    // Clean up database file created during tests
+    QFile::remove(QStringLiteral("scripts.db"));
+
     return exitCode;
 }
 

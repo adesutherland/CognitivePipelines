@@ -137,6 +137,9 @@ ExecutionEngine::ExecutionEngine(NodeGraphModel* model, QObject* parent)
 
 ExecutionEngine::~ExecutionEngine()
 {
+    if (m_throttler) m_throttler->stop();
+    if (m_finalizeTimer) m_finalizeTimer->stop();
+    m_threadPool.waitForDone();
 }
 
 void ExecutionEngine::run()
@@ -296,7 +299,7 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
 
     QPointer<NodeGraphModel> graphModel(_graphModel);
     // Launch concurrently (discard the QFuture as we don't need to track it)
-    (void)QtConcurrent::run([this, task, graphModel, outputDir]() {
+    (void)QtConcurrent::run(&m_threadPool, [this, task, graphModel, outputDir]() {
         // Update last activity time when a task actually begins its work
         m_lastActivityMs = QDateTime::currentMSecsSinceEpoch();
         // Worker Guard: if runId is stale, abandon work immediately

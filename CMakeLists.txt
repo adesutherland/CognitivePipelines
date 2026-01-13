@@ -9,10 +9,11 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.12.12 LANGUAGES C CXX)
+project(CognitivePipelines VERSION 0.12.13 LANGUAGES C CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
+option(DEPLOY_QT_ON_BUILD "Run macdeployqt post-build" ON)
 # Auto-enable RELEASE_BUILD for standard Release configurations if not explicitly overridden
 string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
 if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE|RELWITHDEBINFO|MINSIZEREL")
@@ -925,20 +926,22 @@ if(APPLE)
                                             /usr/local/opt/qt@6/bin
                                             /opt/homebrew/opt/qt@6/bin)
                         if(MACDEPLOYQT_EXECUTABLE)
-                            add_custom_command(TARGET ${tgt} POST_BUILD
-                                    COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" "-executable=$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess"
-                                    COMMENT "Running macdeployqt on $<TARGET_BUNDLE_DIR:${tgt}> (including helper process)"
-                                    VERBATIM)
+                            if(DEPLOY_QT_ON_BUILD)
+                                add_custom_command(TARGET ${tgt} POST_BUILD
+                                        COMMAND "${MACDEPLOYQT_EXECUTABLE}" "$<TARGET_BUNDLE_DIR:${tgt}>" "-executable=$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess"
+                                        COMMENT "Running macdeployqt on $<TARGET_BUNDLE_DIR:${tgt}> (including helper process)"
+                                        VERBATIM)
 
-                            # Bundling and patching frameworks for QtWebEngineProcess helper
-                            add_custom_command(TARGET ${tgt} POST_BUILD
-                                # Create the Frameworks directory in the Helper app
-                                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks"
-                                # Copy all frameworks and dylibs from Main App bundle to Helper App bundle (use rsync to preserve symlinks)
-                                # We exclude QtWebEngineCore.framework to avoid recursion.
-                                COMMAND /usr/bin/rsync -a --delete --exclude "QtWebEngineCore.framework" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks/"
-                                COMMENT "Bundling all frameworks for QtWebEngineProcess in ${tgt}.app"
-                                VERBATIM)
+                                # Bundling and patching frameworks for QtWebEngineProcess helper
+                                add_custom_command(TARGET ${tgt} POST_BUILD
+                                    # Create the Frameworks directory in the Helper app
+                                    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks"
+                                    # Copy all frameworks and dylibs from Main App bundle to Helper App bundle (use rsync to preserve symlinks)
+                                    # We exclude QtWebEngineCore.framework to avoid recursion.
+                                    COMMAND /usr/bin/rsync -a --delete --exclude "QtWebEngineCore.framework" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/" "$<TARGET_BUNDLE_DIR:${tgt}>/Contents/Frameworks/QtWebEngineCore.framework/Versions/A/Helpers/QtWebEngineProcess.app/Contents/Frameworks/"
+                                    COMMENT "Bundling all frameworks for QtWebEngineProcess in ${tgt}.app"
+                                    VERBATIM)
+                            endif()
                         else()
                             message(WARNING "macdeployqt not found; Qt frameworks may be missing from ${tgt}.app")
                         endif()

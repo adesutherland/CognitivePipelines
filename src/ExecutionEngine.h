@@ -32,6 +32,7 @@
 #include <QList>
 #include <QReadWriteLock>
 #include <QQueue>
+#include <QThreadPool>
 
 #include "CommonDataTypes.h"
 #include "ExecutionState.h"
@@ -143,6 +144,7 @@ private:
     // Dispatcher throttling: main-thread timer launching tasks at a fixed cadence
     QQueue<ExecutionTask> m_dispatchQueue;
     QTimer* m_throttler {nullptr};
+    QThreadPool m_threadPool;
 
     // Per-node serialization to preserve in-order execution for the same target
     QHash<QUuid, int> m_nodeInFlight; // 0 or 1 per nodeUuid

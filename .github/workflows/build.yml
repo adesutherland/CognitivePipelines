@@ -218,7 +218,8 @@ jobs:
               -G "Visual Studio 17 2022" -A x64 \
               -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
               -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" \
-              -DENABLE_TESTING=ON
+              -DENABLE_TESTING=ON \
+              -DDEPLOY_QT_ON_BUILD=OFF
           else
             # Common flags for Linux/macOS
             CMAKE_FLAGS="-S . -B build \
@@ -226,7 +227,8 @@ jobs:
               -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake \
               -DCMAKE_PREFIX_PATH=${{ env.Qt6_DIR }} \
-              -DENABLE_TESTING=ON"
+              -DENABLE_TESTING=ON \
+              -DDEPLOY_QT_ON_BUILD=OFF"
           
             if [[ "${{ runner.os }}" == "macOS" ]]; then
               # Add the release signing flag ONLY for macOS
