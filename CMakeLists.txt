@@ -763,6 +763,8 @@ if(APPLE)
             MACOSX_BUNDLE_BUNDLE_NAME CognitivePipelines
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
             MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
+            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
         )
     endif()
     if(TARGET unit_tests)
@@ -778,6 +780,8 @@ if(APPLE)
             MACOSX_BUNDLE_BUNDLE_NAME unit_tests
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
             MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
+            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
+            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
         )
     endif()
     if(TARGET integration_tests)
@@ -793,20 +797,8 @@ if(APPLE)
             MACOSX_BUNDLE_BUNDLE_NAME integration_tests
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
             MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-        )
-    endif()
-
-    # Ensure test bundles can locate Homebrew/VCPKG cpr at runtime without copying
-    if(TARGET unit_tests)
-        set_target_properties(unit_tests PROPERTIES
-            BUILD_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
-            INSTALL_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
-        )
-    endif()
-    if(TARGET integration_tests)
-        set_target_properties(integration_tests PROPERTIES
-            BUILD_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
-            INSTALL_RPATH "$<TARGET_FILE_DIR:cpr::cpr>"
+            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
+            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
         )
     endif()
 
@@ -1059,7 +1051,9 @@ if(APPLE)
                         else()
                             message(WARNING "Fast Debug: Qt sqlite driver plugin not found; database features may be unavailable in ${tgt}.app")
                         endif()
-                    else()
+                    elseif(DEPLOY_QT_ON_BUILD)
+                        # Only sanitize/sign targets individually if deploying on build.
+                        # In CI, DEPLOY_QT_ON_BUILD is OFF to allow gtest_discover_tests to work with absolute RPATHs.
                         add_custom_command(TARGET ${tgt} POST_BUILD
                             COMMAND ${CMAKE_COMMAND}
                                 -DAPP_BUNDLE=$<TARGET_BUNDLE_DIR:${tgt}>
