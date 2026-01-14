@@ -421,7 +421,18 @@ void ProviderMatrixProbe::test_LiveMatrixExecution()
             QCOMPARE(resolved->roleMode, RoleMode::SystemParameter);
         }
 
-        LiveResult lr = runSingleLive(row.provider, row.modelId, kPrompt);
+        LiveResult lr;
+        // Retry logic for transient server errors (e.g., HTTP 529 Overloaded)
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            lr = runSingleLive(row.provider, row.modelId, kPrompt);
+            if (lr.httpCode != 529 && lr.status != LiveResult::Status::Timeout) {
+                break;
+            }
+            if (attempt < 2) {
+                qInfo() << "Transient error" << lr.httpCode << "for" << row.modelId << "- retrying in" << (2 * (attempt + 1)) << "s...";
+                QTest::qWait(2000 * (attempt + 1));
+            }
+        }
 
         const QString providerCol = row.provider.leftJustified(7, ' ', true);
         const QString modelCol = row.modelId.leftJustified(27, ' ', true);
@@ -452,6 +463,12 @@ void ProviderMatrixProbe::test_LiveMatrixExecution()
                      .arg(row.provider, row.modelId)
                      .toLocal8Bit().constData());
 
+        // Must match expected HTTP code
+        QVERIFY2(lr.httpCode == row.expectedCode,
+                 QStringLiteral("Expected HTTP %1 but got %2 for provider=%3 model=%4 (error=%5)")
+                     .arg(QString::number(row.expectedCode), QString::number(lr.httpCode), row.provider, row.modelId, lr.error)
+                     .toLocal8Bit().constData());
+
         // Must have non-empty response if success expected
         if (row.expectedCode == 200) {
             QVERIFY2(!lr.response.trimmed().isEmpty(),
@@ -459,12 +476,6 @@ void ProviderMatrixProbe::test_LiveMatrixExecution()
                          .arg(row.provider, row.modelId)
                          .toLocal8Bit().constData());
         }
-
-        // Must match expected HTTP code
-        QVERIFY2(lr.httpCode == row.expectedCode,
-                 QStringLiteral("Expected HTTP %1 but got %2 for provider=%3 model=%4 (error=%5)")
-                     .arg(QString::number(row.expectedCode), QString::number(lr.httpCode), row.provider, row.modelId, lr.error)
-                     .toLocal8Bit().constData());
 
         // Vision audit: if attempted, it must not 400
         if (lr.visionAttempted) {

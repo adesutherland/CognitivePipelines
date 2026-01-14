@@ -268,10 +268,12 @@ LLMResult AnthropicBackend::sendPrompt(
                     result.errorMsg = QStringLiteral("HTTP %1: %2").arg(QString::number(response.status_code), result.rawResponse);
                 }
             }
+            result.content = result.errorMsg;
         }
     } catch (const std::exception& e) {
         result.hasError = true;
         result.errorMsg = QString::fromStdString(e.what());
+        result.content = result.errorMsg;
     }
 
     return result;
