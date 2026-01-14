@@ -92,15 +92,18 @@ TEST(UniversalLLMNodeTest, OpenAIIntegration)
     ASSERT_FALSE(outTokens.empty());
     const DataPacket output = outTokens.front().data;
 
-    // Verify response
-    const QString response = output.value(QStringLiteral("response")).toString();
-    ASSERT_FALSE(response.isEmpty()) << "Response should not be empty";
-    
     // Check for error
     if (output.contains(QStringLiteral("__error"))) {
         const QString error = output.value(QStringLiteral("__error")).toString();
+        if (isTemporaryError(error)) {
+            GTEST_SKIP() << "Temporary LLM error: " << error.toStdString();
+        }
         FAIL() << "LLM request failed with error: " << error.toStdString();
     }
+
+    // Verify response
+    const QString response = output.value(QStringLiteral("response")).toString();
+    ASSERT_FALSE(response.isEmpty()) << "Response should not be empty";
 
     // Verify usage tokens (should be > 0 for successful request)
     const int totalTokens = output.value(QStringLiteral("_usage.total_tokens")).toInt();
@@ -147,6 +150,24 @@ TEST(UniversalLLMNodeTest, GoogleIntegration)
     ASSERT_FALSE(outTokens.empty());
     const DataPacket output = outTokens.front().data;
 
+    // Check for error
+    if (output.contains(QStringLiteral("__error"))) {
+        const QString error = output.value(QStringLiteral("__error")).toString();
+        if (isTemporaryError(error)) {
+            GTEST_SKIP() << "Temporary LLM error: " << error.toStdString();
+        }
+        
+        // Also check responseRaw for model availability issues (Google specific)
+        const QString responseRaw = output.value(QStringLiteral("response")).toString();
+        if (responseRaw.contains(QStringLiteral("is not found for api version v1"), Qt::CaseInsensitive) ||
+            responseRaw.contains(QStringLiteral("is not supported for generatecontent"), Qt::CaseInsensitive)) {
+            GTEST_SKIP() << "Google Gemini model is not available for v1/generateContent in this environment. "
+                         << "Full response: " << responseRaw.toStdString();
+        }
+
+        FAIL() << "LLM request failed with error: " << error.toStdString();
+    }
+
     // Verify response
     const QString responseRaw = output.value(QStringLiteral("response")).toString();
     const QString response = responseRaw.toLower();
@@ -156,12 +177,6 @@ TEST(UniversalLLMNodeTest, GoogleIntegration)
         response.contains(QStringLiteral("is not supported for generatecontent"))) {
         GTEST_SKIP() << "Google Gemini model is not available for v1/generateContent in this environment. "
                      << "Full response: " << responseRaw.toStdString();
-    }
-    
-    // Check for error
-    if (output.contains(QStringLiteral("__error"))) {
-        const QString error = output.value(QStringLiteral("__error")).toString();
-        FAIL() << "LLM request failed with error: " << error.toStdString();
     }
 
     // Verify response is not empty
@@ -223,6 +238,9 @@ TEST(UniversalLLMNodeTest, OpenAIVisionIntegration)
     // Check for error
     if (output.contains(QStringLiteral("__error"))) {
         const QString error = output.value(QStringLiteral("__error")).toString();
+        if (isTemporaryError(error)) {
+            GTEST_SKIP() << "Temporary LLM error: " << error.toStdString();
+        }
         FAIL() << "LLM request failed with error: " << error.toStdString();
     }
 
@@ -284,6 +302,24 @@ TEST(UniversalLLMNodeTest, GoogleVisionIntegration)
     // Clean up the temporary image file
     QFile::remove(imagePath);
 
+    // Check for error
+    if (output.contains(QStringLiteral("__error"))) {
+        const QString error = output.value(QStringLiteral("__error")).toString();
+        if (isTemporaryError(error)) {
+            GTEST_SKIP() << "Temporary LLM error: " << error.toStdString();
+        }
+
+        // Also check responseRaw for model availability issues (Google specific)
+        const QString responseRaw = output.value(QStringLiteral("response")).toString();
+        if (responseRaw.contains(QStringLiteral("is not found for api version"), Qt::CaseInsensitive) ||
+            responseRaw.contains(QStringLiteral("is not supported"), Qt::CaseInsensitive)) {
+            GTEST_SKIP() << "Google Gemini model is not available in this environment. "
+                         << "Full response: " << responseRaw.toStdString();
+        }
+
+        FAIL() << "LLM request failed with error: " << error.toStdString();
+    }
+
     // Verify response
     const QString responseRaw = output.value(QStringLiteral("response")).toString();
     const QString response = responseRaw.toLower();
@@ -293,12 +329,6 @@ TEST(UniversalLLMNodeTest, GoogleVisionIntegration)
         response.contains(QStringLiteral("is not supported"))) {
         GTEST_SKIP() << "Google Gemini model is not available in this environment. "
                      << "Full response: " << responseRaw.toStdString();
-    }
-    
-    // Check for error
-    if (output.contains(QStringLiteral("__error"))) {
-        const QString error = output.value(QStringLiteral("__error")).toString();
-        FAIL() << "LLM request failed with error: " << error.toStdString();
     }
 
     // Verify response is not empty

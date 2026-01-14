@@ -296,6 +296,15 @@ private:
             if (code == 0) code = parseHttpCode(raw);
             out.httpCode = code;
 
+            // Handle temporary errors (e.g., 429, 503) by marking as SKIPPED
+            if (code == 429 || code == 502 || code == 503 || code == 504 ||
+                err.contains(QStringLiteral("overloaded"), Qt::CaseInsensitive) ||
+                err.contains(QStringLiteral("try again later"), Qt::CaseInsensitive)) {
+                out.status = LiveResult::Status::Skipped;
+                out.skipReason = QStringLiteral("TEMPORARY ERROR (%1)").arg(code > 0 ? QString::number(code) : QStringLiteral("status unknown"));
+                return out;
+            }
+
             // Access gating: known restricted models (e.g., o‑series). If 403 or model_not_found, mark as SKIPPED.
             if (isRestrictedAccessModel(provider, modelId)) {
                 const bool is403 = (out.httpCode == 403);

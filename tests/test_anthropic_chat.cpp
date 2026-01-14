@@ -6,6 +6,7 @@
 #include "ModelCapsRegistry.h"
 #include "backends/AnthropicBackend.h"
 #include "core/LLMProviderRegistry.h"
+#include "test_app.h"
 
 /**
  * @brief Helper that returns a 1x1 red pixel PNG in base64.
@@ -43,6 +44,10 @@ TEST_F(AnthropicChatTest, SimpleChat_ShouldReturnHelloWorld) {
         FAIL() << "Test failed as expected: " << result.errorMsg.toStdString();
     }
 
+    if (result.hasError && isTemporaryError(result.errorMsg)) {
+        GTEST_SKIP() << "Temporary LLM error: " << result.errorMsg.toStdString();
+    }
+
     ASSERT_FALSE(result.hasError) << "API call failed: " << result.errorMsg.toStdString();
     EXPECT_TRUE(result.content.contains("Hello World")) << "Response did not contain 'Hello World'. Content: " << result.content.toStdString();
 }
@@ -60,6 +65,10 @@ TEST_F(AnthropicChatTest, SystemRoleNormalization_ShouldRespectPersona) {
 
     if (result.hasError && result.errorMsg == "Anthropic backend not yet fully implemented") {
         FAIL() << "Test failed as expected: " << result.errorMsg.toStdString();
+    }
+
+    if (result.hasError && isTemporaryError(result.errorMsg)) {
+        GTEST_SKIP() << "Temporary LLM error: " << result.errorMsg.toStdString();
     }
 
     ASSERT_FALSE(result.hasError) << "API call failed: " << result.errorMsg.toStdString();
@@ -83,6 +92,10 @@ TEST_F(AnthropicChatTest, VisionRequest_ShouldIdentifyColor) {
     tempFile.close();
 
     LLMResult result = backend.sendPrompt(apiKey, model, 0.0, 100, "", userPrompt, tempFile.fileName());
+
+    if (result.hasError && isTemporaryError(result.errorMsg)) {
+        GTEST_SKIP() << "Temporary LLM error: " << result.errorMsg.toStdString();
+    }
 
     // This test is expected to fail in Phase 2 because the backend ignores imagePath
     ASSERT_FALSE(result.hasError) << "API call failed: " << result.errorMsg.toStdString();

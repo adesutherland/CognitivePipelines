@@ -13,6 +13,7 @@
 #include <QSqlError>
 
 #include "RagIndexerNode.h"
+#include "test_app.h"
 
 namespace {
 
@@ -98,6 +99,13 @@ TEST(RagIntegrationTest, IndexesMultipleFilesIntoSingleDatabase)
     const TokenList outTokens = indexer.execute(tokens);
     ASSERT_FALSE(outTokens.empty());
     DataPacket output = outTokens.front().data;
+
+    if (output.contains(QStringLiteral("__error"))) {
+        const QString error = output.value(QStringLiteral("__error")).toString();
+        if (isTemporaryError(error)) {
+            GTEST_SKIP() << "Temporary LLM error during indexing: " << error.toStdString();
+        }
+    }
 
     ASSERT_TRUE(output.contains(QString::fromLatin1(RagIndexerNode::kOutputCount)));
     const int chunkCount = output.value(QString::fromLatin1(RagIndexerNode::kOutputCount)).toInt();

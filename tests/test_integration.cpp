@@ -26,6 +26,7 @@
 #include "PromptBuilderNode.h"
 #include "UniversalLLMNode.h"
 #include "core/LLMProviderRegistry.h"
+#include "test_app.h"
 
 using namespace QtNodes;
 
@@ -190,6 +191,14 @@ void IntegrationTests::test_FullPipelineExecution()
     loop.exec();
 
     QVERIFY(finished);
+
+    if (finalOut.contains(QStringLiteral("__error"))) {
+        const QString error = finalOut.value(QStringLiteral("__error")).toString();
+        if (isTemporaryError(error)) {
+            QSKIP(QString("Skipping due to temporary LLM error: %1").arg(error).toLocal8Bit().constData());
+        }
+    }
+
     QVERIFY(finalOut.contains(QString::fromLatin1(UniversalLLMNode::kOutputResponseId)));
     const QString response = finalOut.value(QString::fromLatin1(UniversalLLMNode::kOutputResponseId)).toString();
     QVERIFY(!response.trimmed().isEmpty());

@@ -15,6 +15,7 @@
 #include "core/RagUtils.h"
 #include "backends/OpenAIBackend.h"
 #include "core/LLMProviderRegistry.h"
+#include "test_app.h"
 
 // Minimal app helper to ensure Qt application context exists
 static QCoreApplication* ensureCoreApp()
@@ -150,6 +151,9 @@ TEST(RagFoundationTest, OpenAIEmbeddingsAPI)
     
     // Verify no error occurred
     if (result.hasError) {
+        if (isTemporaryError(result.errorMsg)) {
+            GTEST_SKIP() << "Temporary LLM error during embedding: " << result.errorMsg.toStdString();
+        }
         FAIL() << "Embedding request failed with error: " << result.errorMsg.toStdString();
     }
     

@@ -16,6 +16,7 @@
 
 #include "RagQueryNode.h"
 #include "core/LLMProviderRegistry.h"
+#include "test_app.h"
 
 #include "core/RagUtils.h"
 
@@ -135,6 +136,13 @@ TEST(RagQueryNodeTest, PinOverridesProperty)
         ASSERT_FALSE(outTokens.empty());
         const DataPacket& out = outTokens.front().data;
 
+        if (out.contains(QStringLiteral("__error"))) {
+            const QString error = out.value(QStringLiteral("__error")).toString();
+            if (isTemporaryError(error)) {
+                GTEST_SKIP() << "Temporary LLM error during RAG query: " << error.toStdString();
+            }
+        }
+
         // Execution should have attempted to use the property path and produced outputs
         EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputContext)));
         EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputResults)));
@@ -156,6 +164,13 @@ TEST(RagQueryNodeTest, PinOverridesProperty)
         const TokenList outTokens = node.execute(tokens);
         ASSERT_FALSE(outTokens.empty());
         const DataPacket& out = outTokens.front().data;
+
+        if (out.contains(QStringLiteral("__error"))) {
+            const QString error = out.value(QStringLiteral("__error")).toString();
+            if (isTemporaryError(error)) {
+                GTEST_SKIP() << "Temporary LLM error during RAG query: " << error.toStdString();
+            }
+        }
 
         EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputContext)));
         EXPECT_TRUE(out.contains(QString::fromLatin1(RagQueryNode::kOutputResults)));
