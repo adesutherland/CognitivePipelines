@@ -38,6 +38,16 @@ TEST(ImageNodeTest, Registration)
     ASSERT_TRUE(connector);
     auto* imageNode = dynamic_cast<ImageNode*>(connector.get());
     ASSERT_NE(imageNode, nullptr);
+
+    // Verify pin types
+    NodeDescriptor desc = imageNode->getDescriptor();
+    const QString pinId = QString::fromLatin1(ImageNode::kImagePinId);
+    
+    ASSERT_TRUE(desc.inputPins.contains(pinId));
+    EXPECT_EQ(desc.inputPins[pinId].type, QStringLiteral("text"));
+
+    ASSERT_TRUE(desc.outputPins.contains(pinId));
+    EXPECT_EQ(desc.outputPins[pinId].type, QStringLiteral("text"));
 }
 
 TEST(ImageNodeTest, SourceModeExecution)

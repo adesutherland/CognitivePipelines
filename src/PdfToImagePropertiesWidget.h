@@ -26,6 +26,7 @@
 #include <QWidget>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QCheckBox>
 
 class PdfToImagePropertiesWidget : public QWidget {
     Q_OBJECT
@@ -35,14 +36,18 @@ public:
 
     // Initialize / update UI value from external state
     void setPdfPath(const QString& path);
+    void setSplitPages(bool split);
 
-    // Read current value
+    // Read current values
     QString pdfPath() const;
+    bool splitPages() const;
 
 signals:
     void pdfPathChanged(const QString& path);
+    void splitPagesChanged(bool split);
 
 private:
     QLineEdit* m_pathLineEdit {nullptr};
     QPushButton* m_selectButton {nullptr};
+    QCheckBox* m_splitCheckBox {nullptr};
 };

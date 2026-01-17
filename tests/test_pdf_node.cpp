@@ -18,12 +18,15 @@ TEST(PdfToImageNodeTest, PinContract)
     PdfToImageNode node;
     NodeDescriptor desc = node.getDescriptor();
 
-    const QString pinId = QString::fromLatin1(PdfToImageNode::kPdfPathPinId);
-    ASSERT_TRUE(desc.inputPins.contains(pinId));
-    
-    // This is expected to FAIL currently as the type is "file"
-    EXPECT_EQ(desc.inputPins[pinId].type, QStringLiteral("text")) 
+    const QString inPinId = QString::fromLatin1(PdfToImageNode::kPdfPathPinId);
+    ASSERT_TRUE(desc.inputPins.contains(inPinId));
+    EXPECT_EQ(desc.inputPins[inPinId].type, QStringLiteral("text")) 
         << "PdfToImageNode input pin type should be standardized to 'text'";
+
+    const QString outPinId = QString::fromLatin1(PdfToImageNode::kImagePathPinId);
+    ASSERT_TRUE(desc.outputPins.contains(outPinId));
+    EXPECT_EQ(desc.outputPins[outPinId].type, QStringLiteral("text"))
+        << "PdfToImageNode output pin type should be standardized to 'text'";
 }
 
 TEST(PdfToImageNodeTest, PathHandling)

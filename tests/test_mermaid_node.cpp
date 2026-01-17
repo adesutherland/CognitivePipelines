@@ -15,7 +15,7 @@ TEST(MermaidNodeTest, DescriptorMatchesPins)
     EXPECT_EQ(desc.inputPins.value(QString::fromLatin1(MermaidNode::kInputCode)).type, QStringLiteral("text"));
 
     ASSERT_TRUE(desc.outputPins.contains(QString::fromLatin1(MermaidNode::kOutputImage)));
-    EXPECT_EQ(desc.outputPins.value(QString::fromLatin1(MermaidNode::kOutputImage)).type, QStringLiteral("image"));
+    EXPECT_EQ(desc.outputPins.value(QString::fromLatin1(MermaidNode::kOutputImage)).type, QStringLiteral("text"));
 }
 
 TEST(MermaidNodeTest, EmptyCodeProducesError)

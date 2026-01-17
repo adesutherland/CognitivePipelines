@@ -48,6 +48,13 @@ PdfToImagePropertiesWidget::PdfToImagePropertiesWidget(QWidget* parent)
     m_selectButton = new QPushButton(tr("Select PDF..."), this);
     layout->addWidget(m_selectButton);
 
+    // Split checkbox
+    m_splitCheckBox = new QCheckBox(tr("Split pages into separate images"), this);
+    layout->addWidget(m_splitCheckBox);
+
+    // Connect checkbox signal
+    connect(m_splitCheckBox, &QCheckBox::toggled, this, &PdfToImagePropertiesWidget::splitPagesChanged);
+
     // Connect button click handler
     connect(m_selectButton, &QPushButton::clicked, this, [this]() {
         QString fileName = QFileDialog::getOpenFileName(
@@ -75,10 +82,22 @@ void PdfToImagePropertiesWidget::setPdfPath(const QString& path)
     }
 }
 
+void PdfToImagePropertiesWidget::setSplitPages(bool split)
+{
+    if (m_splitCheckBox) {
+        m_splitCheckBox->setChecked(split);
+    }
+}
+
 QString PdfToImagePropertiesWidget::pdfPath() const
 {
     if (m_pathLineEdit && !m_pathLineEdit->text().isEmpty()) {
         return m_pathLineEdit->text();
     }
     return QString();
+}
+
+bool PdfToImagePropertiesWidget::splitPages() const
+{
+    return m_splitCheckBox && m_splitCheckBox->isChecked();
 }

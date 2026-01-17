@@ -49,6 +49,13 @@ public:
     QJsonObject saveState() const override;
     void loadState(const QJsonObject& data) override;
 
+signals:
+    void splitPagesChanged(bool split);
+
+public slots:
+    void onPdfPathChanged(const QString& path);
+    void onSplitPagesChanged(bool split);
+
 public:
     static constexpr const char* kPdfPathPinId = "pdf_path";
     static constexpr const char* kImagePathPinId = "image_path";
@@ -56,4 +63,5 @@ public:
 private:
     QPointer<PdfToImagePropertiesWidget> m_widget;
     QString m_pdfPath;  // PDF path configured via properties widget (Source Mode)
+    bool m_splitPages {false};
 };

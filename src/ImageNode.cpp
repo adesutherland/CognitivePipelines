@@ -51,7 +51,7 @@ NodeDescriptor ImageNode::getDescriptor() const
     in.direction = PinDirection::Input;
     in.id = QString::fromLatin1(kImagePinId);
     in.name = QStringLiteral("Input");
-    in.type = QStringLiteral("image");
+    in.type = QStringLiteral("text");
     desc.inputPins.insert(in.id, in);
 
     // One output pin
@@ -59,7 +59,7 @@ NodeDescriptor ImageNode::getDescriptor() const
     out.direction = PinDirection::Output;
     out.id = QString::fromLatin1(kImagePinId);
     out.name = QStringLiteral("Output");
-    out.type = QStringLiteral("image");
+    out.type = QStringLiteral("text");
     desc.outputPins.insert(out.id, out);
 
     return desc;

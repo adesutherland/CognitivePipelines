@@ -61,7 +61,7 @@ NodeDescriptor MermaidNode::getDescriptor() const
     out.direction = PinDirection::Output;
     out.id = QString::fromLatin1(kOutputImage);
     out.name = QStringLiteral("Image");
-    out.type = QStringLiteral("image");
+    out.type = QStringLiteral("text");
     desc.outputPins.insert(out.id, out);
 
     return desc;

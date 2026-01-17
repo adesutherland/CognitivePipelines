@@ -61,7 +61,7 @@ NodeDescriptor ImageGenNode::getDescriptor() const
     outPin.direction = PinDirection::Output;
     outPin.id = QString::fromLatin1(kOutputImagePathPinId);
     outPin.name = QStringLiteral("Image Path");
-    outPin.type = QStringLiteral("image");
+    outPin.type = QStringLiteral("text");
     desc.outputPins.insert(outPin.id, outPin);
 
     return desc;

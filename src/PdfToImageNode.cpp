@@ -64,7 +64,7 @@ NodeDescriptor PdfToImageNode::getDescriptor() const
     outPin.direction = PinDirection::Output;
     outPin.id = QString::fromLatin1(kImagePathPinId);
     outPin.name = QStringLiteral("Image");
-    outPin.type = QStringLiteral("image");
+    outPin.type = QStringLiteral("text");
     desc.outputPins.insert(outPin.id, outPin);
 
     return desc;
@@ -76,16 +76,26 @@ QWidget* PdfToImageNode::createConfigurationWidget(QWidget* parent)
         m_widget = new PdfToImagePropertiesWidget(parent);
         
         // Connect widget signal to update internal state
-        connect(m_widget, &PdfToImagePropertiesWidget::pdfPathChanged, this, [this](const QString& path) {
-            m_pdfPath = path;
-        });
+        connect(m_widget, &PdfToImagePropertiesWidget::pdfPathChanged, this, &PdfToImageNode::onPdfPathChanged);
+        connect(m_widget, &PdfToImagePropertiesWidget::splitPagesChanged, this, &PdfToImageNode::onSplitPagesChanged);
         
         // Initialize widget with current state
         if (!m_pdfPath.isEmpty()) {
             m_widget->setPdfPath(m_pdfPath);
         }
+        m_widget->setSplitPages(m_splitPages);
     }
     return m_widget;
+}
+
+void PdfToImageNode::onPdfPathChanged(const QString& path)
+{
+    m_pdfPath = path;
+}
+
+void PdfToImageNode::onSplitPagesChanged(bool split)
+{
+    m_splitPages = split;
 }
 
 TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
@@ -106,15 +116,20 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
     bool isPersistent = !sysOutDir.isEmpty();
     std::unique_ptr<QTemporaryFile> tempFile;
 
+    // Capture m_splitPages for path resolution
+    const bool splitPages = m_splitPages;
+
     if (isPersistent) {
         // Case A: Persistent Output
-        outPath = sysOutDir + QDir::separator() + QStringLiteral("stitched_output.png");
+        QString fileName = splitPages ? QStringLiteral("page.png") : QStringLiteral("stitched_output.png");
+        outPath = sysOutDir + QDir::separator() + fileName;
     } else {
         // Case B: Fallback to QTemporaryFile (System Temp)
         QString tempDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
         if (tempDir.isEmpty()) tempDir = QDir::tempPath();
 
-        tempFile = std::make_unique<QTemporaryFile>(tempDir + QDir::separator() + QStringLiteral("pdf_stitched_XXXXXX.png"));
+        QString templateStr = splitPages ? QStringLiteral("pdf_page_XXXXXX.png") : QStringLiteral("pdf_stitched_XXXXXX.png");
+        tempFile = std::make_unique<QTemporaryFile>(tempDir + QDir::separator() + templateStr);
         tempFile->setAutoRemove(false);
         if (!tempFile->open()) {
             CP_CLOG(PDF_DEBUG) << "Failed to create temporary file:" << tempFile->errorString();
@@ -126,8 +141,9 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         tempFile->close();
     }
 
-    // Capture m_pdfPath for use during this execution
+    // Capture m_pdfPath and m_splitPages for use during this execution
     const QString configuredPath = m_pdfPath;
+    // splitPages already captured above
 
     // Step 2: Extract PDF path from input or use configured path (Source Mode)
     const QString pdfPathPinId = QString::fromLatin1(kPdfPathPinId);
@@ -186,68 +202,86 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         return TokenList{token};
     }
 
-    // Step 5: Layout calculation - determine dimensions
-    qreal totalHeight = 0.0;
-    qreal maxWidth = 0.0;
-
-    for (int i = 0; i < pageCount; ++i) {
-        QSizeF pageSize = pdfDoc.pagePointSize(i);
-        totalHeight += pageSize.height();
-        if (pageSize.width() > maxWidth) {
-            maxWidth = pageSize.width();
-        }
-    }
-
-    // Step 6: Create the tall image for stitching
-    // Using a reasonable DPI for rendering (72 points = 1 inch, use 2x for better quality)
+    // Step 5: Render and Save
     const qreal scale = 2.0;
-    const int imageWidth = static_cast<int>(maxWidth * scale);
-    const int imageHeight = static_cast<int>(totalHeight * scale);
-
-    QImage stitchedImage(imageWidth, imageHeight, QImage::Format_ARGB32);
-    stitchedImage.fill(Qt::white);
-
-    // Step 7: Render and stitch pages
-    QPainter painter(&stitchedImage);
-    qreal currentY = 0.0;
-
-    for (int i = 0; i < pageCount; ++i) {
-        QSizeF pageSize = pdfDoc.pagePointSize(i);
-
-        // Calculate image size for this page (in pixels)
-        QSize pageImageSize(static_cast<int>(pageSize.width() * scale),
-                           static_cast<int>(pageSize.height() * scale));
-
-        // Render the page to a QImage
-        QImage pageImage = pdfDoc.render(i, pageImageSize);
-
-        // Draw the page image into the stitched image at the correct vertical offset
-        painter.drawImage(QPointF(0, currentY * scale), pageImage);
-
-        // Advance vertical offset
-        currentY += pageSize.height();
-    }
-
-    painter.end();
-
-    // Step 8: Save Output
-    if (isPersistent) {
-        CP_CLOG(PDF_DEBUG) << "Saved persistent output to:" << outPath;
-    } else {
-        CP_CLOG(PDF_DEBUG) << "Successfully generated output path:" << outPath;
-    }
-
-    // Save the stitched image directly to the absolute path
-    if (!stitchedImage.save(outPath, "PNG")) {
-        CP_CLOG(PDF_DEBUG) << "Failed to save stitched image to:" << outPath;
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
-    }
-
-    // Step 9: Return output with image path (MUST use absolute path for downstream nodes)
     const QString imagePathPinId = QString::fromLatin1(kImagePathPinId);
-    output.insert(imagePathPinId, outPath);
+
+    if (splitPages) {
+        // Mode: Split pages into separate images
+        QStringList generatedPaths;
+        QString basePath = outPath;
+        if (basePath.endsWith(QStringLiteral(".png"), Qt::CaseInsensitive)) {
+            basePath.chop(4);
+        }
+
+        for (int i = 0; i < pageCount; ++i) {
+            QSizeF pageSize = pdfDoc.pagePointSize(i);
+            QSize pageImageSize(static_cast<int>(pageSize.width() * scale),
+                               static_cast<int>(pageSize.height() * scale));
+
+            QImage pageImage = pdfDoc.render(i, pageImageSize);
+            QString pagePath = basePath + QStringLiteral("_p%1.png").arg(i + 1);
+
+            if (pageImage.save(pagePath, "PNG")) {
+                generatedPaths << pagePath;
+                CP_CLOG(PDF_DEBUG) << "Saved page" << (i + 1) << "to:" << pagePath;
+            } else {
+                CP_CLOG(PDF_DEBUG) << "Failed to save page image to:" << pagePath;
+                ExecutionToken token;
+                token.data = output;
+                return TokenList{token};
+            }
+        }
+
+        // Clean up the "base" file if it was a temporary file
+        if (!isPersistent && QFile::exists(outPath)) {
+            QFile::remove(outPath);
+        }
+
+        output.insert(imagePathPinId, generatedPaths);
+    } else {
+        // Mode: Stitch all pages into one tall image
+        qreal totalHeight = 0.0;
+        qreal maxWidth = 0.0;
+
+        for (int i = 0; i < pageCount; ++i) {
+            QSizeF pageSize = pdfDoc.pagePointSize(i);
+            totalHeight += pageSize.height();
+            if (pageSize.width() > maxWidth) {
+                maxWidth = pageSize.width();
+            }
+        }
+
+        const int imageWidth = static_cast<int>(maxWidth * scale);
+        const int imageHeight = static_cast<int>(totalHeight * scale);
+
+        QImage stitchedImage(imageWidth, imageHeight, QImage::Format_ARGB32);
+        stitchedImage.fill(Qt::white);
+
+        QPainter painter(&stitchedImage);
+        qreal currentY = 0.0;
+
+        for (int i = 0; i < pageCount; ++i) {
+            QSizeF pageSize = pdfDoc.pagePointSize(i);
+            QSize pageImageSize(static_cast<int>(pageSize.width() * scale),
+                               static_cast<int>(pageSize.height() * scale));
+
+            QImage pageImage = pdfDoc.render(i, pageImageSize);
+            painter.drawImage(QPointF(0, currentY * scale), pageImage);
+            currentY += pageSize.height();
+        }
+        painter.end();
+
+        if (!stitchedImage.save(outPath, "PNG")) {
+            CP_CLOG(PDF_DEBUG) << "Failed to save stitched image to:" << outPath;
+            ExecutionToken token;
+            token.data = output;
+            return TokenList{token};
+        }
+
+        CP_CLOG(PDF_DEBUG) << "Saved stitched output to:" << outPath;
+        output.insert(imagePathPinId, outPath);
+    }
 
     ExecutionToken token;
     token.data = output;
@@ -258,19 +292,29 @@ QJsonObject PdfToImageNode::saveState() const
 {
     QJsonObject obj;
     if (!m_pdfPath.isEmpty()) {
-        obj["pdf_path"] = m_pdfPath;
+        obj[QStringLiteral("pdf_path")] = m_pdfPath;
     }
+    obj[QStringLiteral("split_pages")] = m_splitPages;
     return obj;
 }
 
 void PdfToImageNode::loadState(const QJsonObject& data)
 {
-    if (data.contains("pdf_path")) {
-        m_pdfPath = data["pdf_path"].toString();
+    if (data.contains(QStringLiteral("pdf_path"))) {
+        m_pdfPath = data[QStringLiteral("pdf_path")].toString();
         
         // Update widget if it exists
         if (m_widget) {
             m_widget->setPdfPath(m_pdfPath);
+        }
+    }
+
+    if (data.contains(QStringLiteral("split_pages"))) {
+        m_splitPages = data[QStringLiteral("split_pages")].toBool();
+        
+        // Update widget if it exists
+        if (m_widget) {
+            m_widget->setSplitPages(m_splitPages);
         }
     }
 }
