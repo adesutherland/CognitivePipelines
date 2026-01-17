@@ -24,6 +24,7 @@
 
 #include "RetryLoopNode.h"
 #include "RetryLoopPropertiesWidget.h"
+#include <QMutexLocker>
 #include <QDebug>
 
 RetryLoopNode::RetryLoopNode(QObject* parent)
@@ -104,6 +105,7 @@ bool RetryLoopNode::isReady(const QVariantMap& inputs, int incomingConnectionsCo
 
 TokenList RetryLoopNode::execute(const TokenList& incomingTokens)
 {
+    QMutexLocker locker(&m_mutex);
     TokenList outputs;
 
     // Step 1: Ingest New Tasks

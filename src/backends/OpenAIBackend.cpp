@@ -205,7 +205,7 @@ LLMResult OpenAIBackend::sendPrompt(
     int maxTokens,
     const QString& systemPrompt,
     const QString& userPrompt,
-    const QString& imagePath
+    const LLMMessage& message
 ) {
     LLMResult result;
 
@@ -220,9 +220,9 @@ LLMResult OpenAIBackend::sendPrompt(
 
     CP_CLOG(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << resolvedModel
              << ": Role Mode=system (hardcoded chat messages), Vision="
-             << (imagePath.trimmed().isEmpty()
-                     ? "disabled (no imagePath provided; no model gating)"
-                     : "enabled (imagePath provided; no model gating)");
+             << (message.attachments.isEmpty()
+                     ? "disabled (no attachments provided; no model gating)"
+                     : "enabled (attachments provided; no model gating)");
 
     // Resolve model caps for capability-driven filtering and role normalization
     const auto resolved = ModelCapsRegistry::instance().resolveWithRule(resolvedModel, id());
@@ -269,45 +269,8 @@ LLMResult OpenAIBackend::sendPrompt(
     QJsonObject userMsg;
     userMsg.insert(QStringLiteral("role"), QStringLiteral("user"));
     
-    // Check if image path is provided for multimodal (Vision) request
-    if (!imagePath.trimmed().isEmpty()) {
-        // Read image file
-        QFile imageFile(imagePath);
-        if (!imageFile.open(QIODevice::ReadOnly)) {
-            result.hasError = true;
-            result.errorMsg = QStringLiteral("Failed to read image file at: %1").arg(imagePath);
-            result.content = result.errorMsg;
-            return result;
-        }
-        
-        QByteArray imageData = imageFile.readAll();
-        imageFile.close();
-        
-        if (imageData.isEmpty()) {
-            result.hasError = true;
-            result.errorMsg = QStringLiteral("Failed to read image file at: %1").arg(imagePath);
-            result.content = result.errorMsg;
-            return result;
-        }
-        
-        // Encode to Base64
-        QString base64Image = QString::fromLatin1(imageData.toBase64());
-        
-        // Determine MIME type based on file extension
-        QFileInfo fileInfo(imagePath);
-        QString extension = fileInfo.suffix().toLower();
-        QString mimeType = QStringLiteral("image/jpeg"); // default
-        
-        if (extension == QStringLiteral("png")) {
-            mimeType = QStringLiteral("image/png");
-        } else if (extension == QStringLiteral("jpg") || extension == QStringLiteral("jpeg")) {
-            mimeType = QStringLiteral("image/jpeg");
-        } else if (extension == QStringLiteral("gif")) {
-            mimeType = QStringLiteral("image/gif");
-        } else if (extension == QStringLiteral("webp")) {
-            mimeType = QStringLiteral("image/webp");
-        }
-        
+    // Check for attachments in message
+    if (!message.attachments.isEmpty()) {
         // Build multimodal content array for Vision API
         QJsonArray contentArray;
         
@@ -317,15 +280,27 @@ LLMResult OpenAIBackend::sendPrompt(
         textPart.insert(QStringLiteral("text"), userPrompt);
         contentArray.append(textPart);
         
-        // Image part
-        QJsonObject imageUrlObj;
-        imageUrlObj.insert(QStringLiteral("url"), 
-                          QStringLiteral("data:%1;base64,%2").arg(mimeType, base64Image));
-        
-        QJsonObject imagePart;
-        imagePart.insert(QStringLiteral("type"), QStringLiteral("image_url"));
-        imagePart.insert(QStringLiteral("image_url"), imageUrlObj);
-        contentArray.append(imagePart);
+        for (const auto& attachment : message.attachments) {
+            // Encode to Base64
+            QString base64Data = QString::fromLatin1(attachment.data.toBase64());
+            
+            // Attachment part
+            if (attachment.mimeType.startsWith(QStringLiteral("image/"))) {
+                QJsonObject imageUrlObj;
+                imageUrlObj.insert(QStringLiteral("url"), 
+                                  QStringLiteral("data:%1;base64,%2").arg(attachment.mimeType, base64Data));
+                
+                QJsonObject imagePart;
+                imagePart.insert(QStringLiteral("type"), QStringLiteral("image_url"));
+                imagePart.insert(QStringLiteral("image_url"), imageUrlObj);
+                contentArray.append(imagePart);
+            } else if (attachment.mimeType == QStringLiteral("application/pdf")) {
+                result.hasError = true;
+                result.errorMsg = QStringLiteral("OpenAI backend does not support native PDF input.");
+                result.content = result.errorMsg;
+                return result;
+            }
+        }
         
         // Set content as array
         userMsg.insert(QStringLiteral("content"), contentArray);

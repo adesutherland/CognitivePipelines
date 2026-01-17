@@ -7,6 +7,10 @@
     {
       "name": "google",
       "api_key": "AIza..."
+    },
+    {
+      "name": "anthropic",
+      "api_key": "sk-ant-..."
     }
   ]
 }

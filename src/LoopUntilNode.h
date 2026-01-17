@@ -28,6 +28,7 @@
 #include <QWidget>
 #include <QString>
 #include <QVariant>
+#include <QMutex>
 #include <deque>
 
 #include "IToolConnector.h"
@@ -88,6 +89,7 @@ private:
     static bool isTruthy(const QVariant& v);
 
 private:
+    mutable QMutex m_mutex;
     int m_maxIterations {10};
     int m_iterationCount {0};
     bool m_isProcessing {false};

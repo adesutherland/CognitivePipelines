@@ -21,7 +21,7 @@ protected:
     void SetUp() override {
         apiKey = LLMProviderRegistry::instance().getCredential("anthropic");
         if (apiKey.isEmpty()) {
-            apiKey = "dummy-key-for-tdd";
+            GTEST_SKIP() << "Skipping Anthropic integration tests: No API key found. Set ANTHROPIC_API_KEY or add to accounts.json.";
         }
         ModelCapsRegistry::instance().loadFromFile(":/resources/model_caps.json");
     }
@@ -91,7 +91,13 @@ TEST_F(AnthropicChatTest, VisionRequest_ShouldIdentifyColor) {
     tempFile.write(imageData);
     tempFile.close();
 
-    LLMResult result = backend.sendPrompt(apiKey, model, 0.0, 100, "", userPrompt, tempFile.fileName());
+    LLMMessage message;
+    LLMAttachment attachment;
+    attachment.mimeType = QStringLiteral("image/png");
+    attachment.data = imageData;
+    message.attachments.append(attachment);
+
+    LLMResult result = backend.sendPrompt(apiKey, model, 0.0, 100, "", userPrompt, message);
 
     if (result.hasError && isTemporaryError(result.errorMsg)) {
         GTEST_SKIP() << "Temporary LLM error: " << result.errorMsg.toStdString();
@@ -101,4 +107,32 @@ TEST_F(AnthropicChatTest, VisionRequest_ShouldIdentifyColor) {
     ASSERT_FALSE(result.hasError) << "API call failed: " << result.errorMsg.toStdString();
     EXPECT_TRUE(result.content.toLower().contains("red")) 
         << "Response did not contain 'red'. Content: " << result.content.toStdString();
+}
+
+/**
+ * @test Test Case 4: PDF Request
+ * Verify PDF support for the Anthropic backend.
+ */
+TEST_F(AnthropicChatTest, PdfRequest_ShouldSummarizeContent) {
+    QString model = "claude-haiku-4-5-20251001";
+    QString userPrompt = "What does this document say?";
+
+    // Create a very simple dummy PDF-like content
+    QByteArray pdfData = "%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << >> /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 51 >>\nstream\nBT /F1 12 Tf 72 712 Td (This is a test PDF document.) Tj ET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000060 00000 n \n0000000121 00000 n \n0000000220 00000 n \ntrailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n322\n%%EOF";
+
+    LLMMessage message;
+    LLMAttachment attachment;
+    attachment.mimeType = QStringLiteral("application/pdf");
+    attachment.data = pdfData;
+    message.attachments.append(attachment);
+
+    LLMResult result = backend.sendPrompt(apiKey, model, 0.0, 100, "", userPrompt, message);
+
+    if (result.hasError && isTemporaryError(result.errorMsg)) {
+        GTEST_SKIP() << "Temporary LLM error: " << result.errorMsg.toStdString();
+    }
+
+    ASSERT_FALSE(result.hasError) << "API call failed: " << result.errorMsg.toStdString();
+    EXPECT_TRUE(result.content.toLower().contains("test")) 
+        << "Response did not contain 'test'. Content: " << result.content.toStdString();
 }

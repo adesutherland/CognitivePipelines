@@ -45,7 +45,7 @@ public:
         int maxTokens,
         const QString& systemPrompt,
         const QString& userPrompt,
-        const QString& imagePath = QString()
+        const LLMMessage& message = {}
     ) override;
 
     EmbeddingResult getEmbedding(

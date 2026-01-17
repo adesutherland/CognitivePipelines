@@ -63,7 +63,7 @@ public:
         int maxTokens,
         const QString& systemPrompt,
         const QString& userPrompt,
-        const QString& imagePath
+        const LLMMessage& message = {}
     ) override {
         captured_model = modelName;
 
@@ -83,8 +83,8 @@ public:
             root.insert(QStringLiteral("temperature"), temperature);
         }
         root.insert(QStringLiteral("max_tokens"), maxTokens);
-        if (!imagePath.trimmed().isEmpty()) {
-            root.insert(QStringLiteral("_imagePath"), imagePath);
+        if (!message.attachments.isEmpty()) {
+            root.insert(QStringLiteral("_attachmentCount"), message.attachments.size());
         }
         captured_payload = root;
 

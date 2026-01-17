@@ -55,16 +55,16 @@ void TestUniversalCaps::testVisionPinToggle()
     node.updateCapabilities(*visionCaps);
 
     const auto descriptorWithVision = node.getDescriptor();
-    QVERIFY2(descriptorWithVision.inputPins.contains(QStringLiteral("image")),
-             "Image pin should exist for vision-capable model");
+    QVERIFY2(descriptorWithVision.inputPins.contains(QString::fromLatin1(UniversalLLMNode::kInputAttachmentId)),
+             "Attachment pin should exist for vision-capable model");
 
     const auto noVisionCaps = ModelCapsRegistry::instance().resolve(QStringLiteral("o1-preview"));
     QVERIFY2(noVisionCaps.has_value(), "Expected capabilities for o1-preview");
     node.updateCapabilities(*noVisionCaps);
 
     const auto descriptorWithoutVision = node.getDescriptor();
-    QVERIFY2(!descriptorWithoutVision.inputPins.contains(QStringLiteral("image")),
-             "Image pin should be removed for non-vision model");
+    QVERIFY2(!descriptorWithoutVision.inputPins.contains(QString::fromLatin1(UniversalLLMNode::kInputAttachmentId)),
+             "Attachment pin should be removed for non-vision model");
 
     QCOMPARE(spy.count(), 1);
 }

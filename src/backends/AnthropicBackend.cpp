@@ -123,7 +123,7 @@ LLMResult AnthropicBackend::sendPrompt(
     int maxTokens,
     const QString& systemPrompt,
     const QString& userPrompt,
-    const QString& imagePath
+    const LLMMessage& message
 ) {
     LLMResult result;
     
@@ -139,15 +139,23 @@ LLMResult AnthropicBackend::sendPrompt(
     const ModelCapsTypes::RoleMode roleMode = capsOpt.has_value() ? capsOpt->roleMode : ModelCapsTypes::RoleMode::System;
 
     // Anthropic API requires a non-empty messages array.
-    if (userPrompt.trimmed().isEmpty() && imagePath.isEmpty()) {
+    if (userPrompt.trimmed().isEmpty() && message.attachments.isEmpty()) {
         result.hasError = true;
-        result.errorMsg = QStringLiteral("User prompt or image must be provided for Anthropic API");
+        result.errorMsg = QStringLiteral("User prompt or attachment must be provided for Anthropic API");
         return result;
     }
 
     // Prepare JSON payload
     QJsonObject root;
     root.insert(QStringLiteral("model"), resolvedModel);
+
+    bool hasPdf = false;
+    for (const auto& att : message.attachments) {
+        if (att.mimeType == QStringLiteral("application/pdf")) {
+            hasPdf = true;
+            break;
+        }
+    }
 
     // Default to 4096 if not provided, as required by Anthropic
     int finalMaxTokens = (maxTokens > 0) ? maxTokens : 4096;
@@ -166,43 +174,42 @@ LLMResult AnthropicBackend::sendPrompt(
     QJsonObject userMsg;
     userMsg.insert(QStringLiteral("role"), QStringLiteral("user"));
 
-    if (!imagePath.isEmpty()) {
-        QFile file(imagePath);
-        if (file.open(QIODevice::ReadOnly)) {
-            QByteArray data = file.readAll();
-            QString base64Data = QString::fromLatin1(data.toBase64());
+    if (!message.attachments.isEmpty()) {
+        QJsonArray contentArray;
 
-            QFileInfo info(imagePath);
-            QString ext = info.suffix().toLower();
-            QString mimeType = QStringLiteral("image/jpeg");
-            if (ext == QStringLiteral("png")) mimeType = QStringLiteral("image/png");
-            else if (ext == QStringLiteral("webp")) mimeType = QStringLiteral("image/webp");
-            else if (ext == QStringLiteral("gif")) mimeType = QStringLiteral("image/gif");
+        for (const auto& attachment : message.attachments) {
+            QString base64Data = QString::fromLatin1(attachment.data.toBase64());
 
-            QJsonArray contentArray;
+            if (attachment.mimeType == QStringLiteral("application/pdf")) {
+                QJsonObject documentBlock;
+                documentBlock.insert(QStringLiteral("type"), QStringLiteral("document"));
+                QJsonObject source;
+                source.insert(QStringLiteral("type"), QStringLiteral("base64"));
+                source.insert(QStringLiteral("media_type"), attachment.mimeType);
+                source.insert(QStringLiteral("data"), base64Data);
+                documentBlock.insert(QStringLiteral("source"), source);
+                contentArray.append(documentBlock);
+            } else if (attachment.mimeType.startsWith(QStringLiteral("image/"))) {
+                QJsonObject imageBlock;
+                imageBlock.insert(QStringLiteral("type"), QStringLiteral("image"));
+                QJsonObject source;
+                source.insert(QStringLiteral("type"), QStringLiteral("base64"));
+                source.insert(QStringLiteral("media_type"), attachment.mimeType);
+                source.insert(QStringLiteral("data"), base64Data);
+                imageBlock.insert(QStringLiteral("source"), source);
+                contentArray.append(imageBlock);
+            }
+        }
 
-            // Image block
-            QJsonObject imageBlock;
-            imageBlock.insert(QStringLiteral("type"), QStringLiteral("image"));
-            QJsonObject source;
-            source.insert(QStringLiteral("type"), QStringLiteral("base64"));
-            source.insert(QStringLiteral("media_type"), mimeType);
-            source.insert(QStringLiteral("data"), base64Data);
-            imageBlock.insert(QStringLiteral("source"), source);
-            contentArray.append(imageBlock);
-
-            // Text block
+        // Text block
+        if (!userPrompt.isEmpty()) {
             QJsonObject textBlock;
             textBlock.insert(QStringLiteral("type"), QStringLiteral("text"));
             textBlock.insert(QStringLiteral("text"), userPrompt);
             contentArray.append(textBlock);
-
-            userMsg.insert(QStringLiteral("content"), contentArray);
-        } else {
-            result.hasError = true;
-            result.errorMsg = QStringLiteral("Failed to read image file at: %1").arg(imagePath);
-            return result;
         }
+
+        userMsg.insert(QStringLiteral("content"), contentArray);
     } else {
         userMsg.insert(QStringLiteral("content"), userPrompt);
     }
@@ -216,8 +223,13 @@ LLMResult AnthropicBackend::sendPrompt(
     try {
         cpr::Header header{
             {"x-api-key", apiKey.toStdString()},
+            {"anthropic-version", "2023-06-01"},
             {"Content-Type", "application/json"}
         };
+
+        if (hasPdf) {
+            header.insert({"anthropic-beta", "pdfs-2024-09-25"});
+        }
 
         if (resolved.has_value()) {
             for (auto it = resolved->caps.customHeaders.begin(); it != resolved->caps.customHeaders.end(); ++it) {

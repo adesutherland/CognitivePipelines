@@ -27,6 +27,7 @@
 #include <QObject>
 #include <QVariant>
 #include <QString>
+#include <QMutex>
 #include <deque>
 #include "IToolConnector.h"
 
@@ -69,6 +70,7 @@ public:
     static constexpr const char* kOutputVerifiedResultId = "verified_result";
 
 private:
+    mutable QMutex m_mutex;
     std::deque<QVariant> m_taskQueue;
     bool m_isProcessing {false};
     QVariant m_cachedPayload;

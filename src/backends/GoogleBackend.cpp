@@ -173,7 +173,7 @@ LLMResult GoogleBackend::sendPrompt(
     int maxTokens,
     const QString& systemPrompt,
     const QString& userPrompt,
-    const QString& imagePath
+    const LLMMessage& message
 ) {
     LLMResult result;
 
@@ -188,9 +188,9 @@ LLMResult GoogleBackend::sendPrompt(
 
     CP_CLOG(cp_caps) << "[caps-baseline]" << "Ad-hoc capability check for model" << resolvedModel
              << ": Role Mode=system (system prompt as first content entry; no developer role), Vision="
-             << (imagePath.trimmed().isEmpty()
-                     ? "disabled (no imagePath provided; no model gating)"
-                     : "enabled via inline_data (imagePath provided; no model gating)");
+             << (message.attachments.isEmpty()
+                     ? "disabled (no attachments provided; no model gating)"
+                     : "enabled via inline_data (attachments provided; no model gating)");
 
     // Google Generative Language (Gemini) endpoint selection:
     // Preview models use v1beta; certain families (e.g., early 1.5, 3.x) may require v1beta.
@@ -233,7 +233,7 @@ LLMResult GoogleBackend::sendPrompt(
         contents.append(sysContent);
     }
 
-    // Build the user message parts array (text + optional image)
+    // Build the user message parts array (text + attachments)
     QJsonArray userParts;
     
     // Always include the text part
@@ -241,50 +241,19 @@ LLMResult GoogleBackend::sendPrompt(
     textPart.insert(QStringLiteral("text"), userPrompt);
     userParts.append(textPart);
     
-    // Add image part if imagePath is provided
-    if (!imagePath.trimmed().isEmpty()) {
-        QFile imageFile(imagePath);
-        if (!imageFile.open(QIODevice::ReadOnly)) {
-            result.hasError = true;
-            result.errorMsg = QStringLiteral("Failed to open image file: %1").arg(imagePath);
-            return result;
-        }
-        
-        const QByteArray imageData = imageFile.readAll();
-        imageFile.close();
-        
-        if (imageData.isEmpty()) {
-            result.hasError = true;
-            result.errorMsg = QStringLiteral("Image file is empty: %1").arg(imagePath);
-            return result;
-        }
-        
+    // Add all attachments
+    for (const auto& attachment : message.attachments) {
         // Convert to Base64
-        const QString base64String = QString::fromLatin1(imageData.toBase64());
-        
-        // Detect MIME type from file extension
-        QString mimeType = QStringLiteral("image/jpeg"); // default
-        const QString lowerPath = imagePath.toLower();
-        if (lowerPath.endsWith(QStringLiteral(".png"))) {
-            mimeType = QStringLiteral("image/png");
-        } else if (lowerPath.endsWith(QStringLiteral(".jpg")) || lowerPath.endsWith(QStringLiteral(".jpeg"))) {
-            mimeType = QStringLiteral("image/jpeg");
-        } else if (lowerPath.endsWith(QStringLiteral(".gif"))) {
-            mimeType = QStringLiteral("image/gif");
-        } else if (lowerPath.endsWith(QStringLiteral(".webp"))) {
-            mimeType = QStringLiteral("image/webp");
-        } else if (lowerPath.endsWith(QStringLiteral(".bmp"))) {
-            mimeType = QStringLiteral("image/bmp");
-        }
+        const QString base64String = QString::fromLatin1(attachment.data.toBase64());
         
         // Create inline_data part per Gemini API schema
         QJsonObject inlineData;
-        inlineData.insert(QStringLiteral("mime_type"), mimeType);
+        inlineData.insert(QStringLiteral("mime_type"), attachment.mimeType);
         inlineData.insert(QStringLiteral("data"), base64String);
         
-        QJsonObject imagePart;
-        imagePart.insert(QStringLiteral("inline_data"), inlineData);
-        userParts.append(imagePart);
+        QJsonObject attachmentPart;
+        attachmentPart.insert(QStringLiteral("inline_data"), inlineData);
+        userParts.append(attachmentPart);
     }
     
     QJsonObject userContent;

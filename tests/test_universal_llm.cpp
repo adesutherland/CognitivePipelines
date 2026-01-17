@@ -219,10 +219,10 @@ TEST(UniversalLLMNodeTest, OpenAIVisionIntegration)
     state.insert(QStringLiteral("temperature"), 0.7);
     node->loadState(state);
 
-    // Prepare input with prompt and image
+    // Prepare input with prompt and attachment
     DataPacket inputs;
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
-    inputs.insert(QStringLiteral("image"), imagePath);
+    inputs.insert(QString::fromLatin1(UniversalLLMNode::kInputAttachmentId), imagePath);
 
     // Execute via V3 token API
     ExecutionToken token;
@@ -262,6 +262,48 @@ TEST(UniversalLLMNodeTest, OpenAIVisionIntegration)
     delete node;
 }
 
+TEST(UniversalLLMNodeTest, OpenAIPdfRejection)
+{
+    ensureApp();
+
+    auto* node = new UniversalLLMNode();
+
+    // Configure via loadState: provider "openai", model "gpt-5.1"
+    QJsonObject state;
+    state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
+    state.insert(QStringLiteral("model"), QStringLiteral("gpt-5.1"));
+    node->loadState(state);
+
+    // Create a dummy PDF file (or just a path that looks like one)
+    // The node will read it and then the backend should reject it.
+    QTemporaryFile tempFile(QDir::tempPath() + "/test_XXXXXX.pdf");
+    ASSERT_TRUE(tempFile.open());
+    tempFile.write("%PDF-1.4 dummy");
+    QString pdfPath = tempFile.fileName();
+    tempFile.close();
+
+    // Prepare input with prompt and PDF attachment
+    DataPacket inputs;
+    inputs.insert(QStringLiteral("prompt"), QStringLiteral("Summarize this."));
+    inputs.insert(QString::fromLatin1(UniversalLLMNode::kInputAttachmentId), pdfPath);
+
+    // Execute via V3 token API
+    ExecutionToken token;
+    token.data = inputs;
+    TokenList tokens;
+    tokens.push_back(std::move(token));
+
+    const TokenList outTokens = node->execute(tokens);
+    ASSERT_FALSE(outTokens.empty());
+    const DataPacket output = outTokens.front().data;
+
+    // Verify that an error was reported by the OpenAI backend
+    ASSERT_TRUE(output.contains(QStringLiteral("__error")));
+    EXPECT_TRUE(output.value(QStringLiteral("__error")).toString().contains(QStringLiteral("OpenAI backend does not support native PDF input.")));
+
+    delete node;
+}
+
 TEST(UniversalLLMNodeTest, GoogleVisionIntegration)
 {
     ensureApp();
@@ -286,10 +328,10 @@ TEST(UniversalLLMNodeTest, GoogleVisionIntegration)
     state.insert(QStringLiteral("temperature"), 0.7);
     node->loadState(state);
 
-    // Prepare input with prompt and image
+    // Prepare input with prompt and attachment
     DataPacket inputs;
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
-    inputs.insert(QStringLiteral("image"), imagePath);
+    inputs.insert(QString::fromLatin1(UniversalLLMNode::kInputAttachmentId), imagePath);
 
     // Execute via V3 token API
     ExecutionToken token;
@@ -365,11 +407,11 @@ TEST(UniversalLLMNodeTest, MissingImageFileError)
     state.insert(QStringLiteral("temperature"), 0.7);
     node->loadState(state);
 
-    // Prepare input with a non-existent image file path
+    // Prepare input with a non-existent attachment file path
     const QString nonExistentPath = QStringLiteral("/tmp/this_file_does_not_exist_12345.png");
     DataPacket inputs;
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
-    inputs.insert(QStringLiteral("image"), nonExistentPath);
+    inputs.insert(QString::fromLatin1(UniversalLLMNode::kInputAttachmentId), nonExistentPath);
 
     // Execute via V3 token API
     ExecutionToken token;
@@ -412,7 +454,7 @@ public:
     QFuture<QStringList> fetchModelList() override {
         return QtConcurrent::run([](){ return QStringList{QStringLiteral("model1")}; });
     }
-    LLMResult sendPrompt(const QString&, const QString&, double, int, const QString&, const QString&, const QString&) override {
+    LLMResult sendPrompt(const QString&, const QString&, double, int, const QString&, const QString&, const LLMMessage& = {}) override {
         LLMResult res;
         res.hasError = true;
         res.errorMsg = QStringLiteral("Simulated API Error");
@@ -464,6 +506,9 @@ TEST(UniversalLLMNodeTest, FallbackMechanism) {
     ASSERT_EQ(outputs.size(), 1);
     EXPECT_TRUE(outputs.front().data.contains(QStringLiteral("__error")));
     EXPECT_EQ(outputs.front().data.value(QStringLiteral("__error")).toString(), QStringLiteral("Simulated API Error"));
+
+    // Clear test key to avoid poisoning subsequent tests
+    LLMProviderRegistry::instance().setAnthropicKey(QString());
 }
 
 TEST(UniversalLLMNodeTest, FallbackSaveLoadPersistence) {

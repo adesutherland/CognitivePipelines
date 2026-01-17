@@ -24,7 +24,7 @@
 
 #include "LoopUntilNode.h"
 #include "LoopUntilPropertiesWidget.h"
-
+#include <QMutexLocker>
 #include <QJsonObject>
 #include <QVariant>
 #include <QtNodes/internal/Definitions.hpp>
@@ -172,6 +172,7 @@ bool LoopUntilNode::isTruthy(const QVariant& v)
 
 TokenList LoopUntilNode::execute(const TokenList& incomingTokens)
 {
+    QMutexLocker locker(&m_mutex);
     const QString startKey = QString::fromLatin1(kInputStartId);
     const QString feedbackKey = QString::fromLatin1(kInputFeedbackId);
     const QString condKey = QString::fromLatin1(kInputConditionId);

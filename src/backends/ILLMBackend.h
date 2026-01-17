@@ -26,7 +26,24 @@
 #include <QFuture>
 #include <QString>
 #include <QStringList>
+#include <QList>
+#include <QByteArray>
 #include <vector>
+
+/**
+ * @brief Represents an attachment (image, PDF, etc.) for multimodal LLM requests.
+ */
+struct LLMAttachment {
+    QString mimeType;
+    QByteArray data;
+};
+
+/**
+ * @brief Represents a message sent to or received from an LLM, including attachments.
+ */
+struct LLMMessage {
+    QList<LLMAttachment> attachments;
+};
 
 /**
  * @brief Token usage statistics returned by LLM backends.
@@ -119,7 +136,7 @@ public:
      * @param maxTokens The maximum number of tokens to generate.
      * @param systemPrompt The system prompt (instructions/context for the AI).
      * @param userPrompt The user's prompt/query.
-     * @param imagePath Optional file path to an image for multimodal requests.
+     * @param message Optional message container for attachments (images, PDFs, etc.).
      * @return LLMResult containing the normalized response, usage statistics, and error information.
      */
     virtual LLMResult sendPrompt(
@@ -129,7 +146,7 @@ public:
         int maxTokens,
         const QString& systemPrompt,
         const QString& userPrompt,
-        const QString& imagePath = QString()
+        const LLMMessage& message = {}
     ) = 0;
 
     /**

@@ -29,6 +29,10 @@
 #include "Logger.h"
 #include <QtConcurrent>
 #include <QJsonObject>
+#include <QMimeDatabase>
+#include <QMimeType>
+#include <QFileInfo>
+#include <QFile>
 #include "logging_categories.h"
 
 UniversalLLMNode::UniversalLLMNode(QObject* parent)
@@ -38,7 +42,7 @@ UniversalLLMNode::UniversalLLMNode(QObject* parent)
     m_descriptor.name = QStringLiteral("Universal AI");
     m_descriptor.category = QStringLiteral("AI Services");
 
-    // Input pins (default: prompt + image; system optional for advanced usage)
+    // Input pins (default: prompt + attachment; system optional for advanced usage)
     PinDefinition systemPin;
     systemPin.direction = PinDirection::Input;
     systemPin.id = QString::fromLatin1(kInputSystemId);
@@ -53,12 +57,12 @@ UniversalLLMNode::UniversalLLMNode(QObject* parent)
     promptPin.type = QStringLiteral("text");
     m_descriptor.inputPins.insert(promptPin.id, promptPin);
 
-    PinDefinition imagePin;
-    imagePin.direction = PinDirection::Input;
-    imagePin.id = QString::fromLatin1(kInputImageId);
-    imagePin.name = QStringLiteral("Image");
-    imagePin.type = QStringLiteral("image");
-    m_descriptor.inputPins.insert(imagePin.id, imagePin);
+    PinDefinition attachmentPin;
+    attachmentPin.direction = PinDirection::Input;
+    attachmentPin.id = QString::fromLatin1(kInputAttachmentId);
+    attachmentPin.name = QStringLiteral("Attachment (Path)");
+    attachmentPin.type = QStringLiteral("text");
+    m_descriptor.inputPins.insert(attachmentPin.id, attachmentPin);
 
     PinDefinition responsePin;
     responsePin.direction = PinDirection::Output;
@@ -142,7 +146,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     // Retrieve input pins (may override defaults from properties)
     const QString systemInput = inputs.value(QString::fromLatin1(kInputSystemId)).toString();
     const QString promptInput = inputs.value(QString::fromLatin1(kInputPromptId)).toString();
-    const QString imageInput = inputs.value(QString::fromLatin1(kInputImageId)).toString();
+    const QString attachmentPath = inputs.value(QString::fromLatin1(kInputAttachmentId)).toString();
 
     // Copy state for use during this execution
     const QString providerId = m_providerId;
@@ -245,10 +249,31 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
                        << " | selected(len=" << modelId.size() << ", first='" << firstChar << "', last='" << lastChar
                        << "') validated(len=" << validatedModelId.size() << ", first='" << vFirstChar
                        << "', last='" << vLastChar << "')";
+    // Prepare LLMMessage with attachments if provided
+    LLMMessage message;
+    if (!attachmentPath.trimmed().isEmpty()) {
+        QFile file(attachmentPath);
+        if (file.open(QIODevice::ReadOnly)) {
+            LLMAttachment attachment;
+            attachment.data = file.readAll();
+            file.close();
+
+            QMimeDatabase db;
+            attachment.mimeType = db.mimeTypeForFile(attachmentPath).name();
+            message.attachments.append(attachment);
+        } else {
+            const QString err = QStringLiteral("ERROR: Failed to open attachment file: %1").arg(attachmentPath);
+            CP_WARN << "UniversalLLMNode:" << err;
+            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+            output.insert(QStringLiteral("__error"), err);
+            ExecutionToken token; token.data = output; return TokenList{token};
+        }
+    }
+
     LLMResult result;
     try {
         result = backend->sendPrompt(apiKey, validatedModelId, temperature, maxTokens, 
-                                    systemPrompt, userPrompt, imageInput);
+                                    systemPrompt, userPrompt, message);
     } catch (const std::exception& e) {
         const QString err = QStringLiteral("ERROR: Exception during backend call: %1").arg(QString::fromUtf8(e.what()));
         CP_WARN << "UniversalLLMNode:" << err;
@@ -345,21 +370,21 @@ void UniversalLLMNode::updateCapabilities(const ModelCapsTypes::ModelCaps& caps)
 {
     m_caps = caps;
 
-    const bool hasVision = caps.hasCapability(ModelCapsTypes::Capability::Vision);
-    const bool hasImagePin = m_descriptor.inputPins.contains(QString::fromLatin1(kInputImageId));
+    const bool hasMultimodal = caps.hasCapability(ModelCapsTypes::Capability::Vision);
+    const bool hasAttachmentPin = m_descriptor.inputPins.contains(QString::fromLatin1(kInputAttachmentId));
 
     bool descriptorChanged = false;
 
-    if (hasVision && !hasImagePin) {
-        PinDefinition imagePin;
-        imagePin.direction = PinDirection::Input;
-        imagePin.id = QString::fromLatin1(kInputImageId);
-        imagePin.name = QStringLiteral("Image");
-        imagePin.type = QStringLiteral("image");
-        m_descriptor.inputPins.insert(imagePin.id, imagePin);
+    if (hasMultimodal && !hasAttachmentPin) {
+        PinDefinition attachmentPin;
+        attachmentPin.direction = PinDirection::Input;
+        attachmentPin.id = QString::fromLatin1(kInputAttachmentId);
+        attachmentPin.name = QStringLiteral("Attachment (Path)");
+        attachmentPin.type = QStringLiteral("text");
+        m_descriptor.inputPins.insert(attachmentPin.id, attachmentPin);
         descriptorChanged = true;
-    } else if (!hasVision && hasImagePin) {
-        m_descriptor.inputPins.remove(QString::fromLatin1(kInputImageId));
+    } else if (!hasMultimodal && hasAttachmentPin) {
+        m_descriptor.inputPins.remove(QString::fromLatin1(kInputAttachmentId));
         descriptorChanged = true;
     }
 
