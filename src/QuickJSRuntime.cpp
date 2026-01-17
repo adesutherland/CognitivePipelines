@@ -45,13 +45,7 @@ QuickJSRuntime::QuickJSRuntime() {
     js_std_add_helpers(m_ctx, 0, nullptr);
 
     // Initialize database bridge
-    // Use environment variable CP_QUICKJS_DB_PATH to override default "scripts.db"
-    // This is useful for testing (e.g. setting it to ":memory:" or a temp file)
-    QString dbPath = QString::fromUtf8(qgetenv("CP_QUICKJS_DB_PATH"));
-    if (dbPath.isEmpty()) {
-        dbPath = QStringLiteral("scripts.db");
-    }
-    m_dbBridge = std::make_unique<ScriptDatabaseBridge>(dbPath);
+    m_dbBridge = std::make_unique<ScriptDatabaseBridge>();
 }
 
 QuickJSRuntime::~QuickJSRuntime() {
@@ -124,7 +118,11 @@ void QuickJSRuntime::setupGlobalEnv(IScriptHost* host) {
     // console object
     JSValue console = JS_NewObject(m_ctx);
     JS_SetPropertyStr(m_ctx, console, "log", JS_NewCFunction(m_ctx, js_console_log, "log", 1));
+    JS_SetPropertyStr(m_ctx, console, "error", JS_NewCFunction(m_ctx, js_console_error, "error", 1));
     JS_SetPropertyStr(m_ctx, global_obj, "console", console);
+
+    // print function
+    JS_SetPropertyStr(m_ctx, global_obj, "print", JS_NewCFunction(m_ctx, js_console_log, "print", 1));
 
     // pipeline object
     JSValue pipeline = JS_NewObject(m_ctx);
@@ -135,7 +133,8 @@ void QuickJSRuntime::setupGlobalEnv(IScriptHost* host) {
 
     // sqlite object
     JSValue sqlite = JS_NewObject(m_ctx);
-    JS_SetPropertyStr(m_ctx, sqlite, "exec", JS_NewCFunction(m_ctx, js_sqlite_exec, "exec", 1));
+    JS_SetPropertyStr(m_ctx, sqlite, "connect", JS_NewCFunction(m_ctx, js_sqlite_connect, "connect", 1));
+    JS_SetPropertyStr(m_ctx, sqlite, "exec", JS_NewCFunction(m_ctx, js_sqlite_exec, "exec", 2));
     JS_SetPropertyStr(m_ctx, global_obj, "sqlite", sqlite);
 
     JS_FreeValue(m_ctx, global_obj);
@@ -154,6 +153,23 @@ JSValue QuickJSRuntime::js_console_log(JSContext* ctx, JSValueConst this_val, in
             }
         }
         host->log(parts.join(QStringLiteral(" ")));
+    }
+    return JS_UNDEFINED;
+}
+
+JSValue QuickJSRuntime::js_console_error(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    QuickJSRuntime* self = static_cast<QuickJSRuntime*>(JS_GetContextOpaque(ctx));
+    IScriptHost* host = self ? self->m_currentHost : nullptr;
+    if (host && argc > 0) {
+        QStringList parts;
+        for (int i = 0; i < argc; ++i) {
+            const char* str = JS_ToCString(ctx, argv[i]);
+            if (str) {
+                parts << QString::fromUtf8(str);
+                JS_FreeCString(ctx, str);
+            }
+        }
+        host->log(QStringLiteral("ERROR: ") + parts.join(QStringLiteral(" ")));
     }
     return JS_UNDEFINED;
 }
@@ -199,12 +215,38 @@ JSValue QuickJSRuntime::js_pipeline_get_temp_dir(JSContext* ctx, JSValueConst th
     return JS_UNDEFINED;
 }
 
+JSValue QuickJSRuntime::js_sqlite_connect(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+    QuickJSRuntime* self = static_cast<QuickJSRuntime*>(JS_GetContextOpaque(ctx));
+    if (self && self->m_dbBridge && argc > 0) {
+        const char* path = JS_ToCString(ctx, argv[0]);
+        if (path) {
+            bool res = self->m_dbBridge->connect(QString::fromUtf8(path));
+            JS_FreeCString(ctx, path);
+            return JS_NewBool(ctx, res);
+        }
+    }
+    return JS_FALSE;
+}
+
 JSValue QuickJSRuntime::js_sqlite_exec(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
     QuickJSRuntime* self = static_cast<QuickJSRuntime*>(JS_GetContextOpaque(ctx));
     if (self && self->m_dbBridge && argc > 0) {
         const char* sql = JS_ToCString(ctx, argv[0]);
         if (sql) {
-            QJsonValue res = self->m_dbBridge->exec(QString::fromUtf8(sql));
+            QVariantList params;
+            if (argc > 1 && JS_IsArray(argv[1])) {
+                JSValue lenVal = JS_GetPropertyStr(ctx, argv[1], "length");
+                uint32_t len = 0;
+                JS_ToUint32(ctx, &len, lenVal);
+                JS_FreeValue(ctx, lenVal);
+                for (uint32_t i = 0; i < len; i++) {
+                    JSValue element = JS_GetPropertyUint32(ctx, argv[1], i);
+                    params.append(jsToVariant(ctx, element));
+                    JS_FreeValue(ctx, element);
+                }
+            }
+
+            QJsonValue res = self->m_dbBridge->exec(QString::fromUtf8(sql), params);
             JS_FreeCString(ctx, sql);
             return qJsonToJSValue(ctx, res);
         }

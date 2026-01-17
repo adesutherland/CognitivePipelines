@@ -37,15 +37,23 @@ class ScriptDatabaseBridge : public QObject {
     Q_OBJECT
 
 public:
-    explicit ScriptDatabaseBridge(const QString& dbPath, QObject* parent = nullptr);
+    explicit ScriptDatabaseBridge(QObject* parent = nullptr);
     ~ScriptDatabaseBridge() override;
+
+    /**
+     * @brief Connects to a database at the given path.
+     * @param path The path to the SQLite database file.
+     * @return true if the path was set, false otherwise.
+     */
+    Q_INVOKABLE bool connect(const QString& path);
 
     /**
      * @brief Executes a SQL query and returns the result as a QJsonValue.
      * @param sql The SQL query to execute.
+     * @param params Optional list of parameters for binding.
      * @return A QJsonArray for SELECT queries, a QJsonObject for others, or an error object.
      */
-    Q_INVOKABLE QJsonValue exec(const QString& sql);
+    Q_INVOKABLE QJsonValue exec(const QString& sql, const QVariantList& params = {});
 
 private:
     QString m_dbPath;

@@ -139,6 +139,8 @@ TEST(QuickJSBackendTest, SqliteIntegration) {
     
     // Test basic SELECT without table
     QString script = 
+        "var dbPath = pipeline.getTempDir() + '/test_integration.db';\n"
+        "sqlite.connect(dbPath);\n"
         "var res = sqlite.exec(\"SELECT 'test' as col\");\n"
         "if (Array.isArray(res) && res.length > 0 && res[0].col === 'test') {\n"
         "  pipeline.setOutput(\"result\", \"success\");\n"
@@ -161,13 +163,17 @@ TEST(QuickJSBackendTest, SqliteFullWorkflow) {
     QString tableName = "js_test_" + QString::number(QDateTime::currentMSecsSinceEpoch());
 
     QString script = 
-        "sqlite.exec(\"CREATE TABLE " + tableName + " (val TEXT)\");\n"
-        "sqlite.exec(\"INSERT INTO " + tableName + " (val) VALUES ('hello')\");\n"
-        "var res = sqlite.exec(\"SELECT val FROM " + tableName + "\");\n"
-        "pipeline.setOutput(\"val\", res[0].val);";
+        "var dbPath = pipeline.getTempDir() + '/test_workflow.db';\n"
+        "sqlite.connect(dbPath);\n"
+        "sqlite.exec(\"CREATE TABLE " + tableName + " (val TEXT, num INTEGER)\");\n"
+        "sqlite.exec(\"INSERT INTO " + tableName + " (val, num) VALUES (?, ?)\", ['hello', 42]);\n"
+        "var res = sqlite.exec(\"SELECT val, num FROM " + tableName + " WHERE num = ?\", [42]);\n"
+        "pipeline.setOutput(\"val\", res[0].val);\n"
+        "pipeline.setOutput(\"num\", res[0].num);";
     
     bool success = runtime.execute(script, &host);
     
     EXPECT_TRUE(success);
     EXPECT_EQ(host.outputs["val"].toString(), "hello");
+    EXPECT_EQ(host.outputs["num"].toInt(), 42);
 }

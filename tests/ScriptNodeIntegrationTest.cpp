@@ -42,10 +42,11 @@ TEST_F(ScriptNodeIntegrationTest, SqliteIntegration)
     UniversalScriptConnector node;
 
     // 3. Set the script
-    // The script creates a table, inserts data and returns it.
+    // The script connects to the database, creates a table, inserts data and returns it.
     // Our QuickJSRuntime now supports top-level return by wrapping non-module scripts in an IIFE,
     // and it automatically captures the return value into the "output" field.
     QString script = 
+        "sqlite.connect(\"" + dbPath + "\");\n"
         "sqlite.exec(\"CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)\");\n"
         "sqlite.exec(\"INSERT INTO test_table (name) VALUES ('integration_check')\");\n"
         "return sqlite.exec(\"SELECT * FROM test_table\");";
@@ -136,6 +137,50 @@ TEST_F(ScriptNodeIntegrationTest, MixedTypes)
 
     ASSERT_EQ(outTokens.size(), 1);
     EXPECT_EQ(outTokens.front().data.value(QStringLiteral("out")).toString(), QStringLiteral("SingleString"));
+}
+
+TEST_F(ScriptNodeIntegrationTest, UnifiedLoggingAndStatus)
+{
+    UniversalScriptConnector node;
+    
+    // Verify Descriptor
+    NodeDescriptor desc = node.getDescriptor();
+    ASSERT_TRUE(desc.outputPins.contains(QStringLiteral("status")));
+    EXPECT_EQ(desc.outputPins.value(QStringLiteral("status")).name, QStringLiteral("Status"));
+
+    // Test print() and console.error()
+    QString script = 
+        "print('Hello Print');\n"
+        "console.error('Hello Error');\n"
+        "pipeline.setOutput('status', 'CustomStatus');";
+    
+    QJsonObject state;
+    state.insert(QStringLiteral("scriptCode"), script);
+    state.insert(QStringLiteral("engineId"), QStringLiteral("quickjs"));
+    node.loadState(state);
+
+    TokenList outTokens = node.execute({});
+    ASSERT_EQ(outTokens.size(), 1);
+    DataPacket data = outTokens.front().data;
+    
+    QString logs = data.value(QStringLiteral("logs")).toString();
+    EXPECT_TRUE(logs.contains(QStringLiteral("Hello Print")));
+    EXPECT_TRUE(logs.contains(QStringLiteral("ERROR: Hello Error")));
+    
+    // Test custom status
+    EXPECT_EQ(data.value(QStringLiteral("status")).toString(), QStringLiteral("CustomStatus"));
+
+    // Test default OK status
+    state.insert(QStringLiteral("scriptCode"), QStringLiteral("console.log('done');"));
+    node.loadState(state);
+    outTokens = node.execute({});
+    EXPECT_EQ(outTokens.front().data.value(QStringLiteral("status")).toString(), QStringLiteral("OK"));
+
+    // Test default FAIL status
+    state.insert(QStringLiteral("scriptCode"), QStringLiteral("throw new Error('boom');"));
+    node.loadState(state);
+    outTokens = node.execute({});
+    EXPECT_EQ(outTokens.front().data.value(QStringLiteral("status")).toString(), QStringLiteral("FAIL"));
 }
 
 TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)

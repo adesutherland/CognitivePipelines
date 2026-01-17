@@ -42,6 +42,13 @@ NodeDescriptor UniversalScriptConnector::getDescriptor() const
     out.type = QStringLiteral("text");
     desc.outputPins.insert(out.id, out);
 
+    PinDefinition status;
+    status.direction = PinDirection::Output;
+    status.id = QStringLiteral("status");
+    status.name = QStringLiteral("Status");
+    status.type = QStringLiteral("text");
+    desc.outputPins.insert(status.id, status);
+
     return desc;
 }
 
@@ -91,6 +98,11 @@ TokenList UniversalScriptConnector::execute(const TokenList& incomingTokens)
 
     if (!success) {
         CP_WARN << "Script execution failed";
+    }
+
+    // Handle Status
+    if (!output.contains(QStringLiteral("status"))) {
+        output.insert(QStringLiteral("status"), success ? QStringLiteral("OK") : QStringLiteral("FAIL"));
     }
 
     // Step 5: Inject summary into logs for visibility in the Stage Output panel

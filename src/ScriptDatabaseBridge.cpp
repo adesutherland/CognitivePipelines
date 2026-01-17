@@ -33,8 +33,8 @@
 #include <QVariant>
 #include "Logger.h"
 
-ScriptDatabaseBridge::ScriptDatabaseBridge(const QString& dbPath, QObject* parent)
-    : QObject(parent), m_dbPath(dbPath)
+ScriptDatabaseBridge::ScriptDatabaseBridge(QObject* parent)
+    : QObject(parent)
 {
 }
 
@@ -42,11 +42,17 @@ ScriptDatabaseBridge::~ScriptDatabaseBridge()
 {
 }
 
-QJsonValue ScriptDatabaseBridge::exec(const QString& sql)
+bool ScriptDatabaseBridge::connect(const QString& path)
+{
+    m_dbPath = path;
+    return true;
+}
+
+QJsonValue ScriptDatabaseBridge::exec(const QString& sql, const QVariantList& params)
 {
     if (m_dbPath.isEmpty()) {
         QJsonObject errorObj;
-        errorObj.insert(QStringLiteral("error"), QStringLiteral("Database path is empty"));
+        errorObj.insert(QStringLiteral("error"), QStringLiteral("Database not connected. Call db.connect(path) first."));
         return errorObj;
     }
 
@@ -68,7 +74,19 @@ QJsonValue ScriptDatabaseBridge::exec(const QString& sql)
                 result = errorObj;
             } else {
                 QSqlQuery query(db);
-                if (!query.exec(sql)) {
+                bool ok = false;
+                if (!params.isEmpty()) {
+                    if (query.prepare(sql)) {
+                        for (const QVariant& param : params) {
+                            query.addBindValue(param);
+                        }
+                        ok = query.exec();
+                    }
+                } else {
+                    ok = query.exec(sql);
+                }
+
+                if (!ok) {
                     QJsonObject errorObj;
                     errorObj.insert(QStringLiteral("error"), query.lastError().text());
                     result = errorObj;

@@ -34,8 +34,8 @@ TEST(ScriptDatabaseBridgeTest, FullWorkflow) {
     QTemporaryDir dir;
     ASSERT_TRUE(dir.isValid());
     QString dbPath = dir.path() + "/test.db";
-
-    ScriptDatabaseBridge bridge(dbPath);
+    ScriptDatabaseBridge bridge;
+    ASSERT_TRUE(bridge.connect(dbPath));
 
     // 1. Create Table
     QJsonValue createResult = bridge.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)");
@@ -61,7 +61,14 @@ TEST(ScriptDatabaseBridgeTest, FullWorkflow) {
     EXPECT_EQ(rows[1].toObject()["name"].toString(), "Alice");
     EXPECT_EQ(rows[1].toObject()["age"].toInt(), 30);
 
-    // 4. Invalid SQL
+    // 4. Parameterized Query
+    QJsonValue paramResult = bridge.exec("SELECT name FROM users WHERE age > ?", {28});
+    ASSERT_TRUE(paramResult.isArray());
+    rows = paramResult.toArray();
+    ASSERT_EQ(rows.size(), 1);
+    EXPECT_EQ(rows[0].toObject()["name"].toString(), "Alice");
+
+    // 5. Invalid SQL
     QJsonValue errorResult = bridge.exec("SELECT * FROM non_existent_table");
     ASSERT_TRUE(errorResult.isObject());
     EXPECT_TRUE(errorResult.toObject().contains("error"));
@@ -72,7 +79,8 @@ TEST(ScriptDatabaseBridgeTest, TransactionRollback) {
     ASSERT_TRUE(dir.isValid());
     QString dbPath = dir.path() + "/test_rollback.db";
 
-    ScriptDatabaseBridge bridge(dbPath);
+    ScriptDatabaseBridge bridge;
+    ASSERT_TRUE(bridge.connect(dbPath));
     bridge.exec("CREATE TABLE items (name TEXT UNIQUE)");
     bridge.exec("INSERT INTO items (name) VALUES ('item1')");
 
@@ -83,4 +91,11 @@ TEST(ScriptDatabaseBridgeTest, TransactionRollback) {
 
     QJsonValue selectResult = bridge.exec("SELECT count(*) as count FROM items");
     EXPECT_EQ(selectResult.toArray()[0].toObject()["count"].toInt(), 1);
+}
+
+TEST(ScriptDatabaseBridgeTest, NotConnectedError) {
+    ScriptDatabaseBridge bridge;
+    QJsonValue result = bridge.exec("SELECT 1");
+    ASSERT_TRUE(result.isObject());
+    EXPECT_EQ(result.toObject()["error"].toString(), "Database not connected. Call db.connect(path) first.");
 }
