@@ -408,7 +408,7 @@ TEST(UniversalLLMNodeTest, MissingImageFileError)
     node->loadState(state);
 
     // Prepare input with a non-existent attachment file path
-    const QString nonExistentPath = QStringLiteral("/tmp/this_file_does_not_exist_12345.png");
+    const QString nonExistentPath = QStringLiteral("this_file_does_not_exist_12345.png");
     DataPacket inputs;
     inputs.insert(QStringLiteral("prompt"), QStringLiteral("What color is this image?"));
     inputs.insert(QString::fromLatin1(UniversalLLMNode::kInputAttachmentId), nonExistentPath);

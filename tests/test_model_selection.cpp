@@ -14,6 +14,7 @@
 #include <QFuture>
 #include <QtConcurrent>
 #include <QByteArray>
+#include <QDir>
 
 #include "UniversalLLMNode.h"
 #include "core/LLMProviderRegistry.h"
@@ -127,7 +128,7 @@ public:
         const QString& /*style*/,
         const QString& /*targetDir*/ = QString()
     ) override {
-        return QtConcurrent::run([](){ return QString("/tmp/dummy.png"); });
+        return QtConcurrent::run([](){ return QDir::tempPath() + QStringLiteral("/dummy.png"); });
     }
 
     QString captured_model;

@@ -29,6 +29,8 @@
 #include "Logger.h"
 #include <QtConcurrent>
 #include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include <QMimeDatabase>
 #include <QMimeType>
 #include <QFileInfo>
@@ -134,19 +136,43 @@ QWidget* UniversalLLMNode::createConfigurationWidget(QWidget* parent)
 
 TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
 {
-    // Merge incoming tokens into a single DataPacket to preserve the prior
-    // Execute(DataPacket) contract.
-    DataPacket inputs;
+    QString systemInput;
+    QString promptInput;
+    QStringList attachmentPaths;
+
     for (const auto& token : incomingTokens) {
         for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
-            inputs.insert(it.key(), it.value());
+            const QString& key = it.key();
+            const QVariant& value = it.value();
+
+            if (key == QString::fromLatin1(kInputAttachmentId)) {
+                if (value.userType() == QMetaType::QStringList) {
+                    attachmentPaths.append(value.toStringList());
+                } else {
+                    QString str = value.toString().trimmed();
+                    if (str.startsWith(QLatin1Char('[')) && str.endsWith(QLatin1Char(']'))) {
+                        QJsonDocument doc = QJsonDocument::fromJson(str.toUtf8());
+                        if (doc.isArray()) {
+                            QJsonArray arr = doc.array();
+                            for (const auto& item : arr) {
+                                if (item.isString()) {
+                                    attachmentPaths.append(item.toString());
+                                }
+                            }
+                        } else if (!str.isEmpty()) {
+                            attachmentPaths.append(str);
+                        }
+                    } else if (!str.isEmpty()) {
+                        attachmentPaths.append(str);
+                    }
+                }
+            } else if (key == QString::fromLatin1(kInputSystemId)) {
+                systemInput = value.toString();
+            } else if (key == QString::fromLatin1(kInputPromptId)) {
+                promptInput = value.toString();
+            }
         }
     }
-
-    // Retrieve input pins (may override defaults from properties)
-    const QString systemInput = inputs.value(QString::fromLatin1(kInputSystemId)).toString();
-    const QString promptInput = inputs.value(QString::fromLatin1(kInputPromptId)).toString();
-    const QString attachmentPath = inputs.value(QString::fromLatin1(kInputAttachmentId)).toString();
 
     // Copy state for use during this execution
     const QString providerId = m_providerId;
@@ -251,18 +277,19 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
                        << "', last='" << vLastChar << "')";
     // Prepare LLMMessage with attachments if provided
     LLMMessage message;
-    if (!attachmentPath.trimmed().isEmpty()) {
-        QFile file(attachmentPath);
+    QMimeDatabase mimeDb;
+    for (const QString& path : attachmentPaths) {
+        if (path.trimmed().isEmpty()) continue;
+        QFile file(path);
         if (file.open(QIODevice::ReadOnly)) {
             LLMAttachment attachment;
             attachment.data = file.readAll();
             file.close();
 
-            QMimeDatabase db;
-            attachment.mimeType = db.mimeTypeForFile(attachmentPath).name();
+            attachment.mimeType = mimeDb.mimeTypeForFile(path).name();
             message.attachments.append(attachment);
         } else {
-            const QString err = QStringLiteral("ERROR: Failed to open attachment file: %1").arg(attachmentPath);
+            const QString err = QStringLiteral("ERROR: Failed to open attachment file: %1").arg(path);
             CP_WARN << "UniversalLLMNode:" << err;
             output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
             output.insert(QStringLiteral("__error"), err);

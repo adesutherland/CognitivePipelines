@@ -2,6 +2,7 @@
 #include <QString>
 #include <QVariant>
 #include <QDateTime>
+#include <QDir>
 #include <map>
 #include <vector>
 #include "IScriptHost.h"
@@ -29,7 +30,7 @@ public:
     }
 
     QString getTempDir() const override {
-        return "/tmp";
+        return QDir::tempPath();
     }
 
     std::vector<QString> logs;
