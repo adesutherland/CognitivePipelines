@@ -9,7 +9,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 # Project configuration
-project(CognitivePipelines VERSION 0.12.14 LANGUAGES C CXX)
+project(CognitivePipelines VERSION 0.12.15 LANGUAGES C CXX)
 
 # Release build switch: control code signing identity for macOS
 option(RELEASE_BUILD "Enable full codesigning for release" OFF)
@@ -263,6 +263,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/LoopUntilNode.h
     ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
     ${SRC_DIR}/LoopUntilPropertiesWidget.h
+    ${SRC_DIR}/RetryLoopNode.cpp
+    ${SRC_DIR}/RetryLoopNode.h
+    ${SRC_DIR}/RetryLoopPropertiesWidget.cpp
+    ${SRC_DIR}/RetryLoopPropertiesWidget.h
     ${SRC_DIR}/UniversalScriptConnector.cpp
     ${SRC_DIR}/UniversalScriptConnector.h
     ${SRC_DIR}/ScriptPropertiesWidget.cpp
@@ -517,6 +521,11 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/LoopUntilNode.h
             ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
             ${SRC_DIR}/LoopUntilPropertiesWidget.h
+            ${SRC_DIR}/RetryLoopNode.cpp
+            ${SRC_DIR}/RetryLoopNode.h
+            ${SRC_DIR}/RetryLoopPropertiesWidget.cpp
+            ${SRC_DIR}/RetryLoopPropertiesWidget.h
+            tests/test_retry_loop_node.cpp
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             ${SRC_DIR}/UniversalLLMNode.cpp
@@ -582,6 +591,7 @@ if(ENABLE_TESTING)
             ${INCLUDE_DIR}/CommonDataTypes.h
             # Test sources and required implementations
             tests/test_integration.cpp
+            tests/test_retry_loop_integration.cpp
             tests/test_matrix.cpp
             tests/integration/MermaidRenderTest.cpp
             ${SRC_DIR}/Logger.cpp
@@ -711,6 +721,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/LoopUntilNode.h
             ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
             ${SRC_DIR}/LoopUntilPropertiesWidget.h
+            ${SRC_DIR}/RetryLoopNode.cpp
+            ${SRC_DIR}/RetryLoopNode.h
+            ${SRC_DIR}/RetryLoopPropertiesWidget.cpp
+            ${SRC_DIR}/RetryLoopPropertiesWidget.h
             ${SRC_DIR}/ExecutionAwarePainters.cpp
             ${SRC_DIR}/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>

@@ -42,6 +42,7 @@
 #include "ConditionalRouterNode.h"
 #include "LoopNode.h"
 #include "LoopUntilNode.h"
+#include "RetryLoopNode.h"
 #include "UniversalScriptConnector.h"
 #include "QuickJSRuntime.h"
 #include "ExecutionIdUtils.h"
@@ -162,6 +163,12 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // Register LoopUntilNode under the "Control Flow" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto tool = std::make_shared<LoopUntilNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Control Flow"));
+
+    // Register RetryLoopNode under the "Control Flow" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<RetryLoopNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Control Flow"));
 

@@ -57,6 +57,12 @@ public:
 
     double temperature() const { return m_temperature; }
 
+    bool getEnableFallback() const;
+    void setEnableFallback(bool enable);
+
+    QString getFallbackString() const;
+    void setFallbackString(const QString& fallback);
+
     // Constants for pin IDs
     static constexpr const char* kInputSystemId = "system";
     static constexpr const char* kInputPromptId = "prompt";
@@ -74,6 +80,8 @@ public slots:
     void onUserPromptChanged(const QString& text);
     void onTemperatureChanged(double value);
     void onMaxTokensChanged(int value);
+    void onEnableFallbackChanged(bool enabled);
+    void onFallbackStringChanged(const QString& fallback);
 
 private:
     // Helper exposed for this class only; implementation lives in string_utils.h
@@ -85,6 +93,8 @@ private:
     QString m_userPrompt;      // Default user prompt from properties
     double m_temperature = 0.7;
     int m_maxTokens = 1024;
+    bool m_enableFallback = false;
+    QString m_fallbackString = QStringLiteral("FAIL");
     NodeDescriptor m_descriptor;
     ModelCapsTypes::ModelCaps m_caps;
 };

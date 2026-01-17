@@ -28,6 +28,7 @@
 #include <QWidget>
 #include <QString>
 #include <QVariant>
+#include <deque>
 
 #include "IToolConnector.h"
 #include "CommonDataTypes.h"
@@ -89,17 +90,13 @@ private:
 private:
     int m_maxIterations {10};
     int m_iterationCount {0};
+    bool m_isProcessing {false};
+    std::deque<QVariant> m_taskQueue;
+    QVariant m_lastIngestedStart;
+    bool m_hasLastIngestedStart {false};
+    bool m_hasLastEvaluatedCondition {false};
+
     // Event-driven latch state (persisted): feedback payload waiting for a condition trigger
     QString m_pendingFeedback;
     bool    m_hasPendingFeedback {false};
-    // Gating flag to treat Start only on the first iteration of a run
-    // Not persisted: set to true on load and after emitting a final result
-    bool    m_isFirstIteration {true};
-    // Runtime-only flag: true after we've evaluated at least one condition in this run
-    // Used to gate feedback-only scheduling (prevents premature ticks)
-    bool    m_hasLastEvaluatedCondition {false};
-    // Track the last Start value we processed to detect actual Start changes
-    // (distinct from m_pendingFeedback which gets updated by feedback)
-    QString m_lastStartValue;
-    bool    m_hasLastStartValue {false};
 };

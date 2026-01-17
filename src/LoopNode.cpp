@@ -79,41 +79,42 @@ QWidget* LoopNode::createConfigurationWidget(QWidget* parent)
 
 TokenList LoopNode::execute(const TokenList& incomingTokens)
 {
-    // Merge tokens into a single DataPacket
-    DataPacket inputs;
-    for (const auto& t : incomingTokens) {
-        for (auto it = t.data.cbegin(); it != t.data.cend(); ++it) {
-            inputs.insert(it.key(), it.value());
+    TokenList outputs;
+    const QString listKey = QString::fromLatin1(kInputListId);
+    int totalItems = 0;
+
+    for (const auto& token : incomingTokens) {
+        if (!token.data.contains(listKey)) continue;
+
+        const QString raw = token.data.value(listKey).toString();
+        const QStringList items = parseItems(raw);
+        totalItems += items.size();
+
+        // Body tokens for this input token
+        for (const QString& item : items) {
+            DataPacket out;
+            out.insert(QStringLiteral("text"), item);
+            out.insert(QString::fromLatin1(kOutputBodyId), item);
+
+            ExecutionToken tok;
+            tok.data = out;
+            outputs.push_back(std::move(tok));
+        }
+
+        // Passthrough token for this input token
+        {
+            DataPacket out;
+            out.insert(QStringLiteral("text"), raw);
+            out.insert(QString::fromLatin1(kOutputPassthroughId), raw);
+            ExecutionToken tok;
+            tok.data = out;
+            outputs.push_back(std::move(tok));
         }
     }
 
-    const QString listKey = QString::fromLatin1(kInputListId);
-    const QString raw = inputs.value(listKey).toString();
-
-    const QStringList items = parseItems(raw);
-    m_lastItemCount = items.size();
-    emit lastItemCountChanged(m_lastItemCount);
-
-    TokenList outputs;
-    // Body tokens
-    for (const QString& item : items) {
-        DataPacket out;
-        out.insert(QStringLiteral("text"), item);
-        out.insert(QString::fromLatin1(kOutputBodyId), item);
-
-        ExecutionToken tok;
-        tok.data = out;
-        outputs.push_back(std::move(tok));
-    }
-
-    // Passthrough token: echo original input string for data continuity
-    {
-        DataPacket out;
-        out.insert(QStringLiteral("text"), raw);
-        out.insert(QString::fromLatin1(kOutputPassthroughId), raw);
-        ExecutionToken tok;
-        tok.data = out;
-        outputs.push_back(std::move(tok));
+    if (m_lastItemCount != totalItems) {
+        m_lastItemCount = totalItems;
+        emit lastItemCountChanged(m_lastItemCount);
     }
 
     return outputs;

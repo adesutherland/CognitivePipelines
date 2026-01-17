@@ -231,6 +231,9 @@ int run_provider_matrix_probe(int argc, char** argv);
 // Forward declaration from tests/integration/MermaidRenderTest.cpp
 int runMermaidRenderTest(int argc, char** argv);
 
+// Forward declaration from tests/test_retry_loop_integration.cpp
+int runRetryLoopIntegrationTest(int argc, char** argv);
+
 // Custom main to ensure QApplication is created and logging is captured in CI
 int main(int argc, char** argv)
 {
@@ -246,6 +249,9 @@ int main(int argc, char** argv)
 
     IntegrationTests tc;
     exitCode |= QTest::qExec(&tc, argc, argv);
+
+    // Run Retry Loop Integration Test
+    exitCode |= runRetryLoopIntegrationTest(argc, argv);
 
     // Run Mermaid Render Test
     exitCode |= runMermaidRenderTest(argc, argv);

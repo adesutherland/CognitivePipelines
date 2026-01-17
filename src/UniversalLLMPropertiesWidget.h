@@ -26,6 +26,8 @@
 #include <QWidget>
 #include <QFutureWatcher>
 #include <QStringList>
+#include <QCheckBox>
+#include <QLineEdit>
 
 class QComboBox;
 class QTextEdit;
@@ -54,6 +56,8 @@ public:
     void setUserPrompt(const QString& text);
     void setTemperature(double value);
     void setMaxTokens(int value);
+    void setEnableFallback(bool enable);
+    void setFallbackString(const QString& fallback);
 
     // Getters for reading current state
     QString provider() const;
@@ -62,6 +66,8 @@ public:
     QString userPrompt() const;
     double temperature() const;
     int maxTokens() const;
+    bool enableFallback() const;
+    QString fallbackString() const;
 
 signals:
     void providerChanged(const QString& providerId);
@@ -70,6 +76,8 @@ signals:
     void userPromptChanged(const QString& text);
     void temperatureChanged(double val);
     void maxTokensChanged(int val);
+    void enableFallbackChanged(bool enabled);
+    void fallbackStringChanged(const QString& fallback);
 
 private slots:
     void onProviderChanged(int index);
@@ -83,6 +91,8 @@ private:
     QTextEdit* m_userPromptEdit {nullptr};
     QDoubleSpinBox* m_temperatureSpinBox {nullptr};
     QSpinBox* m_maxTokensSpinBox {nullptr};
+    QCheckBox* m_enableFallbackCheck {nullptr};
+    QLineEdit* m_fallbackStringEdit {nullptr};
 
     QFutureWatcher<QStringList> m_modelFetcher;
     QString m_pendingModelId;

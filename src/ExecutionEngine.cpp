@@ -147,6 +147,24 @@ void ExecutionEngine::run()
     runPipeline({});
 }
 
+void ExecutionEngine::stop()
+{
+    {
+        QMutexLocker locker(&m_queueMutex);
+        m_currentRunId = QUuid::createUuid();
+        m_dispatchQueue.clear();
+        m_perNodeQueues.clear();
+        m_nodeInFlight.clear();
+    }
+    
+    if (m_throttler) m_throttler->stop();
+    if (m_finalizeTimer) m_finalizeTimer->stop();
+
+    emit nodeLog(QStringLiteral("Pipeline execution stopped by user."));
+    emit pipelineStopped();
+    emit executionFinished();
+}
+
 void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
 {
     if (!_graphModel) {
@@ -403,6 +421,20 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
             }
 
             outputTokens = connector->execute(effectiveInputs);
+
+            // Propagate forceExecution flag from any input token to all output tokens
+            bool forceExecution = false;
+            for (const auto& inTok : task.inputs) {
+                if (inTok.forceExecution) {
+                    forceExecution = true;
+                    break;
+                }
+            }
+            if (forceExecution) {
+                for (auto& outTok : outputTokens) {
+                    outTok.forceExecution = true;
+                }
+            }
         } catch (const std::exception& ex) {
             if (task.runId != m_currentRunId) {
                 if (ragIndexer) QObject::disconnect(progressConn);
@@ -713,7 +745,7 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
             {
                 QMutexLocker ql(&m_queueMutex);
                 const QByteArray last = m_lastInputSignature.value(targetUuid);
-                if (!last.isEmpty() && last == signature) {
+                if (!tok.forceExecution && !last.isEmpty() && last == signature) {
                     continue; // same inputs as last execution for this node
                 }
                 m_lastInputSignature.insert(targetUuid, signature);
@@ -726,6 +758,7 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
             t.sourceNodeId = nodeUuid;
             t.connectionId = connectionUuidForId(e.cid);
             t.triggeringPinId = e.targetPinId;  // The pin that received a fresh value
+            t.forceExecution = tok.forceExecution; // Propagate forced execution
             t.data = inputPayload;
             snap.push_back(std::move(t));
 

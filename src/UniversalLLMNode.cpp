@@ -94,6 +94,8 @@ QWidget* UniversalLLMNode::createConfigurationWidget(QWidget* parent)
     widget->setUserPrompt(m_userPrompt);
     widget->setTemperature(m_temperature);
     widget->setMaxTokens(m_maxTokens);
+    widget->setEnableFallback(m_enableFallback);
+    widget->setFallbackString(m_fallbackString);
 
     // Connect widget signals to node slots
     connect(widget, &UniversalLLMPropertiesWidget::providerChanged,
@@ -118,6 +120,10 @@ QWidget* UniversalLLMNode::createConfigurationWidget(QWidget* parent)
             this, &UniversalLLMNode::onTemperatureChanged);
     connect(widget, &UniversalLLMPropertiesWidget::maxTokensChanged,
             this, &UniversalLLMNode::onMaxTokensChanged);
+    connect(widget, &UniversalLLMPropertiesWidget::enableFallbackChanged,
+            this, &UniversalLLMNode::onEnableFallbackChanged);
+    connect(widget, &UniversalLLMPropertiesWidget::fallbackStringChanged,
+            this, &UniversalLLMNode::onFallbackStringChanged);
 
     return widget;
 }
@@ -246,23 +252,39 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     } catch (const std::exception& e) {
         const QString err = QStringLiteral("ERROR: Exception during backend call: %1").arg(QString::fromUtf8(e.what()));
         CP_WARN << "UniversalLLMNode:" << err;
-        output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
-        output.insert(QStringLiteral("__error"), err);
+        if (m_enableFallback) {
+            CP_WARN << "UniversalLLMNode: Exception occurred. Soft fallback enabled. Outputting fallback string: " << m_fallbackString;
+            output.insert(QString::fromLatin1(kOutputResponseId), m_fallbackString);
+        } else {
+            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+            output.insert(QStringLiteral("__error"), err);
+        }
 
         ExecutionToken token; token.data = output; return TokenList{token};
     } catch (...) {
         const QString err = QStringLiteral("ERROR: Unknown exception during backend call.");
         CP_WARN << "UniversalLLMNode:" << err;
-        output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
-        output.insert(QStringLiteral("__error"), err);
+        if (m_enableFallback) {
+            CP_WARN << "UniversalLLMNode: Unknown exception occurred. Soft fallback enabled. Outputting fallback string: " << m_fallbackString;
+            output.insert(QString::fromLatin1(kOutputResponseId), m_fallbackString);
+        } else {
+            output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
+            output.insert(QStringLiteral("__error"), err);
+        }
 
         ExecutionToken token; token.data = output; return TokenList{token};
     }
 
     // Handle error case
     if (result.hasError) {
-        output.insert(QString::fromLatin1(kOutputResponseId), result.content);
-        output.insert(QStringLiteral("__error"), result.errorMsg);
+        if (m_enableFallback) {
+            CP_WARN << "UniversalLLMNode: API error occurred. Soft fallback enabled. Outputting fallback string: " << m_fallbackString;
+            CP_WARN << "  Original error: " << result.errorMsg;
+            output.insert(QString::fromLatin1(kOutputResponseId), m_fallbackString);
+        } else {
+            output.insert(QString::fromLatin1(kOutputResponseId), result.content);
+            output.insert(QStringLiteral("__error"), result.errorMsg);
+        }
         // Still include raw response for debugging
         output.insert(QStringLiteral("_raw_response"), result.rawResponse);
 
@@ -293,6 +315,8 @@ QJsonObject UniversalLLMNode::saveState() const
     obj[QStringLiteral("userPrompt")] = m_userPrompt;
     obj[QStringLiteral("temperature")] = m_temperature;
     obj[QStringLiteral("maxTokens")] = m_maxTokens;
+    obj[QStringLiteral("enableFallback")] = m_enableFallback;
+    obj[QStringLiteral("fallbackString")] = m_fallbackString;
     return obj;
 }
 
@@ -313,6 +337,8 @@ void UniversalLLMNode::loadState(const QJsonObject& data)
     m_userPrompt = data.value(QStringLiteral("userPrompt")).toString();
     m_temperature = data.value(QStringLiteral("temperature")).toDouble(0.7);
     m_maxTokens = data.value(QStringLiteral("maxTokens")).toInt(1024);
+    m_enableFallback = data.value(QStringLiteral("enableFallback")).toBool(false);
+    m_fallbackString = data.value(QStringLiteral("fallbackString")).toString(QStringLiteral("FAIL"));
 }
 
 void UniversalLLMNode::updateCapabilities(const ModelCapsTypes::ModelCaps& caps)
@@ -398,4 +424,34 @@ void UniversalLLMNode::onTemperatureChanged(double value)
 void UniversalLLMNode::onMaxTokensChanged(int value)
 {
     m_maxTokens = value;
+}
+
+void UniversalLLMNode::onEnableFallbackChanged(bool enabled)
+{
+    m_enableFallback = enabled;
+}
+
+void UniversalLLMNode::onFallbackStringChanged(const QString& fallback)
+{
+    m_fallbackString = fallback;
+}
+
+bool UniversalLLMNode::getEnableFallback() const
+{
+    return m_enableFallback;
+}
+
+void UniversalLLMNode::setEnableFallback(bool enable)
+{
+    m_enableFallback = enable;
+}
+
+QString UniversalLLMNode::getFallbackString() const
+{
+    return m_fallbackString;
+}
+
+void UniversalLLMNode::setFallbackString(const QString& fallback)
+{
+    m_fallbackString = fallback;
 }

@@ -68,6 +68,7 @@ signals:
 
 public slots:
     void run();
+    void stop();
     // Run the pipeline starting from specific entry point node UUIDs. If the list is empty,
     // the engine discovers all source nodes (no incoming connections) and schedules them.
     void runPipeline(const QList<QUuid>& specificEntryPoints = {});
@@ -130,6 +131,7 @@ signals:
     // Global execution lifecycle
     void executionStarted();
     void executionFinished();
+    void pipelineStopped();
 
 private slots:
     void onThrottleTimeout();

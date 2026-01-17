@@ -17,6 +17,8 @@
 #include "test_app.h"
 #include "UniversalLLMNode.h"
 #include "core/LLMProviderRegistry.h"
+#include "backends/ILLMBackend.h"
+#include <QtConcurrent>
 
 // Minimal app helper in case QObject machinery needs it
 static QApplication* ensureApp()
@@ -399,4 +401,81 @@ TEST(UniversalLLMNodeTest, MissingImageFileError)
     EXPECT_FALSE(response.isEmpty()) << "Response should contain error information";
 
     delete node;
+}
+
+class MockErrorBackend : public ILLMBackend {
+public:
+    QString id() const override { return QStringLiteral("fallback_test_provider"); }
+    QString name() const override { return QStringLiteral("Mock Error Backend"); }
+    QStringList availableModels() const override { return {QStringLiteral("model1")}; }
+    QStringList availableEmbeddingModels() const override { return {}; }
+    QFuture<QStringList> fetchModelList() override {
+        return QtConcurrent::run([](){ return QStringList{QStringLiteral("model1")}; });
+    }
+    LLMResult sendPrompt(const QString&, const QString&, double, int, const QString&, const QString&, const QString&) override {
+        LLMResult res;
+        res.hasError = true;
+        res.errorMsg = QStringLiteral("Simulated API Error");
+        return res;
+    }
+    EmbeddingResult getEmbedding(const QString&, const QString&, const QString&) override { return {}; }
+    QFuture<QString> generateImage(const QString&, const QString&, const QString&, const QString&, const QString&, const QString&) override { 
+        return QFuture<QString>(); 
+    }
+};
+
+TEST(UniversalLLMNodeTest, FallbackMechanism) {
+    // Register mock backend
+    auto mockBackend = std::make_shared<MockErrorBackend>();
+    LLMProviderRegistry::instance().registerBackend(mockBackend);
+    LLMProviderRegistry::instance().setAnthropicKey(QStringLiteral("dummy_key"));
+
+    UniversalLLMNode node;
+    // We need to use "anthropic" as provider id to bypass getCredential check easily
+    class AnthropicMockErrorBackend : public MockErrorBackend {
+    public:
+        QString id() const override { return QStringLiteral("anthropic"); }
+    };
+    auto anthropicMock = std::make_shared<AnthropicMockErrorBackend>();
+    LLMProviderRegistry::instance().registerBackend(anthropicMock);
+
+    node.onProviderChanged(QStringLiteral("anthropic"));
+    node.onModelChanged(QStringLiteral("model1"));
+    node.setEnableFallback(true);
+    node.setFallbackString(QStringLiteral("FALLBACK_VALUE"));
+
+    TokenList inputs;
+    ExecutionToken token;
+    token.data.insert(QStringLiteral("prompt"), QStringLiteral("Hello"));
+    inputs.push_back(token);
+
+    TokenList outputs = node.execute(inputs);
+    ASSERT_EQ(outputs.size(), 1);
+    
+    QVariant response = outputs.front().data.value(QStringLiteral("response"));
+    EXPECT_EQ(response.toString(), QStringLiteral("FALLBACK_VALUE"));
+    
+    // Check that __error is NOT present
+    EXPECT_FALSE(outputs.front().data.contains(QStringLiteral("__error")));
+    
+    // Test with fallback DISABLED
+    node.setEnableFallback(false);
+    outputs = node.execute(inputs);
+    ASSERT_EQ(outputs.size(), 1);
+    EXPECT_TRUE(outputs.front().data.contains(QStringLiteral("__error")));
+    EXPECT_EQ(outputs.front().data.value(QStringLiteral("__error")).toString(), QStringLiteral("Simulated API Error"));
+}
+
+TEST(UniversalLLMNodeTest, FallbackSaveLoadPersistence) {
+    UniversalLLMNode node;
+    node.setEnableFallback(true);
+    node.setFallbackString(QStringLiteral("CUSTOM_FAIL"));
+    
+    QJsonObject state = node.saveState();
+    
+    UniversalLLMNode node2;
+    node2.loadState(state);
+    
+    EXPECT_TRUE(node2.getEnableFallback());
+    EXPECT_EQ(node2.getFallbackString(), QStringLiteral("CUSTOM_FAIL"));
 }

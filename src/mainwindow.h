@@ -85,6 +85,7 @@ private slots:
     void onSaveOutput();
     void onDeleteSelected();
     void onRunPipeline();
+    void onStopPipeline();
 
     // Selection handling
     void onNodeSelected(QtNodes::NodeId nodeId);
@@ -96,6 +97,7 @@ private slots:
 private:
     void createActions();
     void createMenus();
+    void createToolBar();
     void createStatusBar();
     void populateRunMenu();
 
@@ -109,6 +111,7 @@ private:
     QAction* aboutAction {nullptr};
 
     QAction* runAction_ {nullptr};
+    QAction* stopAction_ {nullptr};
     QAction* saveOutputAction_ {nullptr};
     QAction* showDebugLogAction_ {nullptr};
     QAction* enableDebugLoggingAction_ {nullptr};

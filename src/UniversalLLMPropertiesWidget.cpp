@@ -32,6 +32,10 @@
 #include <QTextEdit>
 #include <QDoubleSpinBox>
 #include <QSpinBox>
+#include <QCheckBox>
+#include <QLineEdit>
+#include <QGroupBox>
+#include <QFormLayout>
 #include <QSignalBlocker>
 #include "Logger.h"
 #include "logging_categories.h"
@@ -111,6 +115,23 @@ UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
     m_maxTokensSpinBox->setValue(1024);
     layout->addWidget(m_maxTokensSpinBox);
 
+    // Resilience & Fallback Group
+    auto* fallbackGroup = new QGroupBox(tr("Resilience & Fallback"), this);
+    auto* fallbackLayout = new QFormLayout(fallbackGroup);
+    fallbackLayout->setContentsMargins(4, 8, 4, 4);
+    fallbackLayout->setSpacing(8);
+
+    m_enableFallbackCheck = new QCheckBox(tr("Enable Soft Fallback"), this);
+    fallbackLayout->addRow(m_enableFallbackCheck);
+
+    m_fallbackStringEdit = new QLineEdit(this);
+    m_fallbackStringEdit->setPlaceholderText(tr("Fallback string (e.g. FAIL)"));
+    m_fallbackStringEdit->setText(QStringLiteral("FAIL"));
+    m_fallbackStringEdit->setEnabled(false); // Default disabled
+    fallbackLayout->addRow(tr("Fallback Output String:"), m_fallbackStringEdit);
+
+    layout->addWidget(fallbackGroup);
+
     layout->addStretch();
 
     // Connect signals
@@ -137,6 +158,13 @@ UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
 
     connect(m_maxTokensSpinBox, qOverload<int>(&QSpinBox::valueChanged),
             this, &UniversalLLMPropertiesWidget::maxTokensChanged);
+
+    connect(m_enableFallbackCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        m_fallbackStringEdit->setEnabled(checked);
+        emit enableFallbackChanged(checked);
+    });
+
+    connect(m_fallbackStringEdit, &QLineEdit::textChanged, this, &UniversalLLMPropertiesWidget::fallbackStringChanged);
 
     // Initialize model list for the first provider
     if (m_providerCombo->count() > 0) {
@@ -343,6 +371,25 @@ void UniversalLLMPropertiesWidget::setMaxTokens(int value)
     m_maxTokensSpinBox->setValue(value);
 }
 
+void UniversalLLMPropertiesWidget::setEnableFallback(bool enable)
+{
+    if (!m_enableFallbackCheck) return;
+    
+    const QSignalBlocker blocker(m_enableFallbackCheck);
+    m_enableFallbackCheck->setChecked(enable);
+    if (m_fallbackStringEdit) {
+        m_fallbackStringEdit->setEnabled(enable);
+    }
+}
+
+void UniversalLLMPropertiesWidget::setFallbackString(const QString& fallback)
+{
+    if (!m_fallbackStringEdit) return;
+    
+    const QSignalBlocker blocker(m_fallbackStringEdit);
+    m_fallbackStringEdit->setText(fallback);
+}
+
 QString UniversalLLMPropertiesWidget::provider() const
 {
     return m_providerCombo ? m_providerCombo->currentData().toString() : QString();
@@ -371,4 +418,14 @@ double UniversalLLMPropertiesWidget::temperature() const
 int UniversalLLMPropertiesWidget::maxTokens() const
 {
     return m_maxTokensSpinBox ? m_maxTokensSpinBox->value() : 1024;
+}
+
+bool UniversalLLMPropertiesWidget::enableFallback() const
+{
+    return m_enableFallbackCheck ? m_enableFallbackCheck->isChecked() : false;
+}
+
+QString UniversalLLMPropertiesWidget::fallbackString() const
+{
+    return m_fallbackStringEdit ? m_fallbackStringEdit->text() : QStringLiteral("FAIL");
 }

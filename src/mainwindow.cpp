@@ -36,9 +36,9 @@
 #include <QFileDialog>
 #include <QMenu>
 #include <QMenuBar>
+#include <QToolBar>
 #include <QStatusBar>
 #include <QFont>
-#include <QToolBar>
 #include <QWidget>
 #include <QKeySequence>
 #include <QPushButton>
@@ -108,6 +108,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     createActions();
     createMenus();
+    createToolBar();
     createStatusBar();
 
     // Create Properties dock on the right
@@ -166,6 +167,8 @@ MainWindow::MainWindow(QWidget* parent)
 
     // Global running status indicator wiring
     connect(execEngine_, &ExecutionEngine::executionStarted, this, [this]() {
+        if (runAction_) runAction_->setEnabled(false);
+        if (stopAction_) stopAction_->setEnabled(true);
         if (!m_statusLabel) return;
         m_statusLabel->setText(tr("Status: RUNNING"));
         QFont f = m_statusLabel->font();
@@ -174,6 +177,8 @@ MainWindow::MainWindow(QWidget* parent)
         m_statusLabel->setStyleSheet("color: #1b8f22;"); // green
     });
     connect(execEngine_, &ExecutionEngine::executionFinished, this, [this]() {
+        if (runAction_) runAction_->setEnabled(true);
+        if (stopAction_) stopAction_->setEnabled(false);
         if (!m_statusLabel) return;
         m_statusLabel->setText(tr("Status: Idle"));
         QFont f = m_statusLabel->font();
@@ -239,8 +244,15 @@ void MainWindow::createActions() {
     // Run action (moved from toolbar to the Pipeline menu)
     runAction_ = new QAction(tr("&Run"), this);
     runAction_->setStatusTip(tr("Execute the current pipeline"));
+    runAction_->setIcon(QIcon(":/icons/run.png")); // Assuming icons might exist or just set text
     // Connect to slot that clears output before running
     connect(runAction_, &QAction::triggered, this, &MainWindow::onRunPipeline);
+
+    stopAction_ = new QAction(tr("&Stop"), this);
+    stopAction_->setStatusTip(tr("Stop the current pipeline execution"));
+    stopAction_->setIcon(QIcon(":/icons/stop.png"));
+    stopAction_->setEnabled(false);
+    connect(stopAction_, &QAction::triggered, this, &MainWindow::onStopPipeline);
 
     // Save last output action (Pipeline menu)
     saveOutputAction_ = new QAction(tr("Save Last Output..."), this);
@@ -302,6 +314,7 @@ void MainWindow::createMenus() {
     // Populate on demand to reflect current graph state
     connect(runMenu_, &QMenu::aboutToShow, this, &MainWindow::populateRunMenu);
     pipelineMenu->addMenu(runMenu_);
+    pipelineMenu->addAction(stopAction_);
     pipelineMenu->addSeparator();
     pipelineMenu->addAction(saveOutputAction_);
     pipelineMenu->addAction(enableDebugLoggingAction_);
@@ -321,6 +334,13 @@ void MainWindow::createMenus() {
     helpMenu->addAction(aboutAction);
 }
 
+
+void MainWindow::createToolBar() {
+    QToolBar* toolbar = addToolBar(tr("Main Toolbar"));
+    toolbar->setObjectName("MainToolbar");
+    toolbar->addAction(runAction_);
+    toolbar->addAction(stopAction_);
+}
 
 void MainWindow::createStatusBar() {
     statusBar()->showMessage(tr("Ready"));
@@ -492,6 +512,12 @@ void MainWindow::onRunPipeline()
             execEngine_->setProjectName(QFileInfo(m_currentFileName).baseName());
         }
         execEngine_->run();
+    }
+}
+
+void MainWindow::onStopPipeline() {
+    if (execEngine_) {
+        execEngine_->stop();
     }
 }
 

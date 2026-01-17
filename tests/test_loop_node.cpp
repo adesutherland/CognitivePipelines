@@ -166,3 +166,33 @@ TEST_F(LoopNodeTest, PassthroughPayloadEchoesOriginalInput)
     }
     EXPECT_TRUE(found);
 }
+
+TEST_F(LoopNodeTest, MultipleInputTokensProcessedSequentially)
+{
+    LoopNode node;
+
+    TokenList inputs;
+    {
+        DataPacket in;
+        in.insert(QString::fromLatin1(LoopNode::kInputListId), QStringLiteral("A\nB"));
+        ExecutionToken t; t.data = in;
+        inputs.push_back(t);
+    }
+    {
+        DataPacket in;
+        in.insert(QString::fromLatin1(LoopNode::kInputListId), QStringLiteral("C\nD"));
+        ExecutionToken t; t.data = in;
+        inputs.push_back(t);
+    }
+
+    const TokenList outputs = node.execute(inputs);
+    // (2 items + 1 passthrough) * 2 = 6 total
+    ASSERT_EQ(outputs.size(), 6u);
+
+    int passthroughCount = 0;
+    const QString passthroughKey = QString::fromLatin1(LoopNode::kOutputPassthroughId);
+    for (const auto& tok : outputs) {
+        if (tok.data.contains(passthroughKey)) ++passthroughCount;
+    }
+    EXPECT_EQ(passthroughCount, 2);
+}

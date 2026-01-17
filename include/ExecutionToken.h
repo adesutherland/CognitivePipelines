@@ -26,4 +26,7 @@ struct ExecutionToken
 
     // Data payload associated with this token (node output).
     QVariantMap data;
+
+    // If true, bypasses the ExecutionEngine's deduplication logic.
+    bool forceExecution = false;
 };

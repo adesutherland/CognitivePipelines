@@ -146,10 +146,9 @@ TEST_F(LoopUntilNodeTest, MaxIterationsSafetyBrake)
 // Test 4 (updated semantics): Start-only or Start+blankCondition should KICKSTART by emitting 'current' immediately
 TEST_F(LoopUntilNodeTest, StartWithMissingOrBlankConditionProducesNoOutput)
 {
-    LoopUntilNode node;
-
     // Case A: condition key entirely missing
     {
+        LoopUntilNode node;
         DataPacket in;
         in.insert(QString::fromLatin1(LoopUntilNode::kInputStartId), QStringLiteral("seedA"));
         ExecutionToken t; t.data = in;
@@ -163,6 +162,7 @@ TEST_F(LoopUntilNodeTest, StartWithMissingOrBlankConditionProducesNoOutput)
 
     // Case B: condition explicitly provided but blank/whitespace
     {
+        LoopUntilNode node;
         DataPacket in;
         in.insert(QString::fromLatin1(LoopUntilNode::kInputStartId), QStringLiteral("seedB"));
         in.insert(QString::fromLatin1(LoopUntilNode::kInputConditionId), QStringLiteral("   ")); // blank
@@ -294,5 +294,54 @@ TEST_F(LoopUntilNodeTest, IsReadyGatingOptionB)
         QVariantMap snap;
         snap.insert(QString::fromLatin1(LoopUntilNode::kInputStartId), QStringLiteral("S1")); // changed
         EXPECT_TRUE(node.isReady(snap, 1));
+    }
+}
+
+TEST_F(LoopUntilNodeTest, QueuesMultipleStarts)
+{
+    LoopUntilNode node;
+
+    // Start 1
+    {
+        DataPacket in;
+        in.insert(QString::fromLatin1(LoopUntilNode::kInputStartId), QStringLiteral("S1"));
+        ExecutionToken t; t.data = in; t.triggeringPinId = QString::fromLatin1(LoopUntilNode::kInputStartId);
+        TokenList out = node.execute({t});
+        ASSERT_EQ(out.size(), 1u);
+        EXPECT_EQ(out.front().data.value(QString::fromLatin1(LoopUntilNode::kOutputCurrentId)).toString(), "S1");
+    }
+
+    // Start 2 arrives while S1 is processing
+    {
+        DataPacket in;
+        in.insert(QString::fromLatin1(LoopUntilNode::kInputStartId), QStringLiteral("S2"));
+        ExecutionToken t; t.data = in; t.triggeringPinId = QString::fromLatin1(LoopUntilNode::kInputStartId);
+        TokenList out = node.execute({t});
+        ASSERT_EQ(out.size(), 0u); // Should be queued, nothing emitted yet
+    }
+
+    // Finish S1
+    {
+        DataPacket in;
+        in.insert(QString::fromLatin1(LoopUntilNode::kInputConditionId), QStringLiteral("true"));
+        ExecutionToken t; t.data = in; t.triggeringPinId = QString::fromLatin1(LoopUntilNode::kInputConditionId);
+        TokenList out = node.execute({t});
+        // 1 for result of S1, 1 for kickstart of S2
+        ASSERT_EQ(out.size(), 2u);
+        
+        bool foundResultS1 = false;
+        bool foundCurrentS2 = false;
+        for (const auto& tok : out) {
+            if (tok.data.contains(QString::fromLatin1(LoopUntilNode::kOutputResultId))) {
+                EXPECT_EQ(tok.data.value(QString::fromLatin1(LoopUntilNode::kOutputResultId)).toString(), "S1");
+                foundResultS1 = true;
+            }
+            if (tok.data.contains(QString::fromLatin1(LoopUntilNode::kOutputCurrentId))) {
+                EXPECT_EQ(tok.data.value(QString::fromLatin1(LoopUntilNode::kOutputCurrentId)).toString(), "S2");
+                foundCurrentS2 = true;
+            }
+        }
+        EXPECT_TRUE(foundResultS1);
+        EXPECT_TRUE(foundCurrentS2);
     }
 }
