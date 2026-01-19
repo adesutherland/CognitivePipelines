@@ -154,12 +154,12 @@ ExecutionEngine::~ExecutionEngine()
     m_threadPool.waitForDone();
 }
 
-void ExecutionEngine::Run(QtNodes::NodeId startNodeId)
+void ExecutionEngine::Run(QtNodes::NodeId startNodeId, TaskPriority p)
 {
     if (startNodeId != std::numeric_limits<unsigned int>::max()) {
-        runPipeline({nodeUuidForId(startNodeId)});
+        runPipeline({nodeUuidForId(startNodeId)}, p);
     } else {
-        runPipeline({});
+        runPipeline({}, p);
     }
 }
 
@@ -168,8 +168,7 @@ void ExecutionEngine::stop()
     {
         QMutexLocker locker(&m_queueMutex);
         m_currentRunId = QUuid::createUuid();
-        m_dispatchQueue.clear();
-        m_perNodeQueues.clear();
+        m_priorityQueue.clear();
         m_nodeInFlight.clear();
     }
     
@@ -181,7 +180,7 @@ void ExecutionEngine::stop()
     emit executionFinished();
 }
 
-void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
+void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints, TaskPriority p)
 {
     if (!_graphModel) {
         CP_WARN << "ExecutionEngine: No graph model available.";
@@ -201,10 +200,9 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
         m_hardError = false;
     }
 
-    // Stop throttler and clear dispatch queue for a clean run
+    // Stop throttler and clear priority queue for a clean run
     if (m_throttler) m_throttler->stop();
-    m_dispatchQueue.clear();
-    m_perNodeQueues.clear();
+    m_priorityQueue.clear();
     m_nodeInFlight.clear();
 
     // New Run ID for this pipeline execution to guard against zombie threads
@@ -236,6 +234,7 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
 
     // Seed initial tasks
     if (specificEntryPoints.isEmpty()) {
+        const auto nodeIds = _graphModel->allNodeIds();
         // Seed with all source nodes (nodes with no incoming edges)
         for (auto nodeId : nodeIds) {
             bool hasIncoming = false;
@@ -248,7 +247,7 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
                 task.nodeId = nodeId;
                 task.nodeUuid = nodeUuidForId(nodeId);
                 // Empty inputs are acceptable for source nodes
-                dispatchTask(task);
+                scheduleNode(task, p);
             }
         }
     } else {
@@ -261,7 +260,7 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
             ExecutionTask task;
             task.nodeId = nodeId;
             task.nodeUuid = uuid;
-            dispatchTask(task);
+            scheduleNode(task, p);
         }
     }
 
@@ -269,48 +268,90 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints)
     tryFinalize();
 }
 
-void ExecutionEngine::dispatchTask(const ExecutionTask& task)
+void ExecutionEngine::scheduleNode(const ExecutionTask& task, TaskPriority p)
 {
-    // Assign run identity at scheduling time
+    // Assign run identity and priority at scheduling time
     ExecutionTask toSchedule = task;
     toSchedule.runId = m_currentRunId;
+    toSchedule.priority = static_cast<int>(p);
 
     QMutexLocker locker(&m_queueMutex);
     if (m_hardError) return;
 
-    if (m_executionDelay > 0) {
-        // Allow independent source nodes to start in parallel even under slow-motion
-        if (isSourceNode(toSchedule.nodeId)) {
-            locker.unlock();
-            launchTask(toSchedule);
-            return;
-        }
-        // Throttle non-source launches: enqueue globally. Only trigger throttling
-        // when the queue transitions from empty -> non-empty. This avoids flooding
-        // the event loop with immediate dispatches which would effectively bypass
-        // the pacing timer when many tasks are queued in rapid succession.
-        m_dispatchQueue.enqueue(toSchedule);
-        const bool isFirst = (m_dispatchQueue.size() == 1);
+    // Source nodes bypass the throttler to allow parallel entry points even in slow-motion.
+    // This maintains the original behavior for independent source nodes.
+    if (m_executionDelay > 0 && isSourceNode(toSchedule.nodeId)) {
         locker.unlock();
-        if (isFirst) {
+        launchTask(toSchedule);
+        return;
+    }
+
+    m_priorityQueue[toSchedule.priority].append(toSchedule);
+
+    if (m_executionDelay > 0) {
+        // Throttle non-source launches: enqueue globally. Only trigger throttling
+        // when the queue transitions from empty -> non-empty.
+        int totalQueued = 0;
+        for (auto it = m_priorityQueue.cbegin(); it != m_priorityQueue.cend(); ++it) {
+            totalQueued += it.value().size();
+        }
+
+        if (totalQueued == 1) {
             // Start pacing timer; first dispatch will occur on the first tick to
             // honor slow-motion for the initial emission as well.
             QMetaObject::invokeMethod(m_throttler, "start", Qt::QueuedConnection,
                                       Q_ARG(int, std::max(1, m_executionDelay)));
         }
-        return;
+    } else {
+        locker.unlock();
+        processNext();
     }
+}
 
-    // No delay: launch immediately
-    // Per-node serialization: if a task is already running for this node, queue it
-    const int inflight = m_nodeInFlight.value(toSchedule.nodeUuid, 0);
-    if (inflight > 0) {
-        m_perNodeQueues[toSchedule.nodeUuid].enqueue(toSchedule);
-        return;
+void ExecutionEngine::processNext()
+{
+    QMutexLocker locker(&m_queueMutex);
+    if (m_hardError) return;
+
+    // Check if we can launch more tasks.
+    // We limit total concurrency to the thread pool size to prevent "thundering herds".
+    int maxConcurrent = m_threadPool.maxThreadCount();
+
+    while (m_activeTasks < maxConcurrent) {
+        ExecutionTask task;
+        bool found = false;
+
+        // Iterate through priority buckets in descending order (High -> Normal -> Low)
+        // QMap keys are sorted ascending, so we iterate backwards.
+        auto it = m_priorityQueue.end();
+        while (it != m_priorityQueue.begin()) {
+            --it;
+            auto& list = it.value();
+            // Per-node serialization: find the first task whose node is not currently in flight
+            for (int i = 0; i < list.size(); ++i) {
+                if (m_nodeInFlight.value(list[i].nodeUuid, 0) == 0) {
+                    task = list.takeAt(i);
+                    found = true;
+                    break;
+                }
+            }
+            if (found) break;
+        }
+
+        if (!found) break;
+
+        // Mark node as in flight
+        m_nodeInFlight.insert(task.nodeUuid, 1);
+        
+        // Update activity timestamp when a task is picked for launch
+        m_lastActivityMs = QDateTime::currentMSecsSinceEpoch();
+
+        locker.unlock();
+        launchTask(task);
+        locker.relock();
+
+        if (m_executionDelay > 0) break; // Only one per tick if throttled
     }
-    m_nodeInFlight.insert(toSchedule.nodeUuid, 1);
-    locker.unlock();
-    launchTask(toSchedule);
 }
 
 void ExecutionEngine::launchTask(const ExecutionTask& task)
@@ -545,19 +586,14 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
 
         QMutexLocker locker(&m_queueMutex);
         --m_activeTasks;
-        // Per-node serialization: if queued tasks exist for this node, launch next
+        m_nodeInFlight.insert(task.nodeUuid, 0);
+
         if (m_executionDelay == 0) {
-            auto it = m_perNodeQueues.find(task.nodeUuid);
-            if (it != m_perNodeQueues.end() && !it->isEmpty()) {
-                ExecutionTask nextTask = it->dequeue();
-                // keep node marked inflight
-                locker.unlock();
-                launchTask(nextTask);
-                return;
-            } else {
-                m_nodeInFlight.insert(task.nodeUuid, 0);
-            }
+            locker.unlock();
+            processNext();
+            locker.relock();
         }
+
         tryFinalize();
     });
 }
@@ -566,9 +602,9 @@ void ExecutionEngine::tryFinalize()
 {
     if (m_finalized) return;
     if (m_activeTasks != 0) return;
-    if (!m_dispatchQueue.isEmpty()) return;
-    // Ensure all per-node queues are empty
-    for (auto it = m_perNodeQueues.cbegin(); it != m_perNodeQueues.cend(); ++it) {
+    
+    // Ensure the priority queue is empty
+    for (auto it = m_priorityQueue.cbegin(); it != m_priorityQueue.cend(); ++it) {
         if (!it.value().isEmpty()) return;
     }
 
@@ -783,7 +819,7 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
             next.nodeUuid = targetUuid;
             next.inputs = std::move(snap);
             if (runId == m_currentRunId) {
-                dispatchTask(next);
+                scheduleNode(next, TaskPriority::High);
             }
         }
     }
@@ -791,18 +827,15 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
 
 void ExecutionEngine::onThrottleTimeout()
 {
-    if (m_dispatchQueue.isEmpty()) {
-        if (m_throttler) m_throttler->stop();
-        tryFinalize();
-        return;
+    processNext();
+
+    QMutexLocker locker(&m_queueMutex);
+    bool empty = true;
+    for (auto it = m_priorityQueue.cbegin(); it != m_priorityQueue.cend(); ++it) {
+        if (!it.value().isEmpty()) { empty = false; break; }
     }
 
-    // Pop ONE task and launch it
-    ExecutionTask task = m_dispatchQueue.dequeue();
-    m_lastActivityMs = QDateTime::currentMSecsSinceEpoch();
-    launchTask(task);
-
-    if (m_dispatchQueue.isEmpty()) {
+    if (empty) {
         if (m_throttler) m_throttler->stop();
         tryFinalize();
     }

@@ -66,12 +66,19 @@ signals:
     // refresh the Stage Output view for the currently selected node.
     void nodeOutputChanged(QtNodes::NodeId nodeId);
 
+public:
+    enum TaskPriority {
+        High = 200,
+        Normal = 100,
+        Low = 0
+    };
+
 public slots:
-    void Run(QtNodes::NodeId startNodeId = std::numeric_limits<unsigned int>::max());
+    void Run(QtNodes::NodeId startNodeId = std::numeric_limits<unsigned int>::max(), TaskPriority p = TaskPriority::Normal);
     void stop();
     // Run the pipeline starting from specific entry point node UUIDs. If the list is empty,
     // the engine discovers all source nodes (no incoming connections) and schedules them.
-    void runPipeline(const QList<QUuid>& specificEntryPoints = {});
+    void runPipeline(const QList<QUuid>& specificEntryPoints = {}, TaskPriority p = TaskPriority::Normal);
     void setExecutionDelay(int ms);
     void setProjectName(const QString& name);
     QtNodes::NodeId nodeIdForUuid(const QUuid& uuid) const;
@@ -89,6 +96,7 @@ private:
         QUuid            nodeUuid;
         TokenList        inputs;   // snapshot of ready-to-use input packets
         QUuid            runId;    // run identifier for safety across restarts
+        int              priority {100};
     };
 
     // Global Data Lake: for each node UUID we store a QVariantMap of its
@@ -119,8 +127,9 @@ private:
     // deprecated internal; replaced by the public runPipeline overload above
 
     // Dispatch helpers
-    void dispatchTask(const ExecutionTask& task);
+    void scheduleNode(const ExecutionTask& task, TaskPriority p = TaskPriority::Normal);
     void launchTask(const ExecutionTask& task);
+    void processNext();
     void tryFinalize();
     void handleTaskCompleted(QtNodes::NodeId nodeId,
                              const QUuid& nodeUuid,
@@ -144,14 +153,13 @@ private:
     // Run identity used to guard against zombie threads from previous runs
     QUuid m_currentRunId;
 
-    // Dispatcher throttling: main-thread timer launching tasks at a fixed cadence
-    QQueue<ExecutionTask> m_dispatchQueue;
+    // Dispatcher: priority-bucketed queue
+    QMap<int, QList<ExecutionTask>> m_priorityQueue;
     QTimer* m_throttler {nullptr};
     QThreadPool m_threadPool;
 
     // Per-node serialization to preserve in-order execution for the same target
     QHash<QUuid, int> m_nodeInFlight; // 0 or 1 per nodeUuid
-    QHash<QUuid, QQueue<ExecutionTask>> m_perNodeQueues;
 
     // Finalization delay to satisfy slow-motion elapsed timing semantics
     QTimer* m_finalizeTimer {nullptr};
