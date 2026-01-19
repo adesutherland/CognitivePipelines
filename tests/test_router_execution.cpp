@@ -39,7 +39,7 @@ static bool runEngineAndWait(ExecutionEngine& engine, int timeoutMs = 5000)
     QObject::connect(&engine, &ExecutionEngine::pipelineFinished, &engine, [&](const DataPacket&) {
         finished = true;
     });
-    engine.run();
+    engine.Run();
 
     QEventLoop loop;
     QTimer timeout; timeout.setSingleShot(true);

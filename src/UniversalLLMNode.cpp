@@ -35,6 +35,7 @@
 #include <QMimeType>
 #include <QFileInfo>
 #include <QFile>
+#include <QDebug>
 #include "logging_categories.h"
 
 UniversalLLMNode::UniversalLLMNode(QObject* parent)
@@ -199,6 +200,10 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
                                ? userDefault.trimmed() 
                                : promptInput.trimmed();
 
+    const int systemChars = systemPrompt.length();
+    const int userChars = userPrompt.length();
+    qDebug() << "UniversalLLMNode: System Prompt Length =" << systemChars << "chars, User Prompt Length =" << userChars << "chars";
+
     // Validate inputs
     if (systemPrompt.isEmpty() && userPrompt.isEmpty()) {
         const QString err = QStringLiteral("ERROR: Both system and user prompts are empty.");
@@ -352,6 +357,17 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     output.insert(QStringLiteral("_usage.output_tokens"), result.usage.outputTokens);
     output.insert(QStringLiteral("_usage.total_tokens"), result.usage.totalTokens);
     output.insert(QStringLiteral("_raw_response"), result.rawResponse);
+
+    // Construct telemetry log
+    QString telemetry = QStringLiteral("[Telemetry] Model: %1/%2 | Tokens: %3 (%4 in, %5 out)  \n[Telemetry] Inputs: System (%6 chars), User (%7 chars)")
+                        .arg(providerId)
+                        .arg(modelId)
+                        .arg(result.usage.totalTokens)
+                        .arg(result.usage.inputTokens)
+                        .arg(result.usage.outputTokens)
+                        .arg(systemChars)
+                        .arg(userChars);
+    output.insert(QStringLiteral("logs"), telemetry);
 
     ExecutionToken token;
     token.data = output;

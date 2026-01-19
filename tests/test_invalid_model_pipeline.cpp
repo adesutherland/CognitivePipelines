@@ -28,7 +28,7 @@ static bool runEngineAndWait(ExecutionEngine& engine, DataPacket& finalOut, int 
         finalOut = out;
     });
 
-    engine.run();
+    engine.Run();
 
     QEventLoop loop;
     QTimer timeout;
@@ -106,7 +106,7 @@ TEST(UniversalLLMInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
     {
         QJsonObject state;
         state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
-        state.insert(QStringLiteral("model"), QStringLiteral("gpt-5-mini"));
+        state.insert(QStringLiteral("model"), QStringLiteral("gpt-4o-mini"));
         state.insert(QStringLiteral("temperature"), 1.0);
         state.insert(QStringLiteral("maxTokens"), 0); // Invalid: 0 tokens should trigger API error
         llm->loadState(state);
@@ -172,7 +172,7 @@ TEST(UniversalLLMInvalidModelTest, StopsPipelineOnError)
         // Configure with valid model but invalid maxTokens (0) to trigger API error
         QJsonObject state;
         state.insert(QStringLiteral("provider"), QStringLiteral("openai"));
-        state.insert(QStringLiteral("model"), QStringLiteral("gpt-5-mini"));
+        state.insert(QStringLiteral("model"), QStringLiteral("gpt-4o-mini"));
         state.insert(QStringLiteral("temperature"), 1.0);
         state.insert(QStringLiteral("maxTokens"), 0); // Invalid: 0 tokens should trigger API error
         llm->loadState(state);

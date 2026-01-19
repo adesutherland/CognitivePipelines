@@ -37,6 +37,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QToolBar>
+#include <QComboBox>
 #include <QStatusBar>
 #include <QFont>
 #include <QWidget>
@@ -105,6 +106,12 @@ MainWindow::MainWindow(QWidget* parent)
 
     // Repaint the scene when any state changes
     connect(execStateModel_.get(), &ExecutionStateModel::stateChanged, scene, [scene]() { scene->update(); });
+
+    // Refresh scenario list on graph changes
+    connect(_graphModel, &NodeGraphModel::nodeCreated, this, &MainWindow::RefreshScenarioList);
+    connect(_graphModel, &NodeGraphModel::nodeDeleted, this, &MainWindow::RefreshScenarioList);
+    connect(_graphModel, &NodeGraphModel::connectionCreated, this, &MainWindow::RefreshScenarioList);
+    connect(_graphModel, &NodeGraphModel::connectionDeleted, this, &MainWindow::RefreshScenarioList);
 
     createActions();
     createMenus();
@@ -241,12 +248,14 @@ void MainWindow::createActions() {
     deleteAction->setStatusTip(tr("Delete selected nodes and connections"));
     connect(deleteAction, &QAction::triggered, this, &MainWindow::onDeleteSelected);
 
-    // Run action (moved from toolbar to the Pipeline menu)
+    // Run action removed in favor of Targeted Scenario Runner in toolbar
+    /*
     runAction_ = new QAction(tr("&Run"), this);
     runAction_->setStatusTip(tr("Execute the current pipeline"));
     runAction_->setIcon(QIcon(":/icons/run.png")); // Assuming icons might exist or just set text
     // Connect to slot that clears output before running
     connect(runAction_, &QAction::triggered, this, &MainWindow::onRunPipeline);
+    */
 
     stopAction_ = new QAction(tr("&Stop"), this);
     stopAction_->setStatusTip(tr("Stop the current pipeline execution"));
@@ -338,8 +347,39 @@ void MainWindow::createMenus() {
 void MainWindow::createToolBar() {
     QToolBar* toolbar = addToolBar(tr("Main Toolbar"));
     toolbar->setObjectName("MainToolbar");
-    toolbar->addAction(runAction_);
+
+    toolbar->addWidget(new QLabel(tr(" Scenario: "), this));
+    scenarioCombo_ = new QComboBox(this);
+    scenarioCombo_->setMinimumWidth(200);
+    toolbar->addWidget(scenarioCombo_);
+
+    runScenarioButton_ = new QPushButton(tr("Run Scenario"), this);
+    runScenarioButton_->setIcon(QIcon(":/icons/run.png"));
+    connect(runScenarioButton_, &QPushButton::clicked, this, [this]() {
+        if (!scenarioCombo_ || !execEngine_) return;
+        QVariant data = scenarioCombo_->currentData();
+        if (data.isValid()) {
+            QUuid uuid = data.value<QUuid>();
+            QtNodes::NodeId nodeId = execEngine_->nodeIdForUuid(uuid);
+            if (nodeId != std::numeric_limits<unsigned int>::max()) {
+                // clear stage output and text output nodes before run
+                if (stageOutputText_) stageOutputText_->clear();
+                clearAllTextOutputNodes();
+
+                if (m_currentFileName.isEmpty()) {
+                    execEngine_->setProjectName(QStringLiteral("Untitled"));
+                } else {
+                    execEngine_->setProjectName(QFileInfo(m_currentFileName).baseName());
+                }
+                execEngine_->Run(nodeId);
+            }
+        }
+    });
+    toolbar->addWidget(runScenarioButton_);
+
     toolbar->addAction(stopAction_);
+
+    RefreshScenarioList();
 }
 
 void MainWindow::createStatusBar() {
@@ -455,6 +495,27 @@ void MainWindow::onSelectionChanged()
     refreshStageOutput();
 }
 
+void MainWindow::RefreshScenarioList() {
+    if (!scenarioCombo_ || !_graphModel) return;
+
+    // Store current selection to restore it if possible
+    QUuid currentUuid = scenarioCombo_->currentData().value<QUuid>();
+
+    scenarioCombo_->clear();
+    const auto entries = _graphModel->getEntryPoints();
+    for (const auto& pair : entries) {
+        scenarioCombo_->addItem(pair.second, pair.first);
+    }
+
+    // Restore selection
+    if (!currentUuid.isNull()) {
+        int index = scenarioCombo_->findData(currentUuid);
+        if (index >= 0) {
+            scenarioCombo_->setCurrentIndex(index);
+        }
+    }
+}
+
 void MainWindow::onSaveAs()
 {
     QString fileName = QFileDialog::getSaveFileName(this,
@@ -511,7 +572,7 @@ void MainWindow::onRunPipeline()
         } else {
             execEngine_->setProjectName(QFileInfo(m_currentFileName).baseName());
         }
-        execEngine_->run();
+        execEngine_->Run();
     }
 }
 
@@ -525,15 +586,6 @@ void MainWindow::populateRunMenu()
 {
     if (!runMenu_) return;
     runMenu_->clear();
-
-    // Run All action (default)
-    if (runAction_) {
-        runMenu_->addAction(runAction_);
-    } else {
-        QAction* runAll = runMenu_->addAction(tr("Run All"));
-        connect(runAll, &QAction::triggered, this, &MainWindow::onRunPipeline);
-    }
-    runMenu_->addSeparator();
 
     if (!_graphModel || !execEngine_) return;
 
@@ -668,6 +720,7 @@ void MainWindow::onOpen()
     clearAllTextOutputNodes();
 
     m_currentFileName = fileName;
+    RefreshScenarioList();
 
     // Zoom to fit the entire pipeline in view
     if (_graphView && _graphView->scene()) {

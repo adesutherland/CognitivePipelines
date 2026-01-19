@@ -67,13 +67,14 @@ signals:
     void nodeOutputChanged(QtNodes::NodeId nodeId);
 
 public slots:
-    void run();
+    void Run(QtNodes::NodeId startNodeId = std::numeric_limits<unsigned int>::max());
     void stop();
     // Run the pipeline starting from specific entry point node UUIDs. If the list is empty,
     // the engine discovers all source nodes (no incoming connections) and schedules them.
     void runPipeline(const QList<QUuid>& specificEntryPoints = {});
     void setExecutionDelay(int ms);
     void setProjectName(const QString& name);
+    QtNodes::NodeId nodeIdForUuid(const QUuid& uuid) const;
 
 public:
     // Thread-safe accessor to retrieve output data for a specific node

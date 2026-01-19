@@ -119,7 +119,7 @@ private slots:
         QSignalSpy spy(&engine, &ExecutionEngine::executionFinished);
 
         // Start execution
-        engine.run();
+        engine.Run();
         
         // Wait for completion (generous timeout for multiple loops)
         QVERIFY(spy.wait(10000));

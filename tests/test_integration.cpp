@@ -180,7 +180,7 @@ void IntegrationTests::test_FullPipelineExecution()
         finalOut = out;
     });
 
-    engine_->run();
+    engine_->Run();
 
     QEventLoop loop;
     QTimer timeout;

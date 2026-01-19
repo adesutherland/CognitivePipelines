@@ -95,6 +95,18 @@ void ExecutionEngine::setProjectName(const QString& name)
     m_projectName = name;
 }
 
+QtNodes::NodeId ExecutionEngine::nodeIdForUuid(const QUuid& uuid) const
+{
+    if (!_graphModel) return std::numeric_limits<unsigned int>::max();
+    const auto ids = _graphModel->allNodeIds();
+    for (auto id : ids) {
+        if (nodeUuidForId(id) == uuid) {
+            return id;
+        }
+    }
+    return std::numeric_limits<unsigned int>::max();
+}
+
 QString ExecutionEngine::getNodeOutputDir(const QString& nodeId, int runIndex) const
 {
     QString sanitizedProject = m_projectName;
@@ -142,9 +154,13 @@ ExecutionEngine::~ExecutionEngine()
     m_threadPool.waitForDone();
 }
 
-void ExecutionEngine::run()
+void ExecutionEngine::Run(QtNodes::NodeId startNodeId)
 {
-    runPipeline({});
+    if (startNodeId != std::numeric_limits<unsigned int>::max()) {
+        runPipeline({nodeUuidForId(startNodeId)});
+    } else {
+        runPipeline({});
+    }
 }
 
 void ExecutionEngine::stop()

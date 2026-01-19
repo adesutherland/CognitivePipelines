@@ -196,12 +196,12 @@ QList<QPair<QUuid, QString>> NodeGraphModel::getEntryPoints() const
     QList<QPair<QUuid, QString>> result;
     const auto idsSet = allNodeIds();
     for (auto nodeId : idsSet) {
-        bool hasIncoming = false;
+        bool hasIncomingOnPort0 = false;
         const auto conns = allConnectionIds(nodeId);
         for (const auto& cid : conns) {
-            if (cid.inNodeId == nodeId) { hasIncoming = true; break; }
+            if (cid.inNodeId == nodeId && cid.inPortIndex == 0) { hasIncomingOnPort0 = true; break; }
         }
-        if (hasIncoming) continue;
+        if (hasIncomingOnPort0) continue;
 
         // Resolve label
         QString label;

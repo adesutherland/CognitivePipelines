@@ -34,6 +34,7 @@
 
 class QAction;
 class QPushButton;
+class QComboBox;
 class QDockWidget;
 class QVBoxLayout;
 class QLabel;
@@ -90,6 +91,7 @@ private slots:
     // Selection handling
     void onNodeSelected(QtNodes::NodeId nodeId);
     void onSelectionChanged();
+    void RefreshScenarioList();
 
     // Execution highlighting: repaint a specific node by execution QUuid
     void onNodeRepaint(const QUuid& nodeUuid);
@@ -120,6 +122,8 @@ private:
     QAction* clearCanvasAction_ {nullptr};
     QAction* deleteAction {nullptr};
     QMenu*   runMenu_ {nullptr};
+    QComboBox* scenarioCombo_ {nullptr};
+    QPushButton* runScenarioButton_ {nullptr};
     ExecutionEngine* execEngine_ {nullptr};
 
     NodeGraphModel* _graphModel {nullptr};

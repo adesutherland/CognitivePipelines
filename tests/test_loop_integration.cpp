@@ -76,7 +76,7 @@ TEST(LoopIntegrationTest, DownstreamExecutesThreeTimesInOrder)
     bool finished = false;
     QObject::connect(&engine, &ExecutionEngine::pipelineFinished, &engine, [&](const DataPacket&){ finished = true; });
 
-    engine.run();
+    engine.Run();
 
     QEventLoop loop;
     QTimer timer; timer.setSingleShot(true);
@@ -129,7 +129,7 @@ TEST(LoopIntegrationTest, ConcurrencyTwoSourcesFinishInParallel)
     QObject::connect(&engine, &ExecutionEngine::pipelineFinished, &engine, [&](const DataPacket&){ finished = true; });
 
     QElapsedTimer t; t.start();
-    engine.run();
+    engine.Run();
 
     QEventLoop loop;
     QTimer timer; timer.setSingleShot(true);
