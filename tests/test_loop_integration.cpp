@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include <QApplication>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QTimer>
 

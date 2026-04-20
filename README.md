@@ -1,99 +1,223 @@
 # Cognitive Pipelines
 
-## Project Overview
-Cognitive Pipelines is a Qt 6 desktop application for composing and running node‑based “cognitive” workflows. The UI provides a data‑flow canvas (via QtNodes) where each node represents a tool (e.g., a Large Language Model call or text utility). A Properties panel lets you configure the selected node, and an ExecutionEngine runs the graph and displays results in a Pipeline Output dock.
+Cognitive Pipelines is a Qt 6 desktop application for composing and running node-based workflows. The project combines a Qt Widgets UI, a QtNodes canvas, asynchronous graph execution, local scripting, external process integration, retrieval tooling, and multi-provider LLM backends.
 
-## Current Features
-- Cross‑platform Qt 6 Widgets application
-- Data‑flow canvas powered by QtNodes (paceholder/nodeeditor)
-- Nodes/tools provided out of the box:
-  - TextInputNode: emits user‑provided text
-  - PromptBuilderNode: formats a template using upstream text
-  - LLMConnector: calls an OpenAI‑compatible Chat Completions endpoint (via cpr)
-- Properties panel for configuring the selected node (e.g., LLM prompt, model, temperature, tokens)
-- Run action that executes the graph in topological order; work is performed asynchronously per node via QtConcurrent
-- Pipeline Output dock and optional Debug Log dock
-- About dialog (version, git hash, build date/time, Qt runtime)
-- GoogleTest‑based test target (unit_tests) for API integration testing (enabled by default)
+## Current Capabilities
 
-## Dependencies (definitive)
-From CMakeLists.txt and vcpkg manifest:
-- Qt 6: Core, Gui, Widgets, Network, Concurrent
-- QtNodes (fetched via CMake FetchContent)
-- Boost (headers)
-- cpr (HTTP/HTTPS client)
-- OpenSSL (TLS, transitive for cpr)
-- Zlib (transitive)
-- GoogleTest (tests only, enabled by default, optional via ENABLE_TESTING=OFF)
+- Qt 6 Widgets desktop application with a node canvas, properties panel, stage output, and debug log
+- Save/load pipeline support from the main window
+- Asynchronous graph execution via `ExecutionEngine` and `QtConcurrent`
+- Built-in node categories:
+  - `Input / Output`: text, image, PDF-to-image, human input, text output
+  - `Text Utilities`: prompt building
+  - `Visualization`: Mermaid rendering
+  - `External Tools`: process execution and Python script execution
+  - `Scripting`: universal scripting via the bundled QuickJS runtime
+  - `AI Services`: universal LLM node and image generation
+  - `Persistence` / `Retrieval`: database, RAG indexing, and RAG querying
+  - `Control Flow`: conditional router, loop, loop-until, retry loop
+- LLM backends currently registered in code:
+  - OpenAI
+  - Google
+  - Anthropic
+- Test targets:
+  - `unit_tests` (GoogleTest)
+  - `integration_tests` (Qt Test / CTest)
 
-Installation methods by environment:
-- CI (GitHub Actions):
-  - Qt installed via jurplel/install-qt-action@v4
-  - Third‑party libraries resolved via vcpkg with NuGet‑based binary caching to GitHub Packages
-  - Ninja generator on Unix; Visual Studio generator on Windows
-- macOS (local dev):
-  - Homebrew: brew install qt cpr googletest (tests optional)
-  - Or use vcpkg with this repo’s vcpkg.json manifest
-- Linux (local dev):
-  - Use your distro packages for Qt 6/cpr where available, or vcpkg
-  - Ensure common build tools (pkg-config, ninja, etc.) are installed
-- Windows (local dev):
-  - vcpkg recommended; pass the toolchain file during CMake configure
+## Dependencies
 
-## How to Build (local)
-Prerequisites:
-- C++17 compiler and CMake 3.21+
-- Qt 6 and listed third‑party dependencies available via your environment
+Definitive dependencies come from [`CMakeLists.txt`](./CMakeLists.txt) and the source tree:
 
-Generic configure/build:
-- cmake -S . -B build
-- cmake --build build --target CognitivePipelines -j 2
+- CMake 3.21+
+- C++17 compiler
+- Qt 6 components:
+  - `Core`
+  - `Gui`
+  - `Widgets`
+  - `Network`
+  - `Concurrent`
+  - `Test`
+  - `Sql`
+  - `Pdf`
+  - `WebChannel`
+  - `Positioning`
+  - `WebEngineWidgets`
+  - `DBus`
+- QtNodes via CMake `FetchContent` (`paceholder/nodeeditor`, tag `3.0.12`)
+- Bundled QuickJS sources under `src/3rdparty/quickjs`
+- Boost headers
+- `cpr`
+- OpenSSL
+- Zlib
+- GoogleTest when `ENABLE_TESTING=ON` (default)
 
-Using vcpkg (recommended on Windows or cross‑platform):
-- cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-- cmake --build build --target CognitivePipelines -j 2
+## macOS First-Time Setup
 
-Enable tests (on by default):
-- cmake -S . -B build [ -DENABLE_TESTING=OFF to disable ]
-- cmake --build build --target unit_tests
-- ctest --test-dir build -V
+For Apple Silicon development on macOS:
 
-## Configuration
-Runtime:
-- Configure the LLMConnector’s API Key and Prompt via the Properties panel.
+1. Install Xcode Command Line Tools if needed:
 
-Tests and app credentials resolution:
-- Order: 1) OPENAI_API_KEY environment variable; 2) accounts.json in the standard per-user app config directory.
-- accounts.json.example is provided as a template; copy it to the canonical location below and set your key.
-
-Canonical accounts.json location (see LLMConnector::defaultAccountsFilePath):
-- macOS: ~/Library/Application Support/CognitivePipelines/accounts.json
-- Linux: ~/.config/CognitivePipelines/accounts.json
-- Windows: %APPDATA%/CognitivePipelines/accounts.json (e.g., C:\\Users\\<You>\\AppData\\Roaming\\CognitivePipelines\\accounts.json)
-
-accounts.json structure:
+```bash
+xcode-select --install
 ```
+
+2. Install the local development dependencies:
+
+```bash
+brew install qt cpr boost googletest ninja pkgconf ripgrep
+```
+
+3. Optional but useful:
+
+```bash
+brew install python
+```
+
+Notes:
+
+- The Python node defaults to `python3 -u`. `/usr/bin/python3` is usually enough on macOS, so Homebrew Python is optional unless you want a newer interpreter.
+- Homebrew `qt` is usually sufficient for local development. If configure fails because a required Qt module is unavailable on your machine, install a matching Qt 6 release with at least `qtpdf`, `qtwebengine`, `qtwebchannel`, and `qtpositioning`, then point `CMAKE_PREFIX_PATH` at that Qt installation.
+
+## Build
+
+### Homebrew-based local build on Apple Silicon
+
+Use `Debug` first. On macOS, `Release` enables additional signing and deployment logic that is not necessary for the initial development loop.
+
+```bash
+cmake -S . -B build \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DDEPLOY_QT_ON_BUILD=OFF
+
+cmake --build build --target CognitivePipelines -j 8
+```
+
+### Build with vcpkg
+
+This project uses vcpkg for the non-Qt C++ dependencies in CI. A local macOS configure looks like:
+
+```bash
+cmake -S . -B build \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DVCPKG_TARGET_TRIPLET=arm64-osx \
+  -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 \
+  -DDEPLOY_QT_ON_BUILD=OFF
+
+cmake --build build --target CognitivePipelines -j 8
+```
+
+### Tests
+
+`ENABLE_TESTING` defaults to `ON`.
+
+Build the test targets:
+
+```bash
+cmake --build build --target unit_tests integration_tests -j 8
+```
+
+Run them with CTest:
+
+```bash
+ctest --test-dir build -V
+```
+
+Disable tests only if you need a lighter configure:
+
+```bash
+cmake -S . -B build -DENABLE_TESTING=OFF
+```
+
+## CLion Configuration
+
+Recommended CLion setup for macOS Apple Silicon:
+
+- Toolchain:
+  - C compiler: `/usr/bin/clang`
+  - C++ compiler: `/usr/bin/clang++`
+  - CMake: bundled CLion CMake or `/opt/homebrew/bin/cmake`
+  - Build tool / generator: Ninja (`/opt/homebrew/bin/ninja`)
+  - Debugger: LLDB
+- CMake profile:
+  - Use a `Debug` profile first
+  - Use an arm64 build directory such as `cmake-build-debug-arm64`, or reuse the active CLion generation directory already associated with the project
+  - Recommended CMake options:
+
+```text
+-DCMAKE_OSX_ARCHITECTURES=arm64
+-DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt
+-DDEPLOY_QT_ON_BUILD=OFF
+```
+
+If you are using vcpkg in CLion, add:
+
+```text
+-DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake
+-DVCPKG_TARGET_TRIPLET=arm64-osx
+```
+
+## Credentials and Runtime Configuration
+
+The application supports provider credentials through environment variables and `accounts.json`.
+
+Environment variables checked first:
+
+- OpenAI: `OPENAI_API_KEY`
+- Google: `GOOGLE_API_KEY`, `GOOGLE_GENAI_API_KEY`, `GOOGLE_AI_API_KEY`
+- Anthropic: `ANTHROPIC_API_KEY`
+
+Canonical `accounts.json` location:
+
+- macOS: `~/Library/Application Support/CognitivePipelines/accounts.json`
+- Linux: `~/.config/CognitivePipelines/accounts.json`
+- Windows: `%APPDATA%/CognitivePipelines/accounts.json`
+
+The GUI exposes `Edit -> Edit Credentials...`, which writes credentials to the canonical location above.
+
+When resolving credentials, the code also checks a few local-development fallback paths after the canonical location, including:
+
+- the current working directory
+- the application directory
+- parent directories near the application binary
+
+Example `accounts.json`:
+
+```json
 {
   "accounts": [
     {
-      "name": "default_openai",
-      "api_key": "YOUR_API_KEY_HERE"
+      "name": "openai",
+      "api_key": "YOUR_OPENAI_KEY"
+    },
+    {
+      "name": "google",
+      "api_key": "YOUR_GOOGLE_KEY"
+    },
+    {
+      "name": "anthropic",
+      "api_key": "YOUR_ANTHROPIC_KEY"
     }
   ]
 }
 ```
 
-Notes:
-- The application and tests resolve credentials in this order: OPENAI_API_KEY, then accounts.json in the standard per-user app config directory. If neither is available, networked tests SKIP and the LLMConnector reports a clear error.
+Networked tests skip when the required credentials are not available.
 
 ## CI/CD
-- Matrix builds on Ubuntu, macOS, and Windows
-- Qt via jurplel/install-qt-action; third‑party dependencies via vcpkg (with NuGet binary caching)
-- Ninja on Unix; MSVC/Visual Studio on Windows
-- Release build target: CognitivePipelines
 
-## Third-Party Libraries
-- MermaidJS (MIT License): https://github.com/mermaid-js/mermaid
+GitHub Actions currently builds on Ubuntu, macOS, and Windows.
+
+- Qt is installed separately in CI
+- vcpkg is used for the C++ package dependencies
+- Ninja is used on Unix-like runners
+- Visual Studio is used on Windows
 
 ## License
-MIT License. See LICENSE for details.
+
+MIT License. See [`LICENSE`](./LICENSE) for details.

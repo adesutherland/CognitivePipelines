@@ -1,10 +1,17 @@
-# For local macOS development, install dependencies via Homebrew:
-# brew install googletest
+# For local macOS development on Apple Silicon, the expected Homebrew toolchain is:
+# brew install qt cpr boost googletest ninja pkgconf ripgrep
+# Optional: brew install python
 #
-# To build and run the tests with CTest:
-# cmake -DENABLE_TESTING=OFF -S . -B <build_dir> (to disable)
-# cmake --build <build_dir> --target unit_tests
+# Recommended first configure:
+# cmake -S . -B <build_dir> -G Ninja -DCMAKE_BUILD_TYPE=Debug \
+#   -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt \
+#   -DCMAKE_OSX_ARCHITECTURES=arm64 \
+#   -DDEPLOY_QT_ON_BUILD=OFF
+#
+# To build and run tests:
+# cmake --build <build_dir> --target unit_tests integration_tests
 # ctest --test-dir <build_dir> -V
+# Use -DENABLE_TESTING=OFF only if you need to skip test targets entirely.
 
 cmake_minimum_required(VERSION 3.21)
 
