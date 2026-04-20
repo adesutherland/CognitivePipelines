@@ -1,38 +1,37 @@
 ### Universal Script Host: Static Registration Strategy
 
-To ensure a robust and cross-platform plugin architecture without the complexities of dynamic library loading (especially on macOS), we will use a **Static Registration** pattern.
+The current scripting architecture uses a static registration pattern for script runtimes. This keeps runtime discovery simple and cross-platform while avoiding the deployment and code-signing complexity of dynamic plugin loading.
 
 #### 1. Registry Mechanism
-The `ScriptEngineRegistry` (defined in `IScriptHost.h`) acts as a singleton that holds a map of engine IDs to `ScriptEngineFactory` functions. This allows for late-binding of engine implementations while maintaining compile-time safety and avoiding global initialization order issues (Static Initialization Order Fiasco).
 
-#### 2. Registration in `main.cpp`
-We will register all available script engines at the very beginning of `main()`, before the `QApplication` starts and before the UI or execution engine are initialized.
+`ScriptEngineRegistry` in `include/IScriptHost.h` is a singleton that maps engine ids to `ScriptEngineFactory` callables. `UniversalScriptNode` only depends on the `IScriptEngine` interface and asks the registry to create an engine instance by id at execution time.
+
+#### 2. Current Registration Point
+
+The current code registers the bundled QuickJS runtime inside `NodeGraphModel::NodeGraphModel()`:
 
 ```cpp
-// main.cpp example integration
-#include "IScriptHost.h"
-#ifdef ENABLE_QUICKJS
-#include "QuickJSEngine.h" // Concrete implementation
-#endif
-
-int main(int argc, char *argv[]) {
-    // 1. Static Registration
-#ifdef ENABLE_QUICKJS
-    ScriptEngineRegistry::instance().registerEngine("quickjs", []() {
-        return std::make_unique<QuickJSEngine>();
-    });
-#endif
-
-    // Register other engines here (Python, Crexx, etc.)
-
-    // 2. Standard Qt App Startup
-    QApplication a(argc, argv);
-    // ...
-}
+ScriptEngineRegistry::instance().registerEngine(QStringLiteral("quickjs"), []() {
+    return std::make_unique<QuickJSRuntime>();
+});
 ```
 
-#### 3. Why this approach?
-- **No dylib issues:** Avoids the "code signing" and "library path" headaches associated with `dlopen` or `QLibrary` on macOS.
-- **Dependency Control:** We can use CMake options (e.g., `-DENABLE_QUICKJS=ON`) to include or exclude specific engines at compile time.
-- **Decoupling:** The `UniversalScriptConnector` only needs to know about `IScriptEngine` and `ScriptEngineRegistry`. It doesn't need to know about `QuickJSEngine` or any other concrete implementation.
-- **Extensibility:** Adding a new engine only requires implementing the `IScriptEngine` interface and adding one registration line in `main.cpp`.
+This means the default engine is available as soon as the graph model is created, before any `UniversalScriptNode` is configured or executed.
+
+Relevant classes:
+
+- `src/graph/NodeGraphModel.*`
+- `src/nodes/scripting/universal_script/UniversalScriptNode.*`
+- `src/scripting/hosts/ExecutionScriptHost.*`
+- `src/scripting/runtimes/QuickJSRuntime.*`
+
+#### 3. Why this approach still fits
+
+- **No dynamic-loading overhead:** avoids `dlopen`/`QLibrary` deployment issues, especially on macOS.
+- **Clear runtime boundary:** `UniversalScriptNode` only knows about `IScriptEngine` and `ScriptEngineRegistry`.
+- **Easy extension path:** adding a new engine still only requires an `IScriptEngine` implementation plus one registration call.
+- **Deterministic startup:** runtime availability is tied to normal application initialization rather than filesystem plugin discovery.
+
+#### 4. Follow-on Note
+
+If script runtime registration later moves out of `NodeGraphModel` into a dedicated bootstrap step, the static registration pattern should stay the same. Only the initialization location would change.
