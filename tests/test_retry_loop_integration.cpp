@@ -6,14 +6,14 @@
 #include "RetryLoopNode.h"
 #include "TextInputNode.h"
 #include "ToolNodeDelegate.h"
-#include "IToolConnector.h"
+#include "IToolNode.h"
 
 using namespace QtNodes;
 
 // Mock worker that fails twice and succeeds on the third attempt
-class MockWorkerNode : public QObject, public IToolConnector {
+class MockWorkerNode : public QObject, public IToolNode {
     Q_OBJECT
-    Q_INTERFACES(IToolConnector)
+    Q_INTERFACES(IToolNode)
 
 public:
     int executionCount = 0;
@@ -105,13 +105,13 @@ private slots:
         // Configuration
         {
             auto* del = model.delegateModel<ToolNodeDelegate>(textId);
-            auto node = std::dynamic_pointer_cast<TextInputNode>(del->connector());
+            auto node = std::dynamic_pointer_cast<TextInputNode>(del->node());
             node->setText(QStringLiteral("TEST_PAYLOAD"));
         }
         
         {
             auto* retryDel = model.delegateModel<ToolNodeDelegate>(retryId);
-            auto retryNode = std::dynamic_pointer_cast<RetryLoopNode>(retryDel->connector());
+            auto retryNode = std::dynamic_pointer_cast<RetryLoopNode>(retryDel->node());
             retryNode->setFailureString(QStringLiteral("FAIL"));
             retryNode->setMaxRetries(5);
         }

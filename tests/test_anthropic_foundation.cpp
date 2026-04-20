@@ -9,7 +9,7 @@
 #include <cstdlib>
 
 #include "ModelCapsRegistry.h"
-#include "core/LLMProviderRegistry.h"
+#include "ai/registry/LLMProviderRegistry.h"
 #include "ModelCaps.h"
 
 using namespace ModelCapsTypes;
@@ -88,7 +88,7 @@ TEST_F(AnthropicFoundationTest, CredentialPriority_EnvVarShouldWin) {
     // We need to know where LLMProviderRegistry looks for it. 
     // Usually it uses QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) or similar.
     // However, for testing, we might need to mock or ensure it's in the expected path.
-    // Based on mainwindow.cpp, it looks in CognitivePipelines/accounts.json in GenericConfigLocation/GenericDataLocation.
+    // Based on MainWindow.cpp, it looks in CognitivePipelines/accounts.json in GenericConfigLocation/GenericDataLocation.
     
 #if defined(Q_OS_MAC)
     const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);

@@ -16,8 +16,8 @@
 
 #include "test_app.h"
 #include "UniversalLLMNode.h"
-#include "core/LLMProviderRegistry.h"
-#include "backends/ILLMBackend.h"
+#include "ai/registry/LLMProviderRegistry.h"
+#include "ai/backends/ILLMBackend.h"
 #include <QtConcurrent>
 
 // Minimal app helper in case QObject machinery needs it

@@ -4,8 +4,8 @@
 #include <QDir>
 #include <QFile>
 #include "ModelCapsRegistry.h"
-#include "backends/AnthropicBackend.h"
-#include "core/LLMProviderRegistry.h"
+#include "ai/backends/AnthropicBackend.h"
+#include "ai/registry/LLMProviderRegistry.h"
 #include "test_app.h"
 
 /**

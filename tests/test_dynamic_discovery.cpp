@@ -32,7 +32,7 @@
 #include <QTest>
 #include <QtConcurrent>
 
-#include "backends/OpenAIBackend.h"
+#include "ai/backends/OpenAIBackend.h"
 #include "ModelCapsRegistry.h"
 
 namespace {

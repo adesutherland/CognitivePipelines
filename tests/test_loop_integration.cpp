@@ -48,7 +48,7 @@ TEST(LoopIntegrationTest, DownstreamExecutesThreeTimesInOrder)
     // Configure TextInput content and PromptBuilder template
     auto* textDel = model.delegateModel<ToolNodeDelegate>(textId);
     ASSERT_NE(textDel, nullptr);
-    auto textConn = textDel->connector();
+    auto textConn = textDel->node();
     ASSERT_TRUE(textConn);
     auto* textTool = dynamic_cast<TextInputNode*>(textConn.get());
     ASSERT_NE(textTool, nullptr);
@@ -56,7 +56,7 @@ TEST(LoopIntegrationTest, DownstreamExecutesThreeTimesInOrder)
 
     auto* promptDel = model.delegateModel<ToolNodeDelegate>(promptId);
     ASSERT_NE(promptDel, nullptr);
-    auto promptConn = promptDel->connector();
+    auto promptConn = promptDel->node();
     ASSERT_TRUE(promptConn);
     auto* promptTool = dynamic_cast<PromptBuilderNode*>(promptConn.get());
     ASSERT_NE(promptTool, nullptr);
@@ -111,8 +111,8 @@ TEST(LoopIntegrationTest, ConcurrencyTwoSourcesFinishInParallel)
     auto* delB = model.delegateModel<ToolNodeDelegate>(textB);
     ASSERT_NE(delA, nullptr);
     ASSERT_NE(delB, nullptr);
-    auto connA = delA->connector();
-    auto connB = delB->connector();
+    auto connA = delA->node();
+    auto connB = delB->node();
     ASSERT_TRUE(connA);
     ASSERT_TRUE(connB);
     auto* toolA = dynamic_cast<TextInputNode*>(connA.get());

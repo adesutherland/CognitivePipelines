@@ -34,14 +34,14 @@ TEST(ExecutionControlTest, SelectiveEntryExecution)
 
     // Assign different texts to distinguish runs (optional)
     if (auto* delA = model.delegateModel<ToolNodeDelegate>(aId)) {
-        if (auto conn = delA->connector()) {
+        if (auto conn = delA->node()) {
             if (auto* ti = dynamic_cast<TextInputNode*>(conn.get())) {
                 ti->setText(QStringLiteral("Alpha"));
             }
         }
     }
     if (auto* delB = model.delegateModel<ToolNodeDelegate>(bId)) {
-        if (auto conn = delB->connector()) {
+        if (auto conn = delB->node()) {
             if (auto* ti = dynamic_cast<TextInputNode*>(conn.get())) {
                 ti->setText(QStringLiteral("Beta"));
             }

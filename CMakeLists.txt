@@ -74,6 +74,22 @@ foreach(CONFIG ${CMAKE_CONFIGURATION_TYPES})
 endforeach()
 # --------------------------------------
 
+# Source tree locations used throughout the build
+set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
+set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+
+# Phase 1 of the source-tree reorganization keeps many local includes as basenames.
+# Add all nested source directories as private include roots to avoid a noisy include rewrite.
+file(GLOB_RECURSE CP_SOURCE_TREE_CONTENTS CONFIGURE_DEPENDS LIST_DIRECTORIES true "${SRC_DIR}/*")
+set(CP_PRIVATE_INCLUDE_DIRS ${SRC_DIR})
+foreach(_path IN LISTS CP_SOURCE_TREE_CONTENTS)
+    if(IS_DIRECTORY "${_path}")
+        list(APPEND CP_PRIVATE_INCLUDE_DIRS "${_path}")
+    endif()
+endforeach()
+list(REMOVE_DUPLICATES CP_PRIVATE_INCLUDE_DIRS)
+
 # FetchContent for external dependencies
 include(FetchContent)
 
@@ -87,12 +103,12 @@ FetchContent_Declare(
 
 # Manually Define the Target from local 3rdparty sources
 add_library(quickjs STATIC
-    src/3rdparty/quickjs/quickjs.c
-    src/3rdparty/quickjs/libregexp.c
-    src/3rdparty/quickjs/libunicode.c
-    src/3rdparty/quickjs/cutils.c
-    src/3rdparty/quickjs/dtoa.c
-    src/3rdparty/quickjs/quickjs-libc.c
+    ${THIRD_PARTY_DIR}/quickjs/quickjs.c
+    ${THIRD_PARTY_DIR}/quickjs/libregexp.c
+    ${THIRD_PARTY_DIR}/quickjs/libunicode.c
+    ${THIRD_PARTY_DIR}/quickjs/cutils.c
+    ${THIRD_PARTY_DIR}/quickjs/dtoa.c
+    ${THIRD_PARTY_DIR}/quickjs/quickjs-libc.c
 )
 
 # Critical Definitions
@@ -103,7 +119,7 @@ target_compile_definitions(quickjs PUBLIC
 )
 
 # Include Paths
-target_include_directories(quickjs PUBLIC src/3rdparty/quickjs)
+target_include_directories(quickjs PUBLIC ${THIRD_PARTY_DIR}/quickjs)
 
 # Enforce C11 for QuickJS (required for atomics on Windows/MSVC)
 set_target_properties(quickjs PROPERTIES
@@ -152,144 +168,142 @@ if(WIN32)
 endif()
 
 # Sources
-set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_executable(CognitivePipelines
     # Core headers
-    ${INCLUDE_DIR}/IToolConnector.h
+    ${INCLUDE_DIR}/IToolNode.h
     ${INCLUDE_DIR}/CommonDataTypes.h
     ${INCLUDE_DIR}/IScriptHost.h
     # Application sources
-    ${SRC_DIR}/main.cpp
-    ${SRC_DIR}/mainwindow.cpp
-    ${SRC_DIR}/mainwindow.h
-    ${SRC_DIR}/Logger.cpp
-    ${SRC_DIR}/Logger.h
-    ${SRC_DIR}/about_dialog.cpp
-    ${SRC_DIR}/about_dialog.h
-    ${SRC_DIR}/UserInputDialog.cpp
-    ${SRC_DIR}/UserInputDialog.h
-    ${SRC_DIR}/PythonScriptConnector.cpp
-    ${SRC_DIR}/PythonScriptConnector.h
-    ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
-    ${SRC_DIR}/UniversalLLMPropertiesWidget.h
-    ${SRC_DIR}/UniversalLLMNode.cpp
-    ${SRC_DIR}/UniversalLLMNode.h
-    ${SRC_DIR}/ImageGenPropertiesWidget.cpp
-    ${SRC_DIR}/ImageGenPropertiesWidget.h
-    ${SRC_DIR}/ImageGenNode.cpp
-    ${SRC_DIR}/ImageGenNode.h
-    ${SRC_DIR}/backends/ILLMBackend.h
-    ${SRC_DIR}/backends/OpenAIBackend.cpp
-    ${SRC_DIR}/backends/OpenAIBackend.h
-    ${SRC_DIR}/backends/GoogleBackend.cpp
-    ${SRC_DIR}/backends/GoogleBackend.h
-    ${SRC_DIR}/backends/AnthropicBackend.cpp
-    ${SRC_DIR}/backends/AnthropicBackend.h
-    ${SRC_DIR}/ExecutionScriptHost.cpp
-    ${SRC_DIR}/ExecutionScriptHost.h
-    ${SRC_DIR}/ModelCaps.cpp
-    ${SRC_DIR}/ModelCaps.h
-    ${SRC_DIR}/ModelCapsRegistry.cpp
-    ${SRC_DIR}/ModelCapsRegistry.h
-    ${SRC_DIR}/core/LLMProviderRegistry.cpp
-    ${SRC_DIR}/core/LLMProviderRegistry.h
-    ${SRC_DIR}/core/DocumentLoader.cpp
-    ${SRC_DIR}/core/DocumentLoader.h
-    ${SRC_DIR}/core/TextChunker.cpp
-    ${SRC_DIR}/core/TextChunker.h
-    ${SRC_DIR}/core/RagUtils.cpp
-    ${SRC_DIR}/core/RagUtils.h
-    ${SRC_DIR}/RagQueryNode.cpp
-    ${SRC_DIR}/RagQueryNode.h
-    ${SRC_DIR}/RagQueryPropertiesWidget.cpp
-    ${SRC_DIR}/RagQueryPropertiesWidget.h
-    ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
-    ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
-    ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
-    ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.cpp
-    ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.h
-    ${SRC_DIR}/PromptBuilderNode.cpp
-    ${SRC_DIR}/PromptBuilderNode.h
-    ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
-    ${SRC_DIR}/PromptBuilderPropertiesWidget.h
-    ${SRC_DIR}/TextInputNode.cpp
-    ${SRC_DIR}/TextInputNode.h
-    ${SRC_DIR}/TextInputPropertiesWidget.cpp
-    ${SRC_DIR}/TextInputPropertiesWidget.h
-    ${SRC_DIR}/TextOutputNode.cpp
-    ${SRC_DIR}/TextOutputNode.h
-    ${SRC_DIR}/TextOutputPropertiesWidget.cpp
-    ${SRC_DIR}/TextOutputPropertiesWidget.h
-    ${SRC_DIR}/ImageNode.cpp
-    ${SRC_DIR}/ImageNode.h
-    ${SRC_DIR}/ImagePropertiesWidget.cpp
-    ${SRC_DIR}/ImagePropertiesWidget.h
-    ${SRC_DIR}/ImagePopupDialog.cpp
-    ${SRC_DIR}/ImagePopupDialog.h
-    ${SRC_DIR}/logging_categories.cpp
-    ${SRC_DIR}/MermaidNode.cpp
-    ${SRC_DIR}/MermaidNode.h
-    ${SRC_DIR}/MermaidPropertiesWidget.cpp
-    ${SRC_DIR}/MermaidPropertiesWidget.h
-    ${SRC_DIR}/PdfToImageNode.cpp
-    ${SRC_DIR}/PdfToImageNode.h
-    ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
-    ${SRC_DIR}/PdfToImagePropertiesWidget.h
-    ${SRC_DIR}/HumanInputNode.cpp
-    ${SRC_DIR}/HumanInputNode.h
-    ${SRC_DIR}/HumanInputPropertiesWidget.cpp
-    ${SRC_DIR}/HumanInputPropertiesWidget.h
-    ${SRC_DIR}/ProcessConnector.cpp
-    ${SRC_DIR}/ProcessConnector.h
-    ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
-    ${SRC_DIR}/ProcessConnectorPropertiesWidget.h
-    ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.cpp
-    ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.h
-    ${SRC_DIR}/DatabaseConnector.cpp
-    ${SRC_DIR}/DatabaseConnector.h
-    ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
-    ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
-    ${SRC_DIR}/QuickJSRuntime.cpp
-    ${SRC_DIR}/QuickJSRuntime.h
-    ${SRC_DIR}/ScriptDatabaseBridge.cpp
-    ${SRC_DIR}/ScriptDatabaseBridge.h
-    ${SRC_DIR}/RagIndexerNode.cpp
-    ${SRC_DIR}/RagIndexerNode.h
-    ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
-    ${SRC_DIR}/RagIndexerPropertiesWidget.h
-    ${SRC_DIR}/ConditionalRouterNode.cpp
-    ${SRC_DIR}/ConditionalRouterNode.h
-    ${SRC_DIR}/ConditionalRouterPropertiesWidget.cpp
-    ${SRC_DIR}/ConditionalRouterPropertiesWidget.h
-    ${SRC_DIR}/LoopNode.cpp
-    ${SRC_DIR}/LoopNode.h
-    ${SRC_DIR}/LoopPropertiesWidget.cpp
-    ${SRC_DIR}/LoopPropertiesWidget.h
-    ${SRC_DIR}/LoopUntilNode.cpp
-    ${SRC_DIR}/LoopUntilNode.h
-    ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
-    ${SRC_DIR}/LoopUntilPropertiesWidget.h
-    ${SRC_DIR}/RetryLoopNode.cpp
-    ${SRC_DIR}/RetryLoopNode.h
-    ${SRC_DIR}/RetryLoopPropertiesWidget.cpp
-    ${SRC_DIR}/RetryLoopPropertiesWidget.h
-    ${SRC_DIR}/UniversalScriptConnector.cpp
-    ${SRC_DIR}/UniversalScriptConnector.h
-    ${SRC_DIR}/ScriptPropertiesWidget.cpp
-    ${SRC_DIR}/ScriptPropertiesWidget.h
-    ${SRC_DIR}/NodeGraphModel.cpp
-    ${SRC_DIR}/NodeGraphModel.h
-    ${SRC_DIR}/ToolNodeDelegate.cpp
-    ${SRC_DIR}/ToolNodeDelegate.h
-    ${SRC_DIR}/NodeInfoWidget.cpp
-    ${SRC_DIR}/NodeInfoWidget.h
-    ${SRC_DIR}/ExecutionEngine.cpp
-    ${SRC_DIR}/ExecutionEngine.h
-    ${SRC_DIR}/MermaidRenderService.cpp
-    ${SRC_DIR}/MermaidRenderService.h
-    ${SRC_DIR}/CredentialsDialog.cpp
-    ${SRC_DIR}/CredentialsDialog.h
+    ${SRC_DIR}/app/main.cpp
+    ${SRC_DIR}/app/MainWindow.cpp
+    ${SRC_DIR}/app/MainWindow.h
+    ${SRC_DIR}/logging/Logger.cpp
+    ${SRC_DIR}/logging/Logger.h
+    ${SRC_DIR}/app/dialogs/AboutDialog.cpp
+    ${SRC_DIR}/app/dialogs/AboutDialog.h
+    ${SRC_DIR}/app/dialogs/UserInputDialog.cpp
+    ${SRC_DIR}/app/dialogs/UserInputDialog.h
+    ${SRC_DIR}/nodes/external_tools/python/PythonScriptNode.cpp
+    ${SRC_DIR}/nodes/external_tools/python/PythonScriptNode.h
+    ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMPropertiesWidget.h
+    ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMNode.cpp
+    ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMNode.h
+    ${SRC_DIR}/nodes/ai/image_generation/ImageGenPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/ai/image_generation/ImageGenPropertiesWidget.h
+    ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.cpp
+    ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.h
+    ${SRC_DIR}/ai/backends/ILLMBackend.h
+    ${SRC_DIR}/ai/backends/OpenAIBackend.cpp
+    ${SRC_DIR}/ai/backends/OpenAIBackend.h
+    ${SRC_DIR}/ai/backends/GoogleBackend.cpp
+    ${SRC_DIR}/ai/backends/GoogleBackend.h
+    ${SRC_DIR}/ai/backends/AnthropicBackend.cpp
+    ${SRC_DIR}/ai/backends/AnthropicBackend.h
+    ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.cpp
+    ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.h
+    ${SRC_DIR}/ai/capabilities/ModelCaps.cpp
+    ${SRC_DIR}/ai/capabilities/ModelCaps.h
+    ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.cpp
+    ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.h
+    ${SRC_DIR}/ai/registry/LLMProviderRegistry.cpp
+    ${SRC_DIR}/ai/registry/LLMProviderRegistry.h
+    ${SRC_DIR}/retrieval/documents/DocumentLoader.cpp
+    ${SRC_DIR}/retrieval/documents/DocumentLoader.h
+    ${SRC_DIR}/retrieval/chunking/TextChunker.cpp
+    ${SRC_DIR}/retrieval/chunking/TextChunker.h
+    ${SRC_DIR}/retrieval/storage/RagUtils.cpp
+    ${SRC_DIR}/retrieval/storage/RagUtils.h
+    ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryNode.cpp
+    ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryNode.h
+    ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryPropertiesWidget.h
+    ${SRC_DIR}/retrieval/chunking/ChunkerStrategy.h
+    ${SRC_DIR}/retrieval/chunking/MarkdownChunker.cpp
+    ${SRC_DIR}/retrieval/chunking/MarkdownChunker.h
+    ${SRC_DIR}/retrieval/chunking/StandardCodeChunker.cpp
+    ${SRC_DIR}/retrieval/chunking/StandardCodeChunker.h
+    ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.cpp
+    ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.h
+    ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.h
+    ${SRC_DIR}/nodes/io/text_input/TextInputNode.cpp
+    ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
+    ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.h
+    ${SRC_DIR}/nodes/io/text_output/TextOutputNode.cpp
+    ${SRC_DIR}/nodes/io/text_output/TextOutputNode.h
+    ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.h
+    ${SRC_DIR}/nodes/io/image/ImageNode.cpp
+    ${SRC_DIR}/nodes/io/image/ImageNode.h
+    ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.cpp
+    ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.h
+    ${SRC_DIR}/nodes/io/image/ImagePopupDialog.cpp
+    ${SRC_DIR}/nodes/io/image/ImagePopupDialog.h
+    ${SRC_DIR}/logging/LoggingCategories.cpp
+    ${SRC_DIR}/nodes/visualization/mermaid/MermaidNode.cpp
+    ${SRC_DIR}/nodes/visualization/mermaid/MermaidNode.h
+    ${SRC_DIR}/nodes/visualization/mermaid/MermaidPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/visualization/mermaid/MermaidPropertiesWidget.h
+    ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImageNode.cpp
+    ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImageNode.h
+    ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImagePropertiesWidget.cpp
+    ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImagePropertiesWidget.h
+    ${SRC_DIR}/nodes/io/human_input/HumanInputNode.cpp
+    ${SRC_DIR}/nodes/io/human_input/HumanInputNode.h
+    ${SRC_DIR}/nodes/io/human_input/HumanInputPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/io/human_input/HumanInputPropertiesWidget.h
+    ${SRC_DIR}/nodes/external_tools/process/ProcessNode.cpp
+    ${SRC_DIR}/nodes/external_tools/process/ProcessNode.h
+    ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.h
+    ${SRC_DIR}/nodes/external_tools/python/PythonScriptPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/external_tools/python/PythonScriptPropertiesWidget.h
+    ${SRC_DIR}/nodes/retrieval/database/DatabaseNode.cpp
+    ${SRC_DIR}/nodes/retrieval/database/DatabaseNode.h
+    ${SRC_DIR}/nodes/retrieval/database/DatabasePropertiesWidget.cpp
+    ${SRC_DIR}/nodes/retrieval/database/DatabasePropertiesWidget.h
+    ${SRC_DIR}/scripting/runtimes/QuickJSRuntime.cpp
+    ${SRC_DIR}/scripting/runtimes/QuickJSRuntime.h
+    ${SRC_DIR}/scripting/bridges/ScriptDatabaseBridge.cpp
+    ${SRC_DIR}/scripting/bridges/ScriptDatabaseBridge.h
+    ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerNode.cpp
+    ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerNode.h
+    ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerPropertiesWidget.h
+    ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.cpp
+    ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
+    ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
+    ${SRC_DIR}/nodes/control_flow/loop/LoopNode.cpp
+    ${SRC_DIR}/nodes/control_flow/loop/LoopNode.h
+    ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.h
+    ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.cpp
+    ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.h
+    ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.h
+    ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.cpp
+    ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.h
+    ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.h
+    ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptNode.cpp
+    ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptNode.h
+    ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptPropertiesWidget.h
+    ${SRC_DIR}/graph/NodeGraphModel.cpp
+    ${SRC_DIR}/graph/NodeGraphModel.h
+    ${SRC_DIR}/graph/ToolNodeDelegate.cpp
+    ${SRC_DIR}/graph/ToolNodeDelegate.h
+    ${SRC_DIR}/graph/NodeInfoWidget.cpp
+    ${SRC_DIR}/graph/NodeInfoWidget.h
+    ${SRC_DIR}/execution/ExecutionEngine.cpp
+    ${SRC_DIR}/execution/ExecutionEngine.h
+    ${SRC_DIR}/nodes/visualization/mermaid/MermaidRenderService.cpp
+    ${SRC_DIR}/nodes/visualization/mermaid/MermaidRenderService.h
+    ${SRC_DIR}/app/dialogs/CredentialsDialog.cpp
+    ${SRC_DIR}/app/dialogs/CredentialsDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
     ${qtnodes_SOURCE_DIR}/resources/resources.qrc
@@ -300,11 +314,8 @@ add_executable(CognitivePipelines
 # Link libraries
 # Add public headers directory to include path
 target_include_directories(CognitivePipelines PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SRC_DIR}
-    ${SRC_DIR}/backends
-    ${SRC_DIR}/core
-    ${SRC_DIR}/chunkingstrategies
+    ${INCLUDE_DIR}
+    ${CP_PRIVATE_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
 )
 
@@ -391,20 +402,20 @@ if(ENABLE_TESTING)
     # Unit Tests (GTest)
     add_executable(unit_tests
             # Core headers
-            ${INCLUDE_DIR}/IToolConnector.h
+            ${INCLUDE_DIR}/IToolNode.h
             ${INCLUDE_DIR}/CommonDataTypes.h
-            ${INCLUDE_DIR}/string_utils.h
+            ${INCLUDE_DIR}/StringUtils.h
             # Test sources
             tests/test_app_init.cpp
-            src/Logger.cpp
-            src/Logger.h
+            ${SRC_DIR}/logging/Logger.cpp
+            ${SRC_DIR}/logging/Logger.h
             tests/test_main.cpp
             tests/test_nodes.cpp
             tests/test_text_output_fanout.cpp
             tests/test_execution_engine.cpp
             tests/test_text_output_save.cpp
             tests/test_invalid_model_pipeline.cpp
-            tests/test_process_connector.cpp
+            tests/test_process_node.cpp
             tests/test_universal_llm.cpp
             tests/test_logging.cpp
             tests/test_image_node.cpp
@@ -439,141 +450,141 @@ if(ENABLE_TESTING)
             tests/ScriptDatabaseBridgeTest.cpp
             tests/ScriptNodeIntegrationTest.cpp
             # Sources required by the unit tests
-            ${SRC_DIR}/ExecutionScriptHost.cpp
-            ${SRC_DIR}/ExecutionScriptHost.h
-            ${SRC_DIR}/logging_categories.cpp
-            ${SRC_DIR}/ExecutionEngine.cpp
-            ${SRC_DIR}/ExecutionEngine.h
-            ${SRC_DIR}/NodeGraphModel.cpp
-            ${SRC_DIR}/NodeGraphModel.h
-            ${SRC_DIR}/ToolNodeDelegate.cpp
-            ${SRC_DIR}/ToolNodeDelegate.h
-            ${SRC_DIR}/NodeInfoWidget.cpp
-            ${SRC_DIR}/NodeInfoWidget.h
-            ${SRC_DIR}/PromptBuilderNode.cpp
-            ${SRC_DIR}/PromptBuilderNode.h
-            ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
-            ${SRC_DIR}/PromptBuilderPropertiesWidget.h
-            ${SRC_DIR}/TextInputNode.cpp
-            ${SRC_DIR}/TextInputNode.h
-            ${SRC_DIR}/TextInputPropertiesWidget.cpp
-            ${SRC_DIR}/TextInputPropertiesWidget.h
-            ${SRC_DIR}/TextOutputNode.cpp
-            ${SRC_DIR}/TextOutputNode.h
-            ${SRC_DIR}/TextOutputPropertiesWidget.cpp
-            ${SRC_DIR}/TextOutputPropertiesWidget.h
-            ${SRC_DIR}/ImageNode.cpp
-            ${SRC_DIR}/ImageNode.h
-            ${SRC_DIR}/ImagePropertiesWidget.cpp
-            ${SRC_DIR}/ImagePropertiesWidget.h
-            ${SRC_DIR}/ImagePopupDialog.cpp
-            ${SRC_DIR}/ImagePopupDialog.h
-            ${SRC_DIR}/MermaidNode.cpp
-            ${SRC_DIR}/MermaidNode.h
-            ${SRC_DIR}/MermaidPropertiesWidget.cpp
-            ${SRC_DIR}/MermaidPropertiesWidget.h
-            ${SRC_DIR}/MermaidRenderService.cpp
-            ${SRC_DIR}/MermaidRenderService.h
+            ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.cpp
+            ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.h
+            ${SRC_DIR}/logging/LoggingCategories.cpp
+            ${SRC_DIR}/execution/ExecutionEngine.cpp
+            ${SRC_DIR}/execution/ExecutionEngine.h
+            ${SRC_DIR}/graph/NodeGraphModel.cpp
+            ${SRC_DIR}/graph/NodeGraphModel.h
+            ${SRC_DIR}/graph/ToolNodeDelegate.cpp
+            ${SRC_DIR}/graph/ToolNodeDelegate.h
+            ${SRC_DIR}/graph/NodeInfoWidget.cpp
+            ${SRC_DIR}/graph/NodeInfoWidget.h
+            ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.cpp
+            ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.h
+            ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/text_input/TextInputNode.cpp
+            ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
+            ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/text_output/TextOutputNode.cpp
+            ${SRC_DIR}/nodes/io/text_output/TextOutputNode.h
+            ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/image/ImageNode.cpp
+            ${SRC_DIR}/nodes/io/image/ImageNode.h
+            ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.h
+            ${SRC_DIR}/nodes/io/image/ImagePopupDialog.cpp
+            ${SRC_DIR}/nodes/io/image/ImagePopupDialog.h
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidNode.cpp
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidNode.h
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidPropertiesWidget.h
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidRenderService.cpp
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidRenderService.h
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
             ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
-            ${SRC_DIR}/PdfToImageNode.cpp
-            ${SRC_DIR}/PdfToImageNode.h
-            ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
-            ${SRC_DIR}/PdfToImagePropertiesWidget.h
-            ${SRC_DIR}/HumanInputNode.cpp
-            ${SRC_DIR}/HumanInputNode.h
-            ${SRC_DIR}/HumanInputPropertiesWidget.cpp
-            ${SRC_DIR}/HumanInputPropertiesWidget.h
-            ${SRC_DIR}/mainwindow.cpp
-            ${SRC_DIR}/mainwindow.h
-            ${SRC_DIR}/UserInputDialog.cpp
-            ${SRC_DIR}/UserInputDialog.h
-            ${SRC_DIR}/about_dialog.cpp
-            ${SRC_DIR}/about_dialog.h
-            ${SRC_DIR}/CredentialsDialog.cpp
-            ${SRC_DIR}/CredentialsDialog.h
-            ${SRC_DIR}/ProcessConnector.cpp
-            ${SRC_DIR}/ProcessConnector.h
-            ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/ProcessConnectorPropertiesWidget.h
-            ${SRC_DIR}/PythonScriptConnector.cpp
-            ${SRC_DIR}/PythonScriptConnector.h
-            ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.h
-            ${SRC_DIR}/DatabaseConnector.cpp
-            ${SRC_DIR}/DatabaseConnector.h
-            ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
-            ${SRC_DIR}/QuickJSRuntime.cpp
-            ${SRC_DIR}/QuickJSRuntime.h
-            ${SRC_DIR}/ScriptDatabaseBridge.cpp
-            ${SRC_DIR}/ScriptDatabaseBridge.h
-            ${SRC_DIR}/UniversalScriptConnector.cpp
-            ${SRC_DIR}/UniversalScriptConnector.h
-            ${SRC_DIR}/ScriptPropertiesWidget.cpp
-            ${SRC_DIR}/ScriptPropertiesWidget.h
-            ${SRC_DIR}/RagIndexerNode.cpp
-            ${SRC_DIR}/RagIndexerNode.h
-            ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
-            ${SRC_DIR}/RagIndexerPropertiesWidget.h
-            ${SRC_DIR}/ConditionalRouterNode.cpp
-            ${SRC_DIR}/ConditionalRouterNode.h
-            ${SRC_DIR}/ConditionalRouterPropertiesWidget.cpp
-            ${SRC_DIR}/ConditionalRouterPropertiesWidget.h
-            ${SRC_DIR}/LoopNode.cpp
-            ${SRC_DIR}/LoopNode.h
-            ${SRC_DIR}/LoopPropertiesWidget.cpp
-            ${SRC_DIR}/LoopPropertiesWidget.h
-            ${SRC_DIR}/LoopUntilNode.cpp
-            ${SRC_DIR}/LoopUntilNode.h
-            ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
-            ${SRC_DIR}/LoopUntilPropertiesWidget.h
-            ${SRC_DIR}/RetryLoopNode.cpp
-            ${SRC_DIR}/RetryLoopNode.h
-            ${SRC_DIR}/RetryLoopPropertiesWidget.cpp
-            ${SRC_DIR}/RetryLoopPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImageNode.cpp
+            ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImageNode.h
+            ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImagePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImagePropertiesWidget.h
+            ${SRC_DIR}/nodes/io/human_input/HumanInputNode.cpp
+            ${SRC_DIR}/nodes/io/human_input/HumanInputNode.h
+            ${SRC_DIR}/nodes/io/human_input/HumanInputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/human_input/HumanInputPropertiesWidget.h
+            ${SRC_DIR}/app/MainWindow.cpp
+            ${SRC_DIR}/app/MainWindow.h
+            ${SRC_DIR}/app/dialogs/UserInputDialog.cpp
+            ${SRC_DIR}/app/dialogs/UserInputDialog.h
+            ${SRC_DIR}/app/dialogs/AboutDialog.cpp
+            ${SRC_DIR}/app/dialogs/AboutDialog.h
+            ${SRC_DIR}/app/dialogs/CredentialsDialog.cpp
+            ${SRC_DIR}/app/dialogs/CredentialsDialog.h
+            ${SRC_DIR}/nodes/external_tools/process/ProcessNode.cpp
+            ${SRC_DIR}/nodes/external_tools/process/ProcessNode.h
+            ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.h
+            ${SRC_DIR}/nodes/external_tools/python/PythonScriptNode.cpp
+            ${SRC_DIR}/nodes/external_tools/python/PythonScriptNode.h
+            ${SRC_DIR}/nodes/external_tools/python/PythonScriptPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/external_tools/python/PythonScriptPropertiesWidget.h
+            ${SRC_DIR}/nodes/retrieval/database/DatabaseNode.cpp
+            ${SRC_DIR}/nodes/retrieval/database/DatabaseNode.h
+            ${SRC_DIR}/nodes/retrieval/database/DatabasePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/retrieval/database/DatabasePropertiesWidget.h
+            ${SRC_DIR}/scripting/runtimes/QuickJSRuntime.cpp
+            ${SRC_DIR}/scripting/runtimes/QuickJSRuntime.h
+            ${SRC_DIR}/scripting/bridges/ScriptDatabaseBridge.cpp
+            ${SRC_DIR}/scripting/bridges/ScriptDatabaseBridge.h
+            ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptNode.cpp
+            ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptNode.h
+            ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptPropertiesWidget.h
+            ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerNode.cpp
+            ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerNode.h
+            ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.cpp
+            ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
+            ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/loop/LoopNode.cpp
+            ${SRC_DIR}/nodes/control_flow/loop/LoopNode.h
+            ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.cpp
+            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.h
+            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.cpp
+            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.h
+            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.h
             tests/test_retry_loop_node.cpp
-            ${SRC_DIR}/ExecutionAwarePainters.cpp
-            ${SRC_DIR}/ExecutionStateModel.cpp
-            ${SRC_DIR}/UniversalLLMNode.cpp
-            ${SRC_DIR}/UniversalLLMNode.h
-            ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
-            ${SRC_DIR}/UniversalLLMPropertiesWidget.h
-            ${SRC_DIR}/ModelCaps.cpp
-            ${SRC_DIR}/ModelCaps.h
-            ${SRC_DIR}/ModelCapsRegistry.cpp
-            ${SRC_DIR}/ModelCapsRegistry.h
-            ${SRC_DIR}/ImageGenNode.cpp
-            ${SRC_DIR}/ImageGenNode.h
-            ${SRC_DIR}/ImageGenPropertiesWidget.cpp
-            ${SRC_DIR}/ImageGenPropertiesWidget.h
-            ${SRC_DIR}/core/LLMProviderRegistry.cpp
-            ${SRC_DIR}/core/LLMProviderRegistry.h
-            ${SRC_DIR}/core/DocumentLoader.cpp
-            ${SRC_DIR}/core/DocumentLoader.h
-            ${SRC_DIR}/core/TextChunker.cpp
-            ${SRC_DIR}/core/TextChunker.h
-            ${SRC_DIR}/core/RagUtils.cpp
-            ${SRC_DIR}/core/RagUtils.h
-            ${SRC_DIR}/RagQueryNode.cpp
-            ${SRC_DIR}/RagQueryNode.h
-            ${SRC_DIR}/RagQueryPropertiesWidget.cpp
-            ${SRC_DIR}/RagQueryPropertiesWidget.h
-            ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
-            ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
-            ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
-            ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.cpp
-            ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.h
-            ${SRC_DIR}/backends/ILLMBackend.h
-            ${SRC_DIR}/backends/OpenAIBackend.cpp
-            ${SRC_DIR}/backends/OpenAIBackend.h
-            ${SRC_DIR}/backends/GoogleBackend.cpp
-            ${SRC_DIR}/backends/GoogleBackend.h
-            ${SRC_DIR}/backends/AnthropicBackend.cpp
-            ${SRC_DIR}/backends/AnthropicBackend.h
+            ${SRC_DIR}/graph/ExecutionAwarePainters.cpp
+            ${SRC_DIR}/execution/ExecutionStateModel.cpp
+            ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMNode.cpp
+            ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMNode.h
+            ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMPropertiesWidget.h
+            ${SRC_DIR}/ai/capabilities/ModelCaps.cpp
+            ${SRC_DIR}/ai/capabilities/ModelCaps.h
+            ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.cpp
+            ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.h
+            ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.cpp
+            ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.h
+            ${SRC_DIR}/nodes/ai/image_generation/ImageGenPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/ai/image_generation/ImageGenPropertiesWidget.h
+            ${SRC_DIR}/ai/registry/LLMProviderRegistry.cpp
+            ${SRC_DIR}/ai/registry/LLMProviderRegistry.h
+            ${SRC_DIR}/retrieval/documents/DocumentLoader.cpp
+            ${SRC_DIR}/retrieval/documents/DocumentLoader.h
+            ${SRC_DIR}/retrieval/chunking/TextChunker.cpp
+            ${SRC_DIR}/retrieval/chunking/TextChunker.h
+            ${SRC_DIR}/retrieval/storage/RagUtils.cpp
+            ${SRC_DIR}/retrieval/storage/RagUtils.h
+            ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryNode.cpp
+            ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryNode.h
+            ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryPropertiesWidget.h
+            ${SRC_DIR}/retrieval/chunking/ChunkerStrategy.h
+            ${SRC_DIR}/retrieval/chunking/MarkdownChunker.cpp
+            ${SRC_DIR}/retrieval/chunking/MarkdownChunker.h
+            ${SRC_DIR}/retrieval/chunking/StandardCodeChunker.cpp
+            ${SRC_DIR}/retrieval/chunking/StandardCodeChunker.h
+            ${SRC_DIR}/ai/backends/ILLMBackend.h
+            ${SRC_DIR}/ai/backends/OpenAIBackend.cpp
+            ${SRC_DIR}/ai/backends/OpenAIBackend.h
+            ${SRC_DIR}/ai/backends/GoogleBackend.cpp
+            ${SRC_DIR}/ai/backends/GoogleBackend.h
+            ${SRC_DIR}/ai/backends/AnthropicBackend.cpp
+            ${SRC_DIR}/ai/backends/AnthropicBackend.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
-    target_include_directories(unit_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_include_directories(unit_tests PRIVATE ${INCLUDE_DIR} ${CP_PRIVATE_INCLUDE_DIRS})
     target_link_libraries(unit_tests PRIVATE
             GTest::gtest # Use vcpkg target
             cpr::cpr
@@ -594,150 +605,150 @@ if(ENABLE_TESTING)
     # Integration tests (Qt Test based, headless) - Definition looks okay
     add_executable(integration_tests
             # Core headers
-            ${INCLUDE_DIR}/IToolConnector.h
+            ${INCLUDE_DIR}/IToolNode.h
             ${INCLUDE_DIR}/CommonDataTypes.h
             # Test sources and required implementations
             tests/test_integration.cpp
             tests/test_retry_loop_integration.cpp
             tests/test_matrix.cpp
             tests/integration/MermaidRenderTest.cpp
-            ${SRC_DIR}/Logger.cpp
-            ${SRC_DIR}/Logger.h
-            ${SRC_DIR}/logging_categories.cpp
-            ${SRC_DIR}/mainwindow.cpp
-            ${SRC_DIR}/mainwindow.h
-            ${SRC_DIR}/about_dialog.cpp
-            ${SRC_DIR}/about_dialog.h
-            ${SRC_DIR}/UserInputDialog.cpp
-            ${SRC_DIR}/UserInputDialog.h
-            ${SRC_DIR}/PythonScriptConnector.cpp
-            ${SRC_DIR}/PythonScriptConnector.h
-            ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/PythonScriptConnectorPropertiesWidget.h
-            ${SRC_DIR}/UniversalLLMNode.cpp
-            ${SRC_DIR}/UniversalLLMNode.h
-            ${SRC_DIR}/UniversalLLMPropertiesWidget.cpp
-            ${SRC_DIR}/UniversalLLMPropertiesWidget.h
-            ${SRC_DIR}/ModelCaps.cpp
-            ${SRC_DIR}/ModelCaps.h
-            ${SRC_DIR}/ModelCapsRegistry.cpp
-            ${SRC_DIR}/ModelCapsRegistry.h
-            ${SRC_DIR}/ImageGenNode.cpp
-            ${SRC_DIR}/ImageGenNode.h
-            ${SRC_DIR}/ImageGenPropertiesWidget.cpp
-            ${SRC_DIR}/ImageGenPropertiesWidget.h
-            ${SRC_DIR}/core/LLMProviderRegistry.cpp
-            ${SRC_DIR}/core/LLMProviderRegistry.h
-            ${SRC_DIR}/backends/ILLMBackend.h
-            ${SRC_DIR}/backends/OpenAIBackend.cpp
-            ${SRC_DIR}/backends/OpenAIBackend.h
-            ${SRC_DIR}/backends/GoogleBackend.cpp
-            ${SRC_DIR}/backends/GoogleBackend.h
-            ${SRC_DIR}/backends/AnthropicBackend.cpp
-            ${SRC_DIR}/backends/AnthropicBackend.h
-            ${SRC_DIR}/ExecutionScriptHost.cpp
-            ${SRC_DIR}/ExecutionScriptHost.h
-            ${SRC_DIR}/core/DocumentLoader.cpp
-            ${SRC_DIR}/core/DocumentLoader.h
-            ${SRC_DIR}/core/TextChunker.cpp
-            ${SRC_DIR}/core/TextChunker.h
-            ${SRC_DIR}/core/RagUtils.cpp
-            ${SRC_DIR}/core/RagUtils.h
-            ${SRC_DIR}/chunkingstrategies/ChunkerStrategy.h
-            ${SRC_DIR}/chunkingstrategies/MarkdownChunker.cpp
-            ${SRC_DIR}/chunkingstrategies/MarkdownChunker.h
-            ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.cpp
-            ${SRC_DIR}/chunkingstrategies/StandardCodeChunker.h
-            ${SRC_DIR}/PromptBuilderNode.cpp
-            ${SRC_DIR}/PromptBuilderNode.h
-            ${SRC_DIR}/PromptBuilderPropertiesWidget.cpp
-            ${SRC_DIR}/PromptBuilderPropertiesWidget.h
-            ${SRC_DIR}/TextInputNode.cpp
-            ${SRC_DIR}/TextInputNode.h
-            ${SRC_DIR}/TextInputPropertiesWidget.cpp
-            ${SRC_DIR}/TextInputPropertiesWidget.h
-            ${SRC_DIR}/TextOutputNode.cpp
-            ${SRC_DIR}/TextOutputNode.h
-            ${SRC_DIR}/TextOutputPropertiesWidget.cpp
-            ${SRC_DIR}/TextOutputPropertiesWidget.h
-            ${SRC_DIR}/ImageNode.cpp
-            ${SRC_DIR}/ImageNode.h
-            ${SRC_DIR}/ImagePropertiesWidget.cpp
-            ${SRC_DIR}/ImagePropertiesWidget.h
-            ${SRC_DIR}/ImagePopupDialog.cpp
-            ${SRC_DIR}/ImagePopupDialog.h
-            ${SRC_DIR}/MermaidNode.cpp
-            ${SRC_DIR}/MermaidNode.h
-            ${SRC_DIR}/MermaidPropertiesWidget.cpp
-            ${SRC_DIR}/MermaidPropertiesWidget.h
-            ${SRC_DIR}/MermaidRenderService.cpp
-            ${SRC_DIR}/MermaidRenderService.h
+            ${SRC_DIR}/logging/Logger.cpp
+            ${SRC_DIR}/logging/Logger.h
+            ${SRC_DIR}/logging/LoggingCategories.cpp
+            ${SRC_DIR}/app/MainWindow.cpp
+            ${SRC_DIR}/app/MainWindow.h
+            ${SRC_DIR}/app/dialogs/AboutDialog.cpp
+            ${SRC_DIR}/app/dialogs/AboutDialog.h
+            ${SRC_DIR}/app/dialogs/UserInputDialog.cpp
+            ${SRC_DIR}/app/dialogs/UserInputDialog.h
+            ${SRC_DIR}/nodes/external_tools/python/PythonScriptNode.cpp
+            ${SRC_DIR}/nodes/external_tools/python/PythonScriptNode.h
+            ${SRC_DIR}/nodes/external_tools/python/PythonScriptPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/external_tools/python/PythonScriptPropertiesWidget.h
+            ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMNode.cpp
+            ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMNode.h
+            ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMPropertiesWidget.h
+            ${SRC_DIR}/ai/capabilities/ModelCaps.cpp
+            ${SRC_DIR}/ai/capabilities/ModelCaps.h
+            ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.cpp
+            ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.h
+            ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.cpp
+            ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.h
+            ${SRC_DIR}/nodes/ai/image_generation/ImageGenPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/ai/image_generation/ImageGenPropertiesWidget.h
+            ${SRC_DIR}/ai/registry/LLMProviderRegistry.cpp
+            ${SRC_DIR}/ai/registry/LLMProviderRegistry.h
+            ${SRC_DIR}/ai/backends/ILLMBackend.h
+            ${SRC_DIR}/ai/backends/OpenAIBackend.cpp
+            ${SRC_DIR}/ai/backends/OpenAIBackend.h
+            ${SRC_DIR}/ai/backends/GoogleBackend.cpp
+            ${SRC_DIR}/ai/backends/GoogleBackend.h
+            ${SRC_DIR}/ai/backends/AnthropicBackend.cpp
+            ${SRC_DIR}/ai/backends/AnthropicBackend.h
+            ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.cpp
+            ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.h
+            ${SRC_DIR}/retrieval/documents/DocumentLoader.cpp
+            ${SRC_DIR}/retrieval/documents/DocumentLoader.h
+            ${SRC_DIR}/retrieval/chunking/TextChunker.cpp
+            ${SRC_DIR}/retrieval/chunking/TextChunker.h
+            ${SRC_DIR}/retrieval/storage/RagUtils.cpp
+            ${SRC_DIR}/retrieval/storage/RagUtils.h
+            ${SRC_DIR}/retrieval/chunking/ChunkerStrategy.h
+            ${SRC_DIR}/retrieval/chunking/MarkdownChunker.cpp
+            ${SRC_DIR}/retrieval/chunking/MarkdownChunker.h
+            ${SRC_DIR}/retrieval/chunking/StandardCodeChunker.cpp
+            ${SRC_DIR}/retrieval/chunking/StandardCodeChunker.h
+            ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.cpp
+            ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.h
+            ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/text_input/TextInputNode.cpp
+            ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
+            ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/text_output/TextOutputNode.cpp
+            ${SRC_DIR}/nodes/io/text_output/TextOutputNode.h
+            ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/image/ImageNode.cpp
+            ${SRC_DIR}/nodes/io/image/ImageNode.h
+            ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.h
+            ${SRC_DIR}/nodes/io/image/ImagePopupDialog.cpp
+            ${SRC_DIR}/nodes/io/image/ImagePopupDialog.h
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidNode.cpp
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidNode.h
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidPropertiesWidget.h
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidRenderService.cpp
+            ${SRC_DIR}/nodes/visualization/mermaid/MermaidRenderService.h
             ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
             ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
-            ${SRC_DIR}/PdfToImageNode.cpp
-            ${SRC_DIR}/PdfToImageNode.h
-            ${SRC_DIR}/PdfToImagePropertiesWidget.cpp
-            ${SRC_DIR}/PdfToImagePropertiesWidget.h
-            ${SRC_DIR}/HumanInputNode.cpp
-            ${SRC_DIR}/HumanInputNode.h
-            ${SRC_DIR}/HumanInputPropertiesWidget.cpp
-            ${SRC_DIR}/HumanInputPropertiesWidget.h
-            ${SRC_DIR}/QuickJSRuntime.cpp
-            ${SRC_DIR}/QuickJSRuntime.h
-            ${SRC_DIR}/ScriptDatabaseBridge.cpp
-            ${SRC_DIR}/ScriptDatabaseBridge.h
-            ${SRC_DIR}/UniversalScriptConnector.cpp
-            ${SRC_DIR}/UniversalScriptConnector.h
-            ${SRC_DIR}/ScriptPropertiesWidget.cpp
-            ${SRC_DIR}/ScriptPropertiesWidget.h
-            ${SRC_DIR}/NodeGraphModel.cpp
-            ${SRC_DIR}/NodeGraphModel.h
-            ${SRC_DIR}/ToolNodeDelegate.cpp
-            ${SRC_DIR}/ToolNodeDelegate.h
-            ${SRC_DIR}/NodeInfoWidget.cpp
-            ${SRC_DIR}/NodeInfoWidget.h
-            ${SRC_DIR}/ExecutionEngine.cpp
-            ${SRC_DIR}/ExecutionEngine.h
-            ${SRC_DIR}/CredentialsDialog.cpp
-            ${SRC_DIR}/CredentialsDialog.h
-            ${SRC_DIR}/ProcessConnector.cpp
-            ${SRC_DIR}/ProcessConnector.h
-            ${SRC_DIR}/ProcessConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/ProcessConnectorPropertiesWidget.h
-            ${SRC_DIR}/DatabaseConnector.cpp
-            ${SRC_DIR}/DatabaseConnector.h
-            ${SRC_DIR}/DatabaseConnectorPropertiesWidget.cpp
-            ${SRC_DIR}/DatabaseConnectorPropertiesWidget.h
-            ${SRC_DIR}/RagIndexerNode.cpp
-            ${SRC_DIR}/RagIndexerNode.h
-            ${SRC_DIR}/RagIndexerPropertiesWidget.cpp
-            ${SRC_DIR}/RagIndexerPropertiesWidget.h
-            ${SRC_DIR}/RagQueryNode.cpp
-            ${SRC_DIR}/RagQueryNode.h
-            ${SRC_DIR}/RagQueryPropertiesWidget.cpp
-            ${SRC_DIR}/RagQueryPropertiesWidget.h
-            ${SRC_DIR}/ConditionalRouterNode.cpp
-            ${SRC_DIR}/ConditionalRouterNode.h
-            ${SRC_DIR}/ConditionalRouterPropertiesWidget.cpp
-            ${SRC_DIR}/ConditionalRouterPropertiesWidget.h
-            ${SRC_DIR}/LoopNode.cpp
-            ${SRC_DIR}/LoopNode.h
-            ${SRC_DIR}/LoopPropertiesWidget.cpp
-            ${SRC_DIR}/LoopPropertiesWidget.h
-            ${SRC_DIR}/LoopUntilNode.cpp
-            ${SRC_DIR}/LoopUntilNode.h
-            ${SRC_DIR}/LoopUntilPropertiesWidget.cpp
-            ${SRC_DIR}/LoopUntilPropertiesWidget.h
-            ${SRC_DIR}/RetryLoopNode.cpp
-            ${SRC_DIR}/RetryLoopNode.h
-            ${SRC_DIR}/RetryLoopPropertiesWidget.cpp
-            ${SRC_DIR}/RetryLoopPropertiesWidget.h
-            ${SRC_DIR}/ExecutionAwarePainters.cpp
-            ${SRC_DIR}/ExecutionStateModel.cpp
+            ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImageNode.cpp
+            ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImageNode.h
+            ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImagePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/pdf_to_image/PdfToImagePropertiesWidget.h
+            ${SRC_DIR}/nodes/io/human_input/HumanInputNode.cpp
+            ${SRC_DIR}/nodes/io/human_input/HumanInputNode.h
+            ${SRC_DIR}/nodes/io/human_input/HumanInputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/human_input/HumanInputPropertiesWidget.h
+            ${SRC_DIR}/scripting/runtimes/QuickJSRuntime.cpp
+            ${SRC_DIR}/scripting/runtimes/QuickJSRuntime.h
+            ${SRC_DIR}/scripting/bridges/ScriptDatabaseBridge.cpp
+            ${SRC_DIR}/scripting/bridges/ScriptDatabaseBridge.h
+            ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptNode.cpp
+            ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptNode.h
+            ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptPropertiesWidget.h
+            ${SRC_DIR}/graph/NodeGraphModel.cpp
+            ${SRC_DIR}/graph/NodeGraphModel.h
+            ${SRC_DIR}/graph/ToolNodeDelegate.cpp
+            ${SRC_DIR}/graph/ToolNodeDelegate.h
+            ${SRC_DIR}/graph/NodeInfoWidget.cpp
+            ${SRC_DIR}/graph/NodeInfoWidget.h
+            ${SRC_DIR}/execution/ExecutionEngine.cpp
+            ${SRC_DIR}/execution/ExecutionEngine.h
+            ${SRC_DIR}/app/dialogs/CredentialsDialog.cpp
+            ${SRC_DIR}/app/dialogs/CredentialsDialog.h
+            ${SRC_DIR}/nodes/external_tools/process/ProcessNode.cpp
+            ${SRC_DIR}/nodes/external_tools/process/ProcessNode.h
+            ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.h
+            ${SRC_DIR}/nodes/retrieval/database/DatabaseNode.cpp
+            ${SRC_DIR}/nodes/retrieval/database/DatabaseNode.h
+            ${SRC_DIR}/nodes/retrieval/database/DatabasePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/retrieval/database/DatabasePropertiesWidget.h
+            ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerNode.cpp
+            ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerNode.h
+            ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/retrieval/rag_indexer/RagIndexerPropertiesWidget.h
+            ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryNode.cpp
+            ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryNode.h
+            ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/retrieval/rag_query/RagQueryPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.cpp
+            ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
+            ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/loop/LoopNode.cpp
+            ${SRC_DIR}/nodes/control_flow/loop/LoopNode.h
+            ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.cpp
+            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.h
+            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.cpp
+            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.h
+            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.h
+            ${SRC_DIR}/graph/ExecutionAwarePainters.cpp
+            ${SRC_DIR}/execution/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
 
-    target_include_directories(integration_tests PRIVATE ${SRC_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_include_directories(integration_tests PRIVATE ${INCLUDE_DIR} ${CP_PRIVATE_INCLUDE_DIRS})
     target_link_libraries(integration_tests PRIVATE
             Qt6::Test
             Qt6::Core
@@ -1213,12 +1224,13 @@ if(APPLE AND NOT XCODE)
     endif()
 endif()
 
-# Discover tests for the unit_tests target; working directory is project root (not used for credentials anymore)
+# Discover tests for the unit_tests target from the build tree so CMake's
+# generated discovery JSON stays out of the source tree.
 # We do this at the very end to ensure it runs AFTER all macOS POST_BUILD cleanup/codesign steps
 if(TARGET unit_tests)
     gtest_discover_tests(unit_tests
         DISCOVERY_MODE POST_BUILD
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         DISCOVERY_TIMEOUT 300
     )
 endif()
@@ -1228,8 +1240,8 @@ include(CPack)
 
 # Live execution-state highlighting sources
 target_sources(CognitivePipelines PRIVATE
-    ${SRC_DIR}/ExecutionAwarePainters.cpp
-    ${SRC_DIR}/ExecutionStateModel.cpp
+    ${SRC_DIR}/graph/ExecutionAwarePainters.cpp
+    ${SRC_DIR}/execution/ExecutionStateModel.cpp
 )
 
 # Windows Post-Build Signing

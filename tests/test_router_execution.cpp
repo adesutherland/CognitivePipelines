@@ -135,7 +135,7 @@ TEST(RouterExecutionTest, testTrueBranch)
     // Configure TextInputs
     auto* dataDel = model.delegateModel<ToolNodeDelegate>(dataNodeId);
     ASSERT_NE(dataDel, nullptr);
-    auto dataConn = dataDel->connector();
+    auto dataConn = dataDel->node();
     ASSERT_TRUE(dataConn);
     auto* dataTool = dynamic_cast<TextInputNode*>(dataConn.get());
     ASSERT_NE(dataTool, nullptr);
@@ -143,14 +143,14 @@ TEST(RouterExecutionTest, testTrueBranch)
 
     auto* condDel = model.delegateModel<ToolNodeDelegate>(condNodeId);
     ASSERT_NE(condDel, nullptr);
-    auto condConn = condDel->connector();
+    auto condConn = condDel->node();
     ASSERT_TRUE(condConn);
     auto* condTool = dynamic_cast<TextInputNode*>(condConn.get());
     ASSERT_NE(condTool, nullptr);
     condTool->setText(QStringLiteral("true"));
 
     // Router uses the explicit condition pin; no need to touch defaultCondition
-    auto routerConn = routerDel->connector();
+    auto routerConn = routerDel->node();
     ASSERT_TRUE(routerConn);
     auto* routerTool = dynamic_cast<ConditionalRouterNode*>(routerConn.get());
     ASSERT_NE(routerTool, nullptr);
@@ -252,7 +252,7 @@ TEST(RouterExecutionTest, testFalseBranch)
     // Configure TextInputs
     auto* dataDel = model.delegateModel<ToolNodeDelegate>(dataNodeId);
     ASSERT_NE(dataDel, nullptr);
-    auto dataConn = dataDel->connector();
+    auto dataConn = dataDel->node();
     ASSERT_TRUE(dataConn);
     auto* dataTool = dynamic_cast<TextInputNode*>(dataConn.get());
     ASSERT_NE(dataTool, nullptr);
@@ -260,14 +260,14 @@ TEST(RouterExecutionTest, testFalseBranch)
 
     auto* condDel = model.delegateModel<ToolNodeDelegate>(condNodeId);
     ASSERT_NE(condDel, nullptr);
-    auto condConn = condDel->connector();
+    auto condConn = condDel->node();
     ASSERT_TRUE(condConn);
     auto* condTool = dynamic_cast<TextInputNode*>(condConn.get());
     ASSERT_NE(condTool, nullptr);
     condTool->setText(QStringLiteral("false"));
 
     // Router uses the explicit condition pin; defaultCondition is irrelevant
-    auto routerConn = routerDel->connector();
+    auto routerConn = routerDel->node();
     ASSERT_TRUE(routerConn);
     auto* routerTool = dynamic_cast<ConditionalRouterNode*>(routerConn.get());
     ASSERT_NE(routerTool, nullptr);

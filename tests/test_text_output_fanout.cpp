@@ -66,7 +66,7 @@ TEST(TextOutputFanoutTest, BothOutputsUpdateOnFirstRun)
     // Configure input text
     auto* inDel = model.delegateModel<ToolNodeDelegate>(inputId);
     ASSERT_NE(inDel, nullptr);
-    auto inConn = inDel->connector();
+    auto inConn = inDel->node();
     ASSERT_TRUE(inConn);
     auto* inputTool = dynamic_cast<TextInputNode*>(inConn.get());
     ASSERT_NE(inputTool, nullptr);
@@ -75,14 +75,14 @@ TEST(TextOutputFanoutTest, BothOutputsUpdateOnFirstRun)
 
     // Create properties widgets for both outputs BEFORE run
     auto* outADel = model.delegateModel<ToolNodeDelegate>(outAId);
-    auto outAConn = outADel->connector();
+    auto outAConn = outADel->node();
     auto* outATool = dynamic_cast<TextOutputNode*>(outAConn.get());
     ASSERT_NE(outATool, nullptr);
     QWidget* wA = outATool->createConfigurationWidget(nullptr);
     ASSERT_NE(wA, nullptr);
 
     auto* outBDel = model.delegateModel<ToolNodeDelegate>(outBId);
-    auto outBConn = outBDel->connector();
+    auto outBConn = outBDel->node();
     auto* outBTool = dynamic_cast<TextOutputNode*>(outBConn.get());
     ASSERT_NE(outBTool, nullptr);
     QWidget* wB = outBTool->createConfigurationWidget(nullptr);
@@ -118,21 +118,21 @@ TEST(TextOutputFanoutTest, SecondWidgetCreatedAfterRunShowsCachedText)
     model.addConnection(ConnectionId{ inputId, 0u, outBId, 0u });
 
     auto* inDel = model.delegateModel<ToolNodeDelegate>(inputId);
-    auto inConn = inDel->connector();
+    auto inConn = inDel->node();
     auto* inputTool = dynamic_cast<TextInputNode*>(inConn.get());
     const QString kText = QStringLiteral("First run value");
     inputTool->setText(kText);
 
     // Create only the first output's widget before run
     auto* outADel = model.delegateModel<ToolNodeDelegate>(outAId);
-    auto outAConn = outADel->connector();
+    auto outAConn = outADel->node();
     auto* outATool = dynamic_cast<TextOutputNode*>(outAConn.get());
     QWidget* wA = outATool->createConfigurationWidget(nullptr);
     ASSERT_NE(wA, nullptr);
 
     // Do not create widget B yet
     auto* outBDel = model.delegateModel<ToolNodeDelegate>(outBId);
-    auto outBConn = outBDel->connector();
+    auto outBConn = outBDel->node();
     auto* outBTool = dynamic_cast<TextOutputNode*>(outBConn.get());
     ASSERT_NE(outBTool, nullptr);
 

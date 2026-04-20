@@ -80,10 +80,10 @@ TEST(ExecutionEngineTest, LinearTwoNodes_DataFlowsAndOrderIsCorrect)
     ConnectionId conn{ textNodeId, 0u, promptNodeId, 0u };
     model.addConnection(conn);
 
-    // Configure nodes via their connectors directly for simplicity
+    // Configure nodes via the delegate-exposed node instances for simplicity.
     auto* textDel = model.delegateModel<ToolNodeDelegate>(textNodeId);
     ASSERT_NE(textDel, nullptr);
-    auto textConn = textDel->connector();
+    auto textConn = textDel->node();
     ASSERT_TRUE(textConn);
     auto* textTool = dynamic_cast<TextInputNode*>(textConn.get());
     ASSERT_NE(textTool, nullptr);
@@ -91,7 +91,7 @@ TEST(ExecutionEngineTest, LinearTwoNodes_DataFlowsAndOrderIsCorrect)
 
     auto* promptDel = model.delegateModel<ToolNodeDelegate>(promptNodeId);
     ASSERT_NE(promptDel, nullptr);
-    auto promptConn = promptDel->connector();
+    auto promptConn = promptDel->node();
     ASSERT_TRUE(promptConn);
     auto* promptTool = dynamic_cast<PromptBuilderNode*>(promptConn.get());
     ASSERT_NE(promptTool, nullptr);
@@ -198,7 +198,7 @@ TEST(ExecutionEngineTest, SlowMotionDelaysFirstDownstreamDispatch)
     // Configure nodes
     auto* textDel = model.delegateModel<ToolNodeDelegate>(textNodeId);
     ASSERT_NE(textDel, nullptr);
-    auto textConn = textDel->connector();
+    auto textConn = textDel->node();
     ASSERT_TRUE(textConn);
     auto* textTool = dynamic_cast<TextInputNode*>(textConn.get());
     ASSERT_NE(textTool, nullptr);
@@ -206,7 +206,7 @@ TEST(ExecutionEngineTest, SlowMotionDelaysFirstDownstreamDispatch)
 
     auto* promptDel = model.delegateModel<ToolNodeDelegate>(promptNodeId);
     ASSERT_NE(promptDel, nullptr);
-    auto promptConn = promptDel->connector();
+    auto promptConn = promptDel->node();
     ASSERT_TRUE(promptConn);
     auto* promptTool = dynamic_cast<PromptBuilderNode*>(promptConn.get());
     ASSERT_NE(promptTool, nullptr);

@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "core/TextChunker.h"
+#include "retrieval/chunking/TextChunker.h"
 #include <QString>
 #include <QStringList>
 

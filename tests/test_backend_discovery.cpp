@@ -7,9 +7,9 @@
 #include <QTest>
 #include <QFile>
 
-#include "backends/OpenAIBackend.h"
+#include "ai/backends/OpenAIBackend.h"
 #include "ModelCapsRegistry.h"
-#include "core/LLMProviderRegistry.h"
+#include "ai/registry/LLMProviderRegistry.h"
 
 // Mock class to override the network fetch
 class MockOpenAIBackend : public OpenAIBackend {

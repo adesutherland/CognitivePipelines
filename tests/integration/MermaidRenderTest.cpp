@@ -4,7 +4,7 @@
 #include <QFileInfo>
 #include <QDir>
 #include "MermaidNode.h"
-#include "IToolConnector.h"
+#include "IToolNode.h"
 
 class MermaidRenderTest : public QObject {
     Q_OBJECT

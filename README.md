@@ -44,7 +44,7 @@ Definitive dependencies come from [`CMakeLists.txt`](./CMakeLists.txt) and the s
   - `WebEngineWidgets`
   - `DBus`
 - QtNodes via CMake `FetchContent` (`paceholder/nodeeditor`, tag `3.0.12`)
-- Bundled QuickJS sources under `src/3rdparty/quickjs`
+- Bundled QuickJS sources under `third_party/quickjs`
 - Boost headers
 - `cpr`
 - OpenSSL

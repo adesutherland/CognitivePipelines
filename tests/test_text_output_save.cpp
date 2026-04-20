@@ -64,7 +64,7 @@ TEST(TextOutputSaveTest, OutputContentShouldNotBeSaved)
     // Configure input text
     auto* inDel = model.delegateModel<ToolNodeDelegate>(inputId);
     ASSERT_NE(inDel, nullptr);
-    auto inConn = inDel->connector();
+    auto inConn = inDel->node();
     ASSERT_TRUE(inConn);
     auto* inputTool = dynamic_cast<TextInputNode*>(inConn.get());
     ASSERT_NE(inputTool, nullptr);
@@ -74,7 +74,7 @@ TEST(TextOutputSaveTest, OutputContentShouldNotBeSaved)
     // Create output widget to receive the data
     auto* outDel = model.delegateModel<ToolNodeDelegate>(outputId);
     ASSERT_NE(outDel, nullptr);
-    auto outConn = outDel->connector();
+    auto outConn = outDel->node();
     ASSERT_TRUE(outConn);
     auto* outputTool = dynamic_cast<TextOutputNode*>(outConn.get());
     ASSERT_NE(outputTool, nullptr);
@@ -138,14 +138,14 @@ TEST(TextOutputSaveTest, OutputContentClearedBeforeSave)
 
     // Configure input
     auto* inDel = model.delegateModel<ToolNodeDelegate>(inputId);
-    auto inConn = inDel->connector();
+    auto inConn = inDel->node();
     auto* inputTool = dynamic_cast<TextInputNode*>(inConn.get());
     const QString kInputText = QStringLiteral("Runtime data");
     inputTool->setText(kInputText);
 
     // Get output node
     auto* outDel = model.delegateModel<ToolNodeDelegate>(outputId);
-    auto outConn = outDel->connector();
+    auto outConn = outDel->node();
     auto* outputTool = dynamic_cast<TextOutputNode*>(outConn.get());
     QWidget* widget = outputTool->createConfigurationWidget(nullptr);
 

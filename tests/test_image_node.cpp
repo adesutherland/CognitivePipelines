@@ -33,10 +33,10 @@ TEST(ImageNodeTest, Registration)
     auto* delegate = model.delegateModel<ToolNodeDelegate>(nodeId);
     ASSERT_NE(delegate, nullptr);
 
-    // Verify the underlying connector is an ImageNode
-    auto connector = delegate->connector();
-    ASSERT_TRUE(connector);
-    auto* imageNode = dynamic_cast<ImageNode*>(connector.get());
+    // Verify the underlying node is an ImageNode.
+    auto node = delegate->node();
+    ASSERT_TRUE(node);
+    auto* imageNode = dynamic_cast<ImageNode*>(node.get());
     ASSERT_NE(imageNode, nullptr);
 
     // Verify pin types

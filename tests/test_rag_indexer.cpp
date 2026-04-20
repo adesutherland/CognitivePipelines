@@ -17,9 +17,9 @@
 #include <QDebug>
 
 #include "RagIndexerNode.h"
-#include "core/DocumentLoader.h"
-#include "core/TextChunker.h"
-#include "core/RagUtils.h"
+#include "retrieval/documents/DocumentLoader.h"
+#include "retrieval/chunking/TextChunker.h"
+#include "retrieval/storage/RagUtils.h"
 
 /**
  * @brief Test suite for RagIndexerNode

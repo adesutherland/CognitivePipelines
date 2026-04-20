@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 #include <QString>
-#include "string_utils.h"
+#include "StringUtils.h"
 
 using cp::strings::canonicalize_model_id;
 

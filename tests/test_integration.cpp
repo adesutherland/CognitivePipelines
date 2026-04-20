@@ -18,14 +18,14 @@
  #include <unistd.h> // dup2, fileno
 #endif
 
-#include "mainwindow.h"
+#include "MainWindow.h"
 #include "NodeGraphModel.h"
 #include "ExecutionEngine.h"
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
 #include "PromptBuilderNode.h"
 #include "UniversalLLMNode.h"
-#include "core/LLMProviderRegistry.h"
+#include "ai/registry/LLMProviderRegistry.h"
 #include "test_app.h"
 
 using namespace QtNodes;
@@ -65,10 +65,10 @@ void IntegrationTests::test_SaveLoad()
     const NodeId textNodeId = model_->addNode(QStringLiteral("text-input"));
     QVERIFY(textNodeId != InvalidNodeId);
 
-    // Configure via loadState on the underlying connector
+    // Configure via loadState on the underlying node
     auto* textDel = model_->delegateModel<ToolNodeDelegate>(textNodeId);
     QVERIFY(textDel != nullptr);
-    auto conn = textDel->connector();
+    auto conn = textDel->node();
     QVERIFY(static_cast<bool>(conn));
     auto* textTool = dynamic_cast<TextInputNode*>(conn.get());
     QVERIFY(textTool != nullptr);
@@ -105,7 +105,7 @@ void IntegrationTests::test_SaveLoad()
 
     auto* restoredDel = model_->delegateModel<ToolNodeDelegate>(restoredId);
     QVERIFY(restoredDel != nullptr);
-    auto restoredConn = restoredDel->connector();
+    auto restoredConn = restoredDel->node();
     QVERIFY(static_cast<bool>(restoredConn));
     auto* restoredText = dynamic_cast<TextInputNode*>(restoredConn.get());
     QVERIFY(restoredText != nullptr);
@@ -145,7 +145,7 @@ void IntegrationTests::test_FullPipelineExecution()
     {
         auto* del = model_->delegateModel<ToolNodeDelegate>(textNodeId);
         QVERIFY(del != nullptr);
-        auto c = del->connector();
+        auto c = del->node();
         auto* tool = dynamic_cast<TextInputNode*>(c.get());
         QVERIFY(tool != nullptr);
         tool->setText(QStringLiteral("Say hello to Alice."));
@@ -153,7 +153,7 @@ void IntegrationTests::test_FullPipelineExecution()
     {
         auto* del = model_->delegateModel<ToolNodeDelegate>(promptNodeId);
         QVERIFY(del != nullptr);
-        auto c = del->connector();
+        auto c = del->node();
         auto* tool = dynamic_cast<PromptBuilderNode*>(c.get());
         QVERIFY(tool != nullptr);
         tool->setTemplateText(QStringLiteral("Instruction: {input}"));
@@ -161,7 +161,7 @@ void IntegrationTests::test_FullPipelineExecution()
     {
         auto* del = model_->delegateModel<ToolNodeDelegate>(llmNodeId);
         QVERIFY(del != nullptr);
-        auto c = del->connector();
+        auto c = del->node();
         auto* tool = dynamic_cast<UniversalLLMNode*>(c.get());
         QVERIFY(tool != nullptr);
         // Configure via loadState: set provider to "openai" and model to "gpt-5-mini"

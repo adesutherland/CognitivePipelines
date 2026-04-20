@@ -12,8 +12,8 @@
 #include <vector>
 #include <algorithm>
 
-#include "core/TextChunker.h"
-#include "core/DocumentLoader.h"
+#include "retrieval/chunking/TextChunker.h"
+#include "retrieval/documents/DocumentLoader.h"
 
 #ifdef VERBOSE_TESTS
 // Helper to print a visible separator line

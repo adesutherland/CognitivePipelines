@@ -17,8 +17,8 @@
 #include <QDir>
 
 #include "UniversalLLMNode.h"
-#include "core/LLMProviderRegistry.h"
-#include "backends/ILLMBackend.h"
+#include "ai/registry/LLMProviderRegistry.h"
+#include "ai/backends/ILLMBackend.h"
 #include "ModelCapsRegistry.h"
 #include "ModelCaps.h"
 

@@ -12,9 +12,9 @@
 #include <QSqlError>
 #include <QString>
 
-#include "core/RagUtils.h"
-#include "backends/OpenAIBackend.h"
-#include "core/LLMProviderRegistry.h"
+#include "retrieval/storage/RagUtils.h"
+#include "ai/backends/OpenAIBackend.h"
+#include "ai/registry/LLMProviderRegistry.h"
 #include "test_app.h"
 
 // Minimal app helper to ensure Qt application context exists

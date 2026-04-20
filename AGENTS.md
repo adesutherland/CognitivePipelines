@@ -27,7 +27,7 @@ This file is the source of truth for repository-specific agent guidance in `Cogn
   - `Sql`, `Pdf`, `WebChannel`, `Positioning`, `WebEngineWidgets`, `DBus`
 - Additional dependencies:
   - QtNodes via `FetchContent` (`paceholder/nodeeditor`, tag `3.0.12`)
-  - bundled QuickJS under `src/3rdparty/quickjs`
+  - bundled QuickJS under `third_party/quickjs`
   - Boost headers
   - `cpr`
   - OpenSSL
@@ -116,9 +116,19 @@ Provider names expected in `accounts.json`:
 
 ## Codebase Notes
 
+- Source layout after the phase 1 reorganization:
+  - `src/app`: application entrypoint, main window, and dialogs
+  - `src/graph`: QtNodes integration and graph-facing UI helpers
+  - `src/execution`: pipeline execution engine and execution-state types
+  - `src/logging`: logging helpers and categories
+  - `src/nodes`: node implementations grouped by domain
+  - `src/ai`: shared AI backends, capability metadata, and provider registry
+  - `src/retrieval`: shared retrieval, chunking, and document services
+  - `src/scripting`: shared script hosts, bridges, and runtimes
+  - `third_party/quickjs`: vendored QuickJS sources
 - `NodeGraphModel` registers the current node set and category layout. Prefer reading it before updating capability docs.
 - `ExecutionEngine` owns pipeline execution order and asynchronous fan-out behavior.
-- `ToolNodeDelegate` is the adapter between QtNodes and `IToolConnector` implementations.
+- `ToolNodeDelegate` is the adapter between QtNodes and `IToolNode` implementations.
 - QuickJS is the bundled default scripting runtime registered in `NodeGraphModel`.
 
 ## Documentation Ownership

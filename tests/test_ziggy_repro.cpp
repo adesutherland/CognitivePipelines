@@ -15,8 +15,8 @@
 #include <QSqlError>
 #include <QDebug>
 
-#include "core/TextChunker.h"
-#include "core/RagUtils.h"
+#include "retrieval/chunking/TextChunker.h"
+#include "retrieval/storage/RagUtils.h"
 
 namespace {
 

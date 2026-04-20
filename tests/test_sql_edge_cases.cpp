@@ -11,7 +11,7 @@
 #include <QTemporaryDir>
 #include <QVariant>
 
-#include "core/RagUtils.h"
+#include "retrieval/storage/RagUtils.h"
 
 namespace {
 

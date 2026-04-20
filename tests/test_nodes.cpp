@@ -12,8 +12,8 @@
 #include "TextInputPropertiesWidget.h"
 #include "PromptBuilderNode.h"
 #include "PromptBuilderPropertiesWidget.h"
-#include "PythonScriptConnector.h"
-#include "PythonScriptConnectorPropertiesWidget.h"
+#include "PythonScriptNode.h"
+#include "PythonScriptPropertiesWidget.h"
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QTemporaryFile>
@@ -22,8 +22,8 @@
 #include "TextOutputNode.h"
 #include "TextOutputPropertiesWidget.h"
 
-#include "DatabaseConnector.h"
-#include "DatabaseConnectorPropertiesWidget.h"
+#include "DatabaseNode.h"
+#include "DatabasePropertiesWidget.h"
 
 // Install a Qt message handler to force all Qt logs to stderr (helps Windows CI capture qInfo/qWarning output)
 static void qtTestMessageHandler(QtMsgType type, const QMessageLogContext& ctx, const QString& msg)
@@ -203,16 +203,16 @@ TEST(TextOutputNodeTest, FormatsComplexDataAsJson)
 }
 
 
-TEST(PythonScriptConnectorTest, ExecutesScriptAndHandlesIO)
+TEST(PythonScriptNodeTest, ExecutesScriptAndHandlesIO)
 {
     ensureApp();
 
-    PythonScriptConnector node;
+    PythonScriptNode node;
 
     // Create and configure properties widget (simulate user interaction)
     QWidget* w = node.createConfigurationWidget(nullptr);
     ASSERT_NE(w, nullptr);
-    auto* props = dynamic_cast<PythonScriptConnectorPropertiesWidget*>(w);
+    auto* props = dynamic_cast<PythonScriptPropertiesWidget*>(w);
     ASSERT_NE(props, nullptr);
 
     // Find underlying editor widgets
@@ -228,11 +228,11 @@ TEST(PythonScriptConnectorTest, ExecutesScriptAndHandlesIO)
         "import sys\n"
         "data = sys.stdin.read()\n"
         "print(data)\n"
-        "print(\"PythonScriptConnector: Test message to stderr.\", file=sys.stderr)\n"
+        "print(\"PythonScriptNode: Test message to stderr.\", file=sys.stderr)\n"
     );
     scriptEdit->setPlainText(kScript);
 
-    // Ensure signals propagate to connector state
+    // Ensure signals propagate to node state
     QApplication::processEvents();
 
     // Build input packet for stdin
@@ -280,13 +280,13 @@ TEST(PythonScriptConnectorTest, ExecutesScriptAndHandlesIO)
 
     // Validate that stdout echoed stdin and stderr contains the test marker
     EXPECT_TRUE(stdoutStr.contains(kStdin));
-    EXPECT_TRUE(stderrStr.contains(QStringLiteral("PythonScriptConnector: Test message to stderr.")));
+    EXPECT_TRUE(stderrStr.contains(QStringLiteral("PythonScriptNode: Test message to stderr.")));
 
     delete w;
 }
 
 
-TEST(DatabaseConnectorTest, ExecutesQueries)
+TEST(DatabaseNodeTest, ExecutesQueries)
 {
     ensureApp();
 
@@ -296,12 +296,12 @@ TEST(DatabaseConnectorTest, ExecutesQueries)
     const QString dbPath = tempFile.fileName();
     tempFile.close(); // allow SQLite to open it exclusively if needed
 
-    DatabaseConnector node;
+    DatabaseNode node;
 
     // Configure via properties widget (simulate user interaction)
     QWidget* w = node.createConfigurationWidget(nullptr);
     ASSERT_NE(w, nullptr);
-    auto* props = dynamic_cast<DatabaseConnectorPropertiesWidget*>(w);
+    auto* props = dynamic_cast<DatabasePropertiesWidget*>(w);
     ASSERT_NE(props, nullptr);
 
     props->setDatabasePath(dbPath);

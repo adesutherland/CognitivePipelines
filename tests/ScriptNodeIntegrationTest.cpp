@@ -6,7 +6,7 @@
 #include <QVariantMap>
 #include <QVariantList>
 
-#include "UniversalScriptConnector.h"
+#include "UniversalScriptNode.h"
 #include "ExecutionToken.h"
 #include "QuickJSRuntime.h"
 
@@ -38,8 +38,8 @@ TEST_F(ScriptNodeIntegrationTest, SqliteIntegration)
     // Set environment variable for QuickJSRuntime to use this temp file
     qputenv("CP_QUICKJS_DB_PATH", dbPath.toUtf8());
 
-    // 2. Instantiate UniversalScriptConnector
-    UniversalScriptConnector node;
+    // 2. Instantiate UniversalScriptNode
+    UniversalScriptNode node;
 
     // 3. Set the script
     // The script connects to the database, creates a table, inserts data and returns it.
@@ -82,7 +82,7 @@ TEST_F(ScriptNodeIntegrationTest, SqliteIntegration)
 
 TEST_F(ScriptNodeIntegrationTest, ArrayPassThrough)
 {
-    UniversalScriptConnector node;
+    UniversalScriptNode node;
     QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
 
     QJsonObject state;
@@ -104,7 +104,7 @@ TEST_F(ScriptNodeIntegrationTest, ArrayPassThrough)
 
 TEST_F(ScriptNodeIntegrationTest, ArrayFanOut)
 {
-    UniversalScriptConnector node;
+    UniversalScriptNode node;
     QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
 
     QJsonObject state;
@@ -124,7 +124,7 @@ TEST_F(ScriptNodeIntegrationTest, ArrayFanOut)
 
 TEST_F(ScriptNodeIntegrationTest, MixedTypes)
 {
-    UniversalScriptConnector node;
+    UniversalScriptNode node;
     QString script = "pipeline.setOutput(\"out\", \"SingleString\");";
 
     QJsonObject state;
@@ -141,7 +141,7 @@ TEST_F(ScriptNodeIntegrationTest, MixedTypes)
 
 TEST_F(ScriptNodeIntegrationTest, UnifiedLoggingAndStatus)
 {
-    UniversalScriptConnector node;
+    UniversalScriptNode node;
     
     // Verify Descriptor
     NodeDescriptor desc = node.getDescriptor();
@@ -185,7 +185,7 @@ TEST_F(ScriptNodeIntegrationTest, UnifiedLoggingAndStatus)
 
 TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)
 {
-    UniversalScriptConnector node;
+    UniversalScriptNode node;
     QString script = "console.log(\"Log 1\");\n"
                      "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
 
@@ -206,7 +206,7 @@ TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)
 
 TEST_F(ScriptNodeIntegrationTest, InjectsFanOutSummaryIntoLogs)
 {
-    UniversalScriptConnector node;
+    UniversalScriptNode node;
     QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
 
     QJsonObject state;
@@ -228,7 +228,7 @@ TEST_F(ScriptNodeIntegrationTest, InjectsFanOutSummaryIntoLogs)
 
 TEST_F(ScriptNodeIntegrationTest, NoSummaryInSingleMode)
 {
-    UniversalScriptConnector node;
+    UniversalScriptNode node;
     QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
 
     QJsonObject state;

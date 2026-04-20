@@ -11,7 +11,7 @@
 #include "TextInputNode.h"
 #include "UniversalLLMNode.h"
 #include "PromptBuilderNode.h"
-#include "core/LLMProviderRegistry.h"
+#include "ai/registry/LLMProviderRegistry.h"
 
 using namespace QtNodes;
 
@@ -68,7 +68,7 @@ TEST(UniversalLLMInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
     {
         auto* del = model.delegateModel<ToolNodeDelegate>(textNodeId);
         ASSERT_NE(del, nullptr);
-        auto c = del->connector();
+        auto c = del->node();
         ASSERT_TRUE(c);
         auto* tool = dynamic_cast<TextInputNode*>(c.get());
         ASSERT_NE(tool, nullptr);
@@ -80,7 +80,7 @@ TEST(UniversalLLMInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
     {
         auto* del = model.delegateModel<ToolNodeDelegate>(llmNodeId);
         ASSERT_NE(del, nullptr);
-        auto c = del->connector();
+        auto c = del->node();
         ASSERT_TRUE(c);
         llm = dynamic_cast<UniversalLLMNode*>(c.get());
         ASSERT_NE(llm, nullptr);
@@ -155,7 +155,7 @@ TEST(UniversalLLMInvalidModelTest, StopsPipelineOnError)
     {
         auto* del = model.delegateModel<ToolNodeDelegate>(textNodeId);
         ASSERT_NE(del, nullptr);
-        auto c = del->connector();
+        auto c = del->node();
         ASSERT_TRUE(c);
         auto* tool = dynamic_cast<TextInputNode*>(c.get());
         ASSERT_NE(tool, nullptr);
@@ -165,7 +165,7 @@ TEST(UniversalLLMInvalidModelTest, StopsPipelineOnError)
     {
         auto* del = model.delegateModel<ToolNodeDelegate>(llmNodeId);
         ASSERT_NE(del, nullptr);
-        auto c = del->connector();
+        auto c = del->node();
         ASSERT_TRUE(c);
         llm = dynamic_cast<UniversalLLMNode*>(c.get());
         ASSERT_NE(llm, nullptr);
@@ -180,7 +180,7 @@ TEST(UniversalLLMInvalidModelTest, StopsPipelineOnError)
     {
         auto* del = model.delegateModel<ToolNodeDelegate>(promptNodeId);
         ASSERT_NE(del, nullptr);
-        auto c = del->connector();
+        auto c = del->node();
         ASSERT_TRUE(c);
         auto* tool = dynamic_cast<PromptBuilderNode*>(c.get());
         ASSERT_NE(tool, nullptr);

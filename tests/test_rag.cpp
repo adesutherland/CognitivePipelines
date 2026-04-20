@@ -15,10 +15,10 @@
 #include <QtSql/QSqlError>
 
 #include "RagQueryNode.h"
-#include "core/LLMProviderRegistry.h"
+#include "ai/registry/LLMProviderRegistry.h"
 #include "test_app.h"
 
-#include "core/RagUtils.h"
+#include "retrieval/storage/RagUtils.h"
 
 namespace {
 

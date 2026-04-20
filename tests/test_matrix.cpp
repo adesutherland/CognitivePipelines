@@ -21,7 +21,7 @@
 #include "ModelCapsRegistry.h"
 #include "ModelCaps.h"
 
-#include "mainwindow.h"
+#include "MainWindow.h"
 #include "NodeGraphModel.h"
 #include "ExecutionEngine.h"
 #include "ToolNodeDelegate.h"
@@ -29,7 +29,7 @@
 #include "PromptBuilderNode.h"
 #include "UniversalLLMNode.h"
 #include "ImageNode.h"
-#include "core/LLMProviderRegistry.h"
+#include "ai/registry/LLMProviderRegistry.h"
 
 using namespace ModelCapsTypes;
 using namespace QtNodes;
@@ -202,7 +202,7 @@ private:
                 const NodeId imageNodeId = model_->addNode(QStringLiteral("image"));
                 if (imageNodeId != InvalidNodeId) {
                     auto* del = model_->delegateModel<ToolNodeDelegate>(imageNodeId);
-                    auto c = del ? del->connector() : nullptr;
+                    auto c = del ? del->node() : nullptr;
                     auto* img = c ? dynamic_cast<ImageNode*>(c.get()) : nullptr;
                     if (img) {
                         img->setImagePath(tmpImage->fileName());
@@ -216,7 +216,7 @@ private:
         // Configure TextInput
         {
             auto* del = model_->delegateModel<ToolNodeDelegate>(textNodeId);
-            auto c = del ? del->connector() : nullptr;
+            auto c = del ? del->node() : nullptr;
             auto* tool = c ? dynamic_cast<TextInputNode*>(c.get()) : nullptr;
             if (!tool) {
                 out.status = LiveResult::Status::HttpError;
@@ -228,7 +228,7 @@ private:
         // Configure PromptBuilder to inject the exact live prompt (no variables)
         {
             auto* del = model_->delegateModel<ToolNodeDelegate>(promptNodeId);
-            auto c = del ? del->connector() : nullptr;
+            auto c = del ? del->node() : nullptr;
             auto* tool = c ? dynamic_cast<PromptBuilderNode*>(c.get()) : nullptr;
             if (!tool) {
                 out.status = LiveResult::Status::HttpError;
@@ -240,7 +240,7 @@ private:
         // Configure UniversalLLM provider/model
         {
             auto* del = model_->delegateModel<ToolNodeDelegate>(llmNodeId);
-            auto c = del ? del->connector() : nullptr;
+            auto c = del ? del->node() : nullptr;
             auto* tool = c ? dynamic_cast<UniversalLLMNode*>(c.get()) : nullptr;
             if (!tool) {
                 out.status = LiveResult::Status::HttpError;

@@ -4,7 +4,7 @@
 #include <QDir>
 #include <QTextStream>
 #include <QSet>
-#include "core/DocumentLoader.h"
+#include "retrieval/documents/DocumentLoader.h"
 
 /**
  * Test suite for DocumentLoader class
