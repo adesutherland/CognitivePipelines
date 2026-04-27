@@ -26,10 +26,14 @@
 #include "Logger.h"
 #include "LoggingCategories.h"
 #include <QFile>
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QStandardPaths>
+#include <QTemporaryFile>
 
 #include <algorithm>
 
@@ -71,6 +75,9 @@ std::optional<RoleMode> roleModeFromString(const QString& value)
 std::optional<Capability> capabilityFromString(const QString& value)
 {
     const QString normalized = normalizeEnumString(value);
+    if (normalized == QStringLiteral("chat")) {
+        return Capability::Chat;
+    }
     if (normalized == QStringLiteral("vision")) {
         return Capability::Vision;
     }
@@ -88,6 +95,12 @@ std::optional<Capability> capabilityFromString(const QString& value)
     }
     if (normalized == QStringLiteral("image")) {
         return Capability::Image;
+    }
+    if (normalized == QStringLiteral("embedding") || normalized == QStringLiteral("embeddings")) {
+        return Capability::Embedding;
+    }
+    if (normalized == QStringLiteral("pdf") || normalized == QStringLiteral("document")) {
+        return Capability::Pdf;
     }
     if (normalized == QStringLiteral("structuredoutput")) {
         return Capability::StructuredOutput;
@@ -111,12 +124,233 @@ std::optional<EndpointMode> endpointModeFromString(const QString& value)
     return std::nullopt;
 }
 
+QString stringValue(const QJsonObject& obj, const QString& camel, const QString& snake = QString())
+{
+    const QJsonValue camelValue = obj.value(camel);
+    if (camelValue.isString()) {
+        return camelValue.toString();
+    }
+    if (!snake.isEmpty()) {
+        const QJsonValue snakeValue = obj.value(snake);
+        if (snakeValue.isString()) {
+            return snakeValue.toString();
+        }
+    }
+    return {};
+}
+
+QMap<QString, QString> headersFromObject(const QJsonObject& obj)
+{
+    QMap<QString, QString> headers;
+    const QJsonValue headersValue = obj.value(QStringLiteral("headers"));
+    if (!headersValue.isObject()) {
+        return headers;
+    }
+
+    const QJsonObject headersObj = headersValue.toObject();
+    for (auto it = headersObj.begin(); it != headersObj.end(); ++it) {
+        if (it.value().isString()) {
+            headers.insert(it.key(), it.value().toString());
+        }
+    }
+    return headers;
+}
+
+QMap<QString, DriverProfile> parseDriverProfiles(const QJsonObject& root)
+{
+    QMap<QString, DriverProfile> profiles;
+    const QJsonArray profilesArray = root.value(QStringLiteral("driver_profiles")).toArray();
+    for (const QJsonValue& value : profilesArray) {
+        if (!value.isObject()) {
+            CP_WARN << "ModelCapsRegistry: skipping non-object driver_profile entry";
+            continue;
+        }
+
+        const QJsonObject obj = value.toObject();
+        DriverProfile profile;
+        profile.id = obj.value(QStringLiteral("id")).toString();
+        if (profile.id.trimmed().isEmpty()) {
+            CP_WARN << "ModelCapsRegistry: skipping driver_profile without id";
+            continue;
+        }
+
+        profile.name = obj.value(QStringLiteral("name")).toString(profile.id);
+        profile.provider = obj.value(QStringLiteral("provider")).toString();
+        profile.protocol = obj.value(QStringLiteral("protocol")).toString();
+        profile.endpoint = obj.value(QStringLiteral("endpoint")).toString();
+        profile.headers = headersFromObject(obj);
+
+        if (const auto endpoint = endpointModeFromString(profile.protocol)) {
+            profile.endpointMode = *endpoint;
+        }
+        if (const auto endpoint = endpointModeFromString(profile.endpoint)) {
+            profile.endpointMode = *endpoint;
+        }
+
+        profiles.insert(profile.id, std::move(profile));
+    }
+    return profiles;
+}
+
+QMap<QString, ProviderSettings> parseProviderSettings(const QJsonObject& root)
+{
+    QMap<QString, ProviderSettings> providers;
+    const QJsonArray providersArray = root.value(QStringLiteral("providers")).toArray();
+    for (const QJsonValue& value : providersArray) {
+        if (!value.isObject()) {
+            CP_WARN << "ModelCapsRegistry: skipping non-object provider entry";
+            continue;
+        }
+
+        const QJsonObject obj = value.toObject();
+        ProviderSettings settings;
+        settings.id = obj.value(QStringLiteral("id")).toString();
+        if (settings.id.trimmed().isEmpty()) {
+            CP_WARN << "ModelCapsRegistry: skipping provider without id";
+            continue;
+        }
+
+        settings.name = obj.value(QStringLiteral("name")).toString();
+        settings.baseUrl = stringValue(obj, QStringLiteral("baseUrl"), QStringLiteral("base_url"));
+        settings.apiKey = stringValue(obj, QStringLiteral("apiKey"), QStringLiteral("api_key"));
+        settings.headers = headersFromObject(obj);
+        settings.enabled = obj.value(QStringLiteral("enabled")).toBool(true);
+        settings.requiresCredential = obj.value(QStringLiteral("requiresCredential"))
+                                          .toBool(obj.value(QStringLiteral("requires_credential")).toBool(true));
+        providers.insert(settings.id, std::move(settings));
+    }
+    return providers;
+}
+
+void mergeArrayById(QJsonObject& base, const QJsonObject& overlay, const QString& key)
+{
+    if (!overlay.value(key).isArray()) {
+        return;
+    }
+
+    QJsonArray merged = base.value(key).toArray();
+    const QJsonArray overlayArray = overlay.value(key).toArray();
+
+    for (const QJsonValue& overlayValue : overlayArray) {
+        if (!overlayValue.isObject()) {
+            merged.append(overlayValue);
+            continue;
+        }
+
+        const QJsonObject overlayObj = overlayValue.toObject();
+        const QString id = overlayObj.value(QStringLiteral("id")).toString();
+        int existingIndex = -1;
+        if (!id.isEmpty()) {
+            for (int i = 0; i < merged.size(); ++i) {
+                if (merged.at(i).isObject()
+                    && merged.at(i).toObject().value(QStringLiteral("id")).toString() == id) {
+                    existingIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (overlayObj.value(QStringLiteral("disabled")).toBool(false)) {
+            if (existingIndex >= 0) {
+                merged.removeAt(existingIndex);
+            }
+            continue;
+        }
+
+        if (existingIndex >= 0) {
+            merged.replace(existingIndex, overlayObj);
+        } else {
+            merged.append(overlayObj);
+        }
+    }
+
+    base.insert(key, merged);
+}
+
+QJsonObject mergeCatalogConfig(QJsonObject base, const QJsonObject& overlay)
+{
+    mergeArrayById(base, overlay, QStringLiteral("providers"));
+    mergeArrayById(base, overlay, QStringLiteral("driver_profiles"));
+    mergeArrayById(base, overlay, QStringLiteral("virtual_models"));
+    mergeArrayById(base, overlay, QStringLiteral("rules"));
+    return base;
+}
+
 } // namespace
 
 ModelCapsRegistry& ModelCapsRegistry::instance()
 {
     static ModelCapsRegistry registry;
     return registry;
+}
+
+QStringList ModelCapsRegistry::userConfigPaths() const
+{
+    QStringList paths;
+
+#if defined(Q_OS_MAC)
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+#else
+    const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+#endif
+
+    if (!baseDir.isEmpty()) {
+        paths << QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/model_catalog.json"));
+    }
+
+    paths << QDir::current().filePath(QStringLiteral("model_catalog.json"));
+    paths.removeDuplicates();
+    return paths;
+}
+
+bool ModelCapsRegistry::loadFromFileWithUserOverrides(const QString& path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        CP_WARN << "ModelCapsRegistry: unable to open file" << path;
+        return false;
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        CP_WARN << "ModelCapsRegistry: failed to parse base JSON" << path << parseError.errorString();
+        return false;
+    }
+
+    QJsonObject mergedRoot = doc.object();
+    for (const QString& candidatePath : userConfigPaths()) {
+        QFile overrideFile(candidatePath);
+        if (!overrideFile.exists()) {
+            continue;
+        }
+        if (!overrideFile.open(QIODevice::ReadOnly)) {
+            CP_WARN << "ModelCapsRegistry: failed to open user catalog config" << candidatePath
+                    << overrideFile.errorString();
+            continue;
+        }
+
+        QJsonParseError overrideParseError;
+        QJsonDocument overrideDoc = QJsonDocument::fromJson(overrideFile.readAll(), &overrideParseError);
+        if (overrideParseError.error != QJsonParseError::NoError || !overrideDoc.isObject()) {
+            CP_WARN << "ModelCapsRegistry: failed to parse user catalog config" << candidatePath
+                    << overrideParseError.errorString();
+            continue;
+        }
+
+        mergedRoot = mergeCatalogConfig(mergedRoot, overrideDoc.object());
+        CP_LOG << "ModelCapsRegistry: applied user catalog config" << candidatePath;
+    }
+
+    QTemporaryFile tempFile;
+    if (!tempFile.open()) {
+        CP_WARN << "ModelCapsRegistry: failed to create temporary merged catalog";
+        return false;
+    }
+
+    tempFile.write(QJsonDocument(mergedRoot).toJson());
+    tempFile.flush();
+    return loadFromFile(tempFile.fileName());
 }
 
 bool ModelCapsRegistry::loadFromFile(const QString& path)
@@ -143,6 +377,8 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
     }
 
     const QJsonObject root = doc.object();
+    const QMap<QString, DriverProfile> parsedDriverProfiles = parseDriverProfiles(root);
+    const QMap<QString, ProviderSettings> parsedProviderSettings = parseProviderSettings(root);
     const QJsonValue rulesValue = root.value(QStringLiteral("rules"));
 
     if (!rulesValue.isArray()) {
@@ -309,8 +545,22 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
             }
         }
 
+        const QString driverProfileId = [ruleObj]() {
+            const QString camel = ruleObj.value(QStringLiteral("driverProfile")).toString();
+            if (!camel.isEmpty()) {
+                return camel;
+            }
+            const QString snake = ruleObj.value(QStringLiteral("driver_profile")).toString();
+            if (!snake.isEmpty()) {
+                return snake;
+            }
+            return ruleObj.value(QStringLiteral("driver")).toString();
+        }();
+
         // Endpoint routing mode (safe default Chat if missing/invalid)
+        bool endpointExplicit = false;
         if (const QJsonValue endpointVal = ruleObj.value(QStringLiteral("endpoint")); endpointVal.isString()) {
+            endpointExplicit = true;
             if (const auto em = endpointModeFromString(endpointVal.toString())) {
                 caps.endpointMode = *em;
             } else {
@@ -320,12 +570,25 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
             caps.endpointMode = EndpointMode::Chat; // default
         }
 
+        if (!driverProfileId.isEmpty() && parsedDriverProfiles.contains(driverProfileId)) {
+            const DriverProfile driver = parsedDriverProfiles.value(driverProfileId);
+            if (!endpointExplicit) {
+                caps.endpointMode = driver.endpointMode;
+            }
+            for (auto it = driver.headers.constBegin(); it != driver.headers.constEnd(); ++it) {
+                if (!caps.customHeaders.contains(it.key())) {
+                    caps.customHeaders.insert(it.key(), it.value());
+                }
+            }
+        }
+
         ModelRule rule;
         if (const QJsonValue idValue = ruleObj.value(QStringLiteral("id")); idValue.isString()) {
             rule.id = idValue.toString();
         }
         rule.pattern = regex;
         rule.caps = caps;
+        rule.driverProfileId = driverProfileId;
 
         if (const QJsonValue backendValue = ruleObj.value(QStringLiteral("backend")); backendValue.isString()) {
             rule.backend = backendValue.toString();
@@ -335,6 +598,8 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
             rule.priority = priorityValue.toInt();
         }
 
+        rule.requiresBackend = ruleObj.value(QStringLiteral("requiresBackend"))
+                                   .toBool(ruleObj.value(QStringLiteral("requires_backend")).toBool(false));
         rule.trailingNegativeLookahead = std::move(trailingNegativeLookahead);
 
         // Diagnostic: per‑rule details are useful only in debug logging.
@@ -344,8 +609,13 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
         const char* endpointStr = (caps.endpointMode == EndpointMode::Chat)
                                       ? "chat"
                                       : (caps.endpointMode == EndpointMode::Completion ? "completion" : "assistant");
-        CP_CLOG(cp_registry).noquote() << QStringLiteral("Loaded Rule [%1]: Pattern='%2', Backend='%3', Caps Count=%4, Endpoint=%5")
-                                 .arg(idForLog, patternString, backendForLog, QString::number(capsCount), QString::fromLatin1(endpointStr));
+        CP_CLOG(cp_registry).noquote() << QStringLiteral("Loaded Rule [%1]: Pattern='%2', Backend='%3', Driver='%4', Caps Count=%5, Endpoint=%6")
+                                 .arg(idForLog,
+                                      patternString,
+                                      backendForLog,
+                                      driverProfileId.isEmpty() ? QStringLiteral("(implicit)") : driverProfileId,
+                                      QString::number(capsCount),
+                                      QString::fromLatin1(endpointStr));
 
         parsedRules.push_back(std::move(rule));
     }
@@ -356,6 +626,8 @@ bool ModelCapsRegistry::loadFromFile(const QString& path)
 
     // Commit parsed rules
     rules_ = std::move(parsedRules);
+    driverProfiles_ = parsedDriverProfiles;
+    providerSettings_ = parsedProviderSettings;
 
     // Parse virtual models (aliases)
     const QJsonValue virtualModelsValue = root.value(QStringLiteral("virtual_models"));
@@ -425,6 +697,9 @@ std::optional<ModelCapsRegistry::ResolvedCaps> ModelCapsRegistry::resolveWithRul
                        << "' model='" << realModelId << "' len=" << realModelId.size()
                        << " first='" << firstChar << "' last='" << lastChar << "'";
     for (const auto& rule : rules_) {
+        if (backendId.isEmpty() && rule.requiresBackend) {
+            continue;
+        }
         if (!backendId.isEmpty() && !rule.backend.isEmpty() && rule.backend != backendId) {
             continue;
         }
@@ -443,7 +718,7 @@ std::optional<ModelCapsRegistry::ResolvedCaps> ModelCapsRegistry::resolveWithRul
                                      .arg(realModelId, idForLog, QString::number(rule.priority),
                                           hasVision ? QStringLiteral("T") : QStringLiteral("F"),
                                           hasReasoning ? QStringLiteral("T") : QStringLiteral("F"));
-            ResolvedCaps rc { rule.caps, rule.id };
+            ResolvedCaps rc { rule.caps, rule.id, rule.driverProfileId };
             return rc;
         }
     }
@@ -519,4 +794,24 @@ QList<ModelCapsTypes::VirtualModel> ModelCapsRegistry::virtualModelsForBackend(c
         }
     }
     return result;
+}
+
+std::optional<ModelCapsTypes::DriverProfile> ModelCapsRegistry::driverProfile(const QString& id) const
+{
+    QReadLocker readLocker(&lock_);
+    const auto it = driverProfiles_.constFind(id);
+    if (it == driverProfiles_.constEnd()) {
+        return std::nullopt;
+    }
+    return it.value();
+}
+
+std::optional<ModelCapsTypes::ProviderSettings> ModelCapsRegistry::providerSettings(const QString& providerId) const
+{
+    QReadLocker readLocker(&lock_);
+    const auto it = providerSettings_.constFind(providerId);
+    if (it == providerSettings_.constEnd()) {
+        return std::nullopt;
+    }
+    return it.value();
 }

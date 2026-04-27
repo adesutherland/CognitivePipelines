@@ -4,7 +4,9 @@
 #include "DocumentLoader.h"
 #include "ModelCapsRegistry.h"
 #include "ai/backends/ILLMBackend.h"
+#include "ai/catalog/ModelCatalogService.h"
 #include "ai/registry/LLMProviderRegistry.h"
+#include "Logger.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -244,12 +246,14 @@ VaultOutputNode::VaultOutputNode(QObject* parent)
     : QObject(parent)
     , m_routingPrompt(defaultRoutingPrompt())
 {
-    const auto backends = LLMProviderRegistry::instance().allBackends();
-    if (!backends.isEmpty()) {
-        m_providerId = backends.first()->id();
-        const QStringList models = backends.first()->availableModels();
-        if (!models.isEmpty()) {
-            m_modelId = models.first();
+    m_providerId = ModelCatalogService::instance().defaultProvider(ModelCatalogKind::Chat);
+    if (!m_providerId.isEmpty()) {
+        const auto models = ModelCatalogService::instance().fallbackModels(m_providerId, ModelCatalogKind::Chat);
+        for (const auto& model : models) {
+            if (model.visibility != ModelCatalogVisibility::Hidden) {
+                m_modelId = model.id;
+                break;
+            }
         }
     }
 }
@@ -392,7 +396,7 @@ TokenList VaultOutputNode::execute(const TokenList& incomingTokens)
     }
 
     const QString apiKey = LLMProviderRegistry::instance().getCredential(m_providerId);
-    if (apiKey.isEmpty()) {
+    if (apiKey.isEmpty() && ModelCatalogService::providerRequiresCredential(m_providerId)) {
         output.insert(QStringLiteral("__error"),
                       QStringLiteral("API key not found for provider '%1'.").arg(m_providerId));
         ExecutionToken token;
@@ -425,6 +429,9 @@ TokenList VaultOutputNode::execute(const TokenList& incomingTokens)
 
     output.insert(QStringLiteral("_raw_response"), result.rawResponse);
     if (result.hasError) {
+        const QString errorForLog = result.errorMsg.isEmpty() ? result.content : result.errorMsg;
+        CP_WARN.noquote() << QStringLiteral("VaultOutputNode: backend failure provider=%1 model=%2 message=%3")
+                                      .arg(m_providerId, resolvedModel, errorForLog);
         output.insert(QStringLiteral("__error"),
                       result.errorMsg.isEmpty() ? result.content : result.errorMsg);
         ExecutionToken token;

@@ -25,6 +25,7 @@
 #include "UniversalLLMPropertiesWidget.h"
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
+#include "ai/catalog/ModelCatalogService.h"
 #include "ModelCapsRegistry.h"
 #include "Logger.h"
 #include <QtConcurrent>
@@ -74,13 +75,15 @@ UniversalLLMNode::UniversalLLMNode(QObject* parent)
     responsePin.type = QStringLiteral("text");
     m_descriptor.outputPins.insert(responsePin.id, responsePin);
 
-    // Initialize with default provider if available
-    auto backends = LLMProviderRegistry::instance().allBackends();
-    if (!backends.isEmpty()) {
-        m_providerId = backends.first()->id();
-        auto models = backends.first()->availableModels();
-        if (!models.isEmpty()) {
-            m_modelId = models.first();
+    // Initialize with the first usable catalog provider, preferring configured cloud accounts.
+    m_providerId = ModelCatalogService::instance().defaultProvider(ModelCatalogKind::Chat);
+    if (!m_providerId.isEmpty()) {
+        const auto models = ModelCatalogService::instance().fallbackModels(m_providerId, ModelCatalogKind::Chat);
+        for (const auto& model : models) {
+            if (model.visibility != ModelCatalogVisibility::Hidden) {
+                m_modelId = model.id;
+                break;
+            }
         }
     }
 }
@@ -266,7 +269,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
 
     // Retrieve API key using LLMProviderRegistry
     const QString apiKey = LLMProviderRegistry::instance().getCredential(providerId);
-    if (apiKey.isEmpty()) {
+    if (apiKey.isEmpty() && ModelCatalogService::providerRequiresCredential(providerId)) {
         const QString err = QStringLiteral("ERROR: API key not found for provider '%1'. Please configure credentials in accounts.json.").arg(providerId);
         CP_WARN << "UniversalLLMNode:" << err;
         output.insert(QString::fromLatin1(kOutputResponseId), QVariant(err));
@@ -343,6 +346,9 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
 
     // Handle error case
     if (result.hasError) {
+        const QString errorForLog = result.errorMsg.isEmpty() ? result.content : result.errorMsg;
+        CP_WARN.noquote() << QStringLiteral("UniversalLLMNode: backend failure provider=%1 model=%2 message=%3")
+                                      .arg(providerId, validatedModelId, errorForLog);
         if (m_enableFallback) {
             CP_WARN << "UniversalLLMNode: API error occurred. Soft fallback enabled. Outputting fallback string: " << m_fallbackString;
             CP_WARN << "  Original error: " << result.errorMsg;

@@ -40,6 +40,8 @@ private slots:
     void testEndpointParsingAndDefaulting();
     void testCustomHeaders();
     void testVirtualModelAliasing();
+    void testDriverProfilesAndProviderSettings();
+    void testRequiresBackendSkipsAmbiguousResolution();
 };
 
 namespace {
@@ -53,6 +55,20 @@ bool writeRulesToTempFile(QTemporaryFile& file, const QJsonArray& rules)
     const QJsonObject root { { QStringLiteral("rules"), rules } };
     const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
 
+    const auto written = file.write(payload);
+    file.flush();
+    file.close();
+
+    return written == payload.size();
+}
+
+bool writeRootToTempFile(QTemporaryFile& file, const QJsonObject& root)
+{
+    if (!file.open()) {
+        return false;
+    }
+
+    const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Indented);
     const auto written = file.write(payload);
     file.flush();
     file.close();
@@ -209,6 +225,76 @@ void TestModelCaps::testVirtualModelAliasing()
         }
     }
     QVERIFY2(found, "Virtual model 'openai-reasoning-latest' not found for backend 'openai'");
+}
+
+void TestModelCaps::testDriverProfilesAndProviderSettings()
+{
+    QJsonObject headers;
+    headers.insert(QStringLiteral("X-Driver"), QStringLiteral("driver-header"));
+
+    QJsonObject root;
+    root.insert(QStringLiteral("providers"), QJsonArray{
+        QJsonObject{
+            { QStringLiteral("id"), QStringLiteral("ollama") },
+            { QStringLiteral("name"), QStringLiteral("Local Ollama") },
+            { QStringLiteral("enabled"), true },
+            { QStringLiteral("requiresCredential"), false },
+            { QStringLiteral("base_url"), QStringLiteral("http://localhost:11434") }
+        }
+    });
+    root.insert(QStringLiteral("driver_profiles"), QJsonArray{
+        QJsonObject{
+            { QStringLiteral("id"), QStringLiteral("test-completion-driver") },
+            { QStringLiteral("provider"), QStringLiteral("openai") },
+            { QStringLiteral("protocol"), QStringLiteral("completion") },
+            { QStringLiteral("headers"), headers }
+        }
+    });
+    root.insert(QStringLiteral("rules"), QJsonArray{
+        QJsonObject{
+            { QStringLiteral("id"), QStringLiteral("test-completion-rule") },
+            { QStringLiteral("backend"), QStringLiteral("openai") },
+            { QStringLiteral("pattern"), QStringLiteral("^legacy-model$") },
+            { QStringLiteral("driver"), QStringLiteral("test-completion-driver") }
+        }
+    });
+
+    QTemporaryFile file;
+    QVERIFY2(writeRootToTempFile(file, root), "Unable to write temporary catalog file");
+    QVERIFY2(ModelCapsRegistry::instance().loadFromFile(file.fileName()), "Registry failed to load catalog");
+
+    const auto resolved = ModelCapsRegistry::instance().resolveWithRule(QStringLiteral("legacy-model"), QStringLiteral("openai"));
+    QVERIFY2(resolved.has_value(), "Expected driver-backed rule to resolve");
+    QCOMPARE(resolved->driverProfileId, QStringLiteral("test-completion-driver"));
+    QCOMPARE(resolved->caps.endpointMode, ModelCapsTypes::EndpointMode::Completion);
+    QCOMPARE(resolved->caps.customHeaders.value(QStringLiteral("X-Driver")), QStringLiteral("driver-header"));
+
+    const auto provider = ModelCapsRegistry::instance().providerSettings(QStringLiteral("ollama"));
+    QVERIFY2(provider.has_value(), "Expected provider settings to load");
+    QCOMPARE(provider->name, QStringLiteral("Local Ollama"));
+    QCOMPARE(provider->requiresCredential, false);
+    QCOMPARE(provider->baseUrl, QStringLiteral("http://localhost:11434"));
+}
+
+void TestModelCaps::testRequiresBackendSkipsAmbiguousResolution()
+{
+    QJsonArray rules;
+    rules.append(QJsonObject{
+        { QStringLiteral("id"), QStringLiteral("broad-local-rule") },
+        { QStringLiteral("backend"), QStringLiteral("ollama") },
+        { QStringLiteral("requires_backend"), true },
+        { QStringLiteral("pattern"), QStringLiteral("^.+$") },
+        { QStringLiteral("capabilities"), QJsonArray{ QStringLiteral("chat") } }
+    });
+
+    QTemporaryFile file;
+    QVERIFY2(writeRulesToTempFile(file, rules), "Unable to write temporary rules file");
+    QVERIFY2(ModelCapsRegistry::instance().loadFromFile(file.fileName()), "Registry failed to load rules");
+
+    QVERIFY2(!ModelCapsRegistry::instance().resolve(QStringLiteral("gpt-4o-tts-2025-06-03")).has_value(),
+             "Broad local rules should not match provider-less resolution");
+    QVERIFY2(ModelCapsRegistry::instance().resolve(QStringLiteral("llama3.2"), QStringLiteral("ollama")).has_value(),
+             "Broad local rule should match when backend is explicit");
 }
 
 TEST(ModelCapsRegistryTests, QtHarness)

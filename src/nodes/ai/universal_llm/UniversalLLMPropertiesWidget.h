@@ -29,18 +29,22 @@
 #include <QCheckBox>
 #include <QLineEdit>
 
+#include "ai/catalog/ModelCatalogService.h"
+
 class QComboBox;
 class QTextEdit;
 class QDoubleSpinBox;
 class QSpinBox;
 class QFormLayout;
+class QLabel;
+class QPushButton;
 
 /**
  * @brief Properties widget for the Universal LLM Node.
  *
  * This widget provides a dynamic UI that allows users to select an AI Provider
- * (OpenAI, Google, etc.) and then updates the Model list based on that selection.
- * It interacts with the LLMProviderRegistry to populate available backends and models.
+ * (OpenAI, Google, Ollama, etc.) and then updates the catalogued model list
+ * based on that selection.
  */
 class UniversalLLMPropertiesWidget : public QWidget {
     Q_OBJECT
@@ -83,10 +87,18 @@ private slots:
     void onProviderChanged(int index);
     void onModelChanged(int index);
     void onModelsFetched();
+    void onShowFilteredChanged(bool checked);
+    void onTestModelClicked();
+    void onModelTestFinished();
 
 private:
+    void populateModelCombo(const QList<ModelCatalogEntry>& models);
+
     QComboBox* m_providerCombo {nullptr};
     QComboBox* m_modelCombo {nullptr};
+    QCheckBox* m_showFilteredCheck {nullptr};
+    QPushButton* m_testModelButton {nullptr};
+    QLabel* m_testStatusLabel {nullptr};
     QTextEdit* m_systemPromptEdit {nullptr};
     QTextEdit* m_userPromptEdit {nullptr};
     QDoubleSpinBox* m_temperatureSpinBox {nullptr};
@@ -94,6 +106,8 @@ private:
     QCheckBox* m_enableFallbackCheck {nullptr};
     QLineEdit* m_fallbackStringEdit {nullptr};
 
-    QFutureWatcher<QStringList> m_modelFetcher;
+    QFutureWatcher<QList<ModelCatalogEntry>> m_modelFetcher;
+    QFutureWatcher<ModelTestResult> m_modelTester;
+    QList<ModelCatalogEntry> m_lastModels;
     QString m_pendingModelId;
 };

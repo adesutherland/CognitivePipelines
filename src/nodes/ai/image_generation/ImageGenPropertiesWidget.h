@@ -23,7 +23,10 @@
 //
 #pragma once
 
+#include <QFutureWatcher>
 #include <QWidget>
+
+#include "ai/catalog/ModelCatalogService.h"
 
 class QComboBox;
 
@@ -51,10 +54,20 @@ signals:
 
 private:
     int setComboValue(QComboBox* combo, const QString& value);
+    void populateProviders();
+    void populateModelCombo(const QList<ModelCatalogEntry>& models);
 
+private slots:
+    void onProviderChanged(int index);
+    void onModelsFetched();
+
+private:
     QComboBox* m_providerCombo {nullptr};
     QComboBox* m_modelCombo {nullptr};
     QComboBox* m_sizeCombo {nullptr};
     QComboBox* m_qualityCombo {nullptr};
     QComboBox* m_styleCombo {nullptr};
+    QFutureWatcher<QList<ModelCatalogEntry>> m_modelFetcher;
+    QList<ModelCatalogEntry> m_lastModels;
+    QString m_pendingModelId;
 };

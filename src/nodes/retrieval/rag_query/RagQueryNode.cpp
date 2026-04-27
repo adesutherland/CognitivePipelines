@@ -28,6 +28,7 @@
 #include "retrieval/storage/RagUtils.h"
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
+#include "ai/catalog/ModelCatalogService.h"
 
 #include <QtConcurrent>
 #include <QJsonArray>
@@ -158,7 +159,7 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
 
         // Resolve credentials and backend via LLMProviderRegistry
         QString apiKey = LLMProviderRegistry::instance().getCredential(indexCfg.providerId);
-        if (apiKey.isEmpty()) {
+        if (apiKey.isEmpty() && ModelCatalogService::providerRequiresCredential(indexCfg.providerId)) {
             CP_WARN << "RagQueryNode: No API key found for provider:" << indexCfg.providerId;
             return output;
         }
@@ -172,12 +173,14 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
         // Vectorization
         EmbeddingResult embResult = backend->getEmbedding(apiKey, indexCfg.modelId, queryText);
         if (embResult.hasError) {
-            CP_WARN << "RagQueryNode: Embedding error:" << embResult.errorMsg;
+            CP_WARN.noquote() << QStringLiteral("RagQueryNode: embedding failure provider=%1 model=%2 message=%3")
+                                          .arg(indexCfg.providerId, indexCfg.modelId, embResult.errorMsg);
             return output;
         }
 
         if (embResult.vector.empty()) {
-            CP_WARN << "RagQueryNode: Empty embedding vector for query";
+            CP_WARN.noquote() << QStringLiteral("RagQueryNode: empty embedding provider=%1 model=%2")
+                                          .arg(indexCfg.providerId, indexCfg.modelId);
             return output;
         }
 

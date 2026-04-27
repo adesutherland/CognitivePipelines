@@ -55,12 +55,15 @@ enum class RoleMode {
 Q_ENUM_NS(RoleMode)
 
 enum class Capability {
+    Chat,
     Vision,
     Reasoning,
     ToolUse,
     LongContext,
     Audio,
     Image,
+    Embedding,
+    Pdf,
     StructuredOutput
 };
 Q_ENUM_NS(Capability)
@@ -101,8 +104,30 @@ struct ModelRule {
     QRegularExpression pattern;
     ModelCaps caps;
     QString backend;
+    QString driverProfileId;
     int priority { 0 };
+    bool requiresBackend { false };
     std::optional<QRegularExpression> trailingNegativeLookahead;
+};
+
+struct DriverProfile {
+    QString id;
+    QString name;
+    QString provider;
+    QString protocol;
+    QString endpoint;
+    EndpointMode endpointMode { EndpointMode::Chat };
+    QMap<QString, QString> headers;
+};
+
+struct ProviderSettings {
+    QString id;
+    QString name;
+    QString baseUrl;
+    QString apiKey;
+    QMap<QString, QString> headers;
+    bool enabled { true };
+    bool requiresCredential { true };
 };
 
 struct VirtualModel {

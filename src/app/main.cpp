@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
     }
 
     CP_CLOG(cp_registry) << "Initializing Model Capabilities Registry...";
-    ModelCapsRegistry::instance().loadFromFile(":/resources/model_caps.json");
+    ModelCapsRegistry::instance().loadFromFileWithUserOverrides(":/resources/model_caps.json");
 
     // Set application icon (cross-platform)
     // Note: Using PNG for macOS to avoid "skipping unknown tag type" warnings

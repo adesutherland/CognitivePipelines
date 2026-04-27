@@ -50,6 +50,7 @@ OpenAIBackend::OpenAIBackend() {
         QStringLiteral("gpt-4.1"),
         QStringLiteral("o3-deep-research"),
         QStringLiteral("o4-mini-deep-research"),
+        QStringLiteral("dall-e-3"),
         QStringLiteral("gpt-image-1"),
         QStringLiteral("gpt-image-1-mini")
     };
@@ -154,6 +155,46 @@ QFuture<QStringList> OpenAIBackend::fetchModelList()
         }
 
         return filtered;
+    });
+}
+
+QFuture<QStringList> OpenAIBackend::fetchRawModelList()
+{
+    return QtConcurrent::run([this]() -> QStringList {
+        QFuture<QByteArray> rawFuture = this->fetchRawModelListJson();
+        rawFuture.waitForFinished();
+        const QByteArray payload = rawFuture.result();
+
+        if (payload.isEmpty()) {
+            return availableModels();
+        }
+
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(payload, &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            CP_WARN << "OpenAIBackend::fetchRawModelList: JSON parse error:" << parseError.errorString();
+            return availableModels();
+        }
+
+        const QJsonArray data = doc.object().value(QStringLiteral("data")).toArray();
+        QStringList models;
+        models.reserve(data.size());
+        for (const QJsonValue& value : data) {
+            const QString id = value.toObject().value(QStringLiteral("id")).toString();
+            if (!id.isEmpty()) {
+                models.append(id);
+            }
+        }
+
+        if (models.isEmpty()) {
+            return availableModels();
+        }
+
+        models.removeDuplicates();
+        std::sort(models.begin(), models.end(), [](const QString& lhs, const QString& rhs) {
+            return lhs.localeAwareCompare(rhs) < 0;
+        });
+        return models;
     });
 }
 
@@ -382,11 +423,13 @@ LLMResult OpenAIBackend::sendPrompt(
             result.hasError = true;
             if (ping.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
                 result.errorMsg = QStringLiteral("OpenAI API Timeout");
-                CP_WARN << "OpenAIBackend::sendPrompt assistant probe timeout:" << QString::fromStdString(ping.error.message);
+                CP_WARN.noquote() << QStringLiteral("OpenAIBackend::sendPrompt assistant probe failure provider=openai model=%1 transport=timeout message=%2")
+                                              .arg(resolvedModel, QString::fromStdString(ping.error.message));
             } else {
                 const QString msg = QString::fromStdString(ping.error.message);
                 result.errorMsg = QStringLiteral("OpenAI network error: %1").arg(msg);
-                CP_WARN << "OpenAIBackend::sendPrompt assistant probe network error:" << msg;
+                CP_WARN.noquote() << QStringLiteral("OpenAIBackend::sendPrompt assistant probe failure provider=openai model=%1 transport=network message=%2")
+                                              .arg(resolvedModel, msg);
             }
             result.content = result.errorMsg;
             result.rawResponse = QString::fromStdString(ping.text);
@@ -419,6 +462,10 @@ LLMResult OpenAIBackend::sendPrompt(
         } else {
             result.errorMsg = QStringLiteral("HTTP %1").arg(ping.status_code);
         }
+        CP_WARN.noquote() << QStringLiteral("OpenAIBackend::sendPrompt assistant probe failure provider=openai model=%1 status=%2 message=%3")
+                                      .arg(resolvedModel)
+                                      .arg(ping.status_code)
+                                      .arg(result.errorMsg);
         result.content = result.errorMsg;
         return result;
     }
@@ -444,11 +491,13 @@ LLMResult OpenAIBackend::sendPrompt(
 
         if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
             result.errorMsg = QStringLiteral("OpenAI API Timeout");
-            CP_WARN << "OpenAIBackend::sendPrompt timeout:" << QString::fromStdString(response.error.message);
+            CP_WARN.noquote() << QStringLiteral("OpenAIBackend::sendPrompt failure provider=openai model=%1 transport=timeout message=%2")
+                                          .arg(resolvedModel, QString::fromStdString(response.error.message));
         } else {
             const QString msg = QString::fromStdString(response.error.message);
             result.errorMsg = QStringLiteral("OpenAI network error: %1").arg(msg);
-            CP_WARN << "OpenAIBackend::sendPrompt network error:" << msg;
+            CP_WARN.noquote() << QStringLiteral("OpenAIBackend::sendPrompt failure provider=openai model=%1 transport=network message=%2")
+                                          .arg(resolvedModel, msg);
         }
 
         result.content = result.errorMsg;
@@ -479,6 +528,10 @@ LLMResult OpenAIBackend::sendPrompt(
         } else {
             result.errorMsg = QStringLiteral("HTTP %1").arg(response.status_code);
         }
+        CP_WARN.noquote() << QStringLiteral("OpenAIBackend::sendPrompt failure provider=openai model=%1 status=%2 message=%3")
+                                      .arg(resolvedModel)
+                                      .arg(response.status_code)
+                                      .arg(result.errorMsg);
         result.content = result.errorMsg;
         return result;
     }
@@ -592,11 +645,13 @@ EmbeddingResult OpenAIBackend::getEmbedding(
 
         if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
             result.errorMsg = QStringLiteral("OpenAI API Timeout");
-            CP_WARN << "OpenAIBackend::getEmbedding timeout:" << QString::fromStdString(response.error.message);
+            CP_WARN.noquote() << QStringLiteral("OpenAIBackend::getEmbedding failure provider=openai model=%1 transport=timeout message=%2")
+                                          .arg(selectedModel, QString::fromStdString(response.error.message));
         } else {
             const QString msg = QString::fromStdString(response.error.message);
             result.errorMsg = QStringLiteral("OpenAI network error: %1").arg(msg);
-            CP_WARN << "OpenAIBackend::getEmbedding network error:" << msg;
+            CP_WARN.noquote() << QStringLiteral("OpenAIBackend::getEmbedding failure provider=openai model=%1 transport=network message=%2")
+                                          .arg(selectedModel, msg);
         }
 
         return result;
@@ -623,6 +678,10 @@ EmbeddingResult OpenAIBackend::getEmbedding(
         } else {
             result.errorMsg = QStringLiteral("HTTP %1").arg(response.status_code);
         }
+        CP_WARN.noquote() << QStringLiteral("OpenAIBackend::getEmbedding failure provider=openai model=%1 status=%2 message=%3")
+                                      .arg(selectedModel)
+                                      .arg(response.status_code)
+                                      .arg(result.errorMsg);
         return result;
     }
     
@@ -736,10 +795,12 @@ QFuture<QString> OpenAIBackend::generateImage(
 
             if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
                 errorMsg = QStringLiteral("OpenAI API Timeout");
-                CP_WARN << "OpenAIBackend::generateImage timeout:" << QString::fromStdString(response.error.message);
+                CP_WARN.noquote() << QStringLiteral("OpenAIBackend::generateImage failure provider=openai model=%1 transport=timeout message=%2")
+                                              .arg(model, QString::fromStdString(response.error.message));
             } else {
                 errorMsg = QString::fromStdString(response.error.message);
-                CP_WARN << "OpenAIBackend::generateImage network error:" << errorMsg;
+                CP_WARN.noquote() << QStringLiteral("OpenAIBackend::generateImage failure provider=openai model=%1 transport=network message=%2")
+                                              .arg(model, errorMsg);
                 errorMsg = QStringLiteral("OpenAI network error: %1").arg(errorMsg);
             }
 
@@ -769,6 +830,10 @@ QFuture<QString> OpenAIBackend::generateImage(
                 errorMsg = QStringLiteral("HTTP %1").arg(response.status_code);
             }
 
+            CP_WARN.noquote() << QStringLiteral("OpenAIBackend::generateImage failure provider=openai model=%1 status=%2 message=%3")
+                                          .arg(model)
+                                          .arg(response.status_code)
+                                          .arg(errorMsg);
             return errorMsg;
         }
 

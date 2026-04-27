@@ -24,9 +24,69 @@
 #include "ImageGenPropertiesWidget.h"
 
 #include <QComboBox>
+#include <QFont>
 #include <QFormLayout>
 #include <QSignalBlocker>
+#include <QStandardItemModel>
 #include <QVBoxLayout>
+
+namespace {
+
+QString providerDisplayText(const ProviderCatalogEntry& entry)
+{
+    return QStringLiteral("%1 (%2)").arg(entry.name, entry.statusText);
+}
+
+void addSectionHeader(QComboBox* combo, const QString& text)
+{
+    combo->addItem(text, QString());
+    if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+        if (auto* item = model->item(combo->count() - 1)) {
+            QFont font = item->font();
+            font.setBold(true);
+            item->setFont(font);
+            item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+        }
+    }
+}
+
+QString modelDisplayText(const ModelCatalogEntry& entry)
+{
+    QString text = entry.displayName.isEmpty() ? entry.id : entry.displayName;
+    if (text != entry.id) {
+        text += QStringLiteral(" [%1]").arg(entry.id);
+    }
+    if (!entry.driverProfileId.isEmpty()) {
+        text += QStringLiteral(" - %1").arg(entry.driverProfileId);
+    }
+    return text;
+}
+
+void addModelGroup(QComboBox* combo,
+                   const QList<ModelCatalogEntry>& entries,
+                   ModelCatalogVisibility visibility,
+                   const QString& header)
+{
+    bool hasGroup = false;
+    for (const auto& entry : entries) {
+        if (entry.visibility == visibility) {
+            hasGroup = true;
+            break;
+        }
+    }
+    if (!hasGroup) {
+        return;
+    }
+
+    addSectionHeader(combo, header);
+    for (const auto& entry : entries) {
+        if (entry.visibility == visibility) {
+            combo->addItem(modelDisplayText(entry), entry.id);
+        }
+    }
+}
+
+} // namespace
 
 ImageGenPropertiesWidget::ImageGenPropertiesWidget(QWidget* parent)
     : QWidget(parent)
@@ -41,12 +101,11 @@ ImageGenPropertiesWidget::ImageGenPropertiesWidget(QWidget* parent)
 
     // Provider
     m_providerCombo = new QComboBox(this);
-    m_providerCombo->addItem(QStringLiteral("OpenAI"));
+    populateProviders();
     layout->addRow(tr("Provider:"), m_providerCombo);
 
     // Model
     m_modelCombo = new QComboBox(this);
-    m_modelCombo->addItem(QStringLiteral("dall-e-3"));
     layout->addRow(tr("Model:"), m_modelCombo);
 
     // Size
@@ -88,16 +147,33 @@ ImageGenPropertiesWidget::ImageGenPropertiesWidget(QWidget* parent)
     connectCombo(m_sizeCombo);
     connectCombo(m_qualityCombo);
     connectCombo(m_styleCombo);
+
+    connect(m_providerCombo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, &ImageGenPropertiesWidget::onProviderChanged);
+    connect(&m_modelFetcher, &QFutureWatcher<QList<ModelCatalogEntry>>::finished,
+            this, &ImageGenPropertiesWidget::onModelsFetched);
+
+    if (m_providerCombo->count() > 0) {
+        onProviderChanged(m_providerCombo->currentIndex());
+    }
 }
 
 QString ImageGenPropertiesWidget::provider() const
 {
-    return m_providerCombo ? m_providerCombo->currentText() : QString();
+    if (!m_providerCombo) {
+        return {};
+    }
+    const QString providerId = m_providerCombo->currentData().toString();
+    return providerId.isEmpty() ? m_providerCombo->currentText() : providerId;
 }
 
 QString ImageGenPropertiesWidget::model() const
 {
-    return m_modelCombo ? m_modelCombo->currentText() : QString();
+    if (!m_modelCombo) {
+        return {};
+    }
+    const QString modelId = m_modelCombo->currentData().toString();
+    return modelId.isEmpty() ? m_modelCombo->currentText() : modelId;
 }
 
 QString ImageGenPropertiesWidget::size() const
@@ -121,10 +197,12 @@ void ImageGenPropertiesWidget::setProvider(const QString& providerName)
         QSignalBlocker blocker(m_providerCombo);
         m_providerCombo->setCurrentIndex(0);
     }
+    onProviderChanged(m_providerCombo ? m_providerCombo->currentIndex() : -1);
 }
 
 void ImageGenPropertiesWidget::setModel(const QString& modelName)
 {
+    m_pendingModelId = modelName;
     setComboValue(m_modelCombo, modelName);
 }
 
@@ -147,7 +225,10 @@ int ImageGenPropertiesWidget::setComboValue(QComboBox* combo, const QString& val
 {
     if (!combo) return -1;
 
-    int index = combo->findText(value, Qt::MatchFixedString | Qt::MatchCaseSensitive);
+    int index = combo->findData(value);
+    if (index < 0) {
+        index = combo->findText(value, Qt::MatchFixedString | Qt::MatchCaseSensitive);
+    }
     if (index < 0) {
         index = combo->findText(value, Qt::MatchFixedString);
     }
@@ -158,4 +239,84 @@ int ImageGenPropertiesWidget::setComboValue(QComboBox* combo, const QString& val
     }
 
     return index;
+}
+
+void ImageGenPropertiesWidget::populateProviders()
+{
+    if (!m_providerCombo) {
+        return;
+    }
+
+    const auto providers = ModelCatalogService::instance().providers(ModelCatalogKind::Image);
+    for (const auto& provider : providers) {
+        m_providerCombo->addItem(providerDisplayText(provider), provider.id);
+        if (!provider.isUsable) {
+            if (auto* model = qobject_cast<QStandardItemModel*>(m_providerCombo->model())) {
+                if (auto* item = model->item(m_providerCombo->count() - 1)) {
+                    item->setForeground(Qt::darkGray);
+                }
+            }
+        }
+    }
+}
+
+void ImageGenPropertiesWidget::populateModelCombo(const QList<ModelCatalogEntry>& models)
+{
+    if (!m_modelCombo) {
+        return;
+    }
+
+    int selectedIndex = -1;
+    {
+        const QSignalBlocker blocker(m_modelCombo);
+        m_modelCombo->clear();
+        addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Recommended, tr("Recommended"));
+        addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Available, tr("Available"));
+
+        if (!m_pendingModelId.isEmpty()) {
+            selectedIndex = m_modelCombo->findData(m_pendingModelId);
+        }
+        if (selectedIndex < 0) {
+            for (int i = 0; i < m_modelCombo->count(); ++i) {
+                if (!m_modelCombo->itemData(i).toString().isEmpty()) {
+                    selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        if (selectedIndex >= 0) {
+            m_modelCombo->setCurrentIndex(selectedIndex);
+        }
+    }
+
+    m_modelCombo->setEnabled(selectedIndex >= 0);
+    if (selectedIndex >= 0) {
+        emit configChanged();
+    }
+}
+
+void ImageGenPropertiesWidget::onProviderChanged(int index)
+{
+    if (index < 0 || !m_providerCombo || !m_modelCombo) {
+        return;
+    }
+
+    const QString providerId = m_providerCombo->itemData(index).toString();
+    {
+        const QSignalBlocker blocker(m_modelCombo);
+        m_modelCombo->clear();
+        m_modelCombo->addItem(tr("Fetching..."), QString());
+    }
+    m_modelCombo->setEnabled(false);
+    m_modelFetcher.setFuture(ModelCatalogService::instance().fetchModels(providerId, ModelCatalogKind::Image));
+}
+
+void ImageGenPropertiesWidget::onModelsFetched()
+{
+    const QString providerId = provider();
+    m_lastModels = m_modelFetcher.result();
+    if (m_lastModels.isEmpty()) {
+        m_lastModels = ModelCatalogService::instance().fallbackModels(providerId, ModelCatalogKind::Image);
+    }
+    populateModelCombo(m_lastModels);
 }

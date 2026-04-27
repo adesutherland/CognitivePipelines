@@ -11,6 +11,10 @@
     {
       "name": "anthropic",
       "api_key": "sk-ant-..."
+    },
+    {
+      "name": "ollama",
+      "api_key": "optional-proxy-key"
     }
   ]
 }

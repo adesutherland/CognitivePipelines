@@ -20,6 +20,7 @@ Cognitive Pipelines is a Qt 6 desktop application for composing and running node
   - OpenAI
   - Google
   - Anthropic
+  - Ollama
 - Test targets:
   - `unit_tests` (GoogleTest)
   - `integration_tests` (Qt Test / CTest)
@@ -180,6 +181,8 @@ Environment variables checked first:
 - OpenAI: `OPENAI_API_KEY`
 - Google: `GOOGLE_API_KEY`, `GOOGLE_GENAI_API_KEY`, `GOOGLE_AI_API_KEY`
 - Anthropic: `ANTHROPIC_API_KEY`
+- Ollama: `OLLAMA_BASE_URL` for the local server URL and optional `OLLAMA_API_KEY` for proxied/hosted endpoints
+- CI/headless runs can set `CP_DISABLE_OLLAMA=1` to avoid registering the local Ollama backend when no daemon is available.
 
 Canonical `accounts.json` location:
 
@@ -211,10 +214,16 @@ Example `accounts.json`:
     {
       "name": "anthropic",
       "api_key": "YOUR_ANTHROPIC_KEY"
+    },
+    {
+      "name": "ollama",
+      "api_key": "OPTIONAL_OLLAMA_PROXY_KEY"
     }
   ]
 }
 ```
+
+Provider visibility, Ollama host/port, model alias regex rules, driver profiles, and capability filters can also be overridden with a local model catalog file. See [`docs/model_catalog_config.md`](docs/model_catalog_config.md).
 
 Networked tests skip when the required credentials are not available.
 

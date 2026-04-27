@@ -71,7 +71,9 @@ QFuture<QStringList> AnthropicBackend::fetchModelList() {
         );
 
         if (response.status_code != 200) {
-            CP_WARN << "AnthropicBackend::fetchModelList: Failed to fetch models. HTTP Status:" << response.status_code;
+            CP_WARN.noquote() << QStringLiteral("AnthropicBackend::fetchModelList failure provider=anthropic status=%1 message=%2")
+                                          .arg(response.status_code)
+                                          .arg(QString::fromStdString(response.error.message));
             return availableModels();
         }
 
@@ -113,6 +115,59 @@ QFuture<QStringList> AnthropicBackend::fetchModelList() {
         QMutexLocker locker(&m_cacheMutex);
         m_cachedModels = models;
         return m_cachedModels;
+    });
+}
+
+QFuture<QStringList> AnthropicBackend::fetchRawModelList() {
+    return QtConcurrent::run([this]() -> QStringList {
+        const QString apiKey = LLMProviderRegistry::instance().getCredential(QStringLiteral("anthropic"));
+        if (apiKey.isEmpty()) {
+            CP_WARN << "AnthropicBackend::fetchRawModelList: API key not found";
+            return availableModels();
+        }
+
+        auto response = cpr::Get(
+            cpr::Url{"https://api.anthropic.com/v1/models"},
+            cpr::Header{
+                {"x-api-key", apiKey.toStdString()},
+                {"anthropic-version", "2023-06-01"},
+                {"content-type", "application/json"}
+            },
+            cpr::Timeout{std::chrono::seconds(30)}
+        );
+
+        if (response.status_code != 200) {
+            CP_WARN.noquote() << QStringLiteral("AnthropicBackend::fetchRawModelList failure provider=anthropic status=%1 message=%2")
+                                          .arg(response.status_code)
+                                          .arg(QString::fromStdString(response.error.message));
+            return availableModels();
+        }
+
+        QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(response.text));
+        if (doc.isNull() || !doc.isObject()) {
+            CP_WARN << "AnthropicBackend::fetchRawModelList: Invalid JSON response";
+            return availableModels();
+        }
+
+        QStringList models;
+        const QJsonArray data = doc.object().value(QStringLiteral("data")).toArray();
+        models.reserve(data.size());
+        for (const QJsonValue& value : data) {
+            const QString id = value.toObject().value(QStringLiteral("id")).toString();
+            if (!id.isEmpty()) {
+                models.append(id);
+            }
+        }
+
+        if (models.isEmpty()) {
+            return availableModels();
+        }
+
+        models.removeDuplicates();
+        std::sort(models.begin(), models.end(), [](const QString& lhs, const QString& rhs) {
+            return lhs.localeAwareCompare(rhs) < 0;
+        });
+        return models;
     });
 }
 
@@ -280,11 +335,17 @@ LLMResult AnthropicBackend::sendPrompt(
                     result.errorMsg = QStringLiteral("HTTP %1: %2").arg(QString::number(response.status_code), result.rawResponse);
                 }
             }
+            CP_WARN.noquote() << QStringLiteral("AnthropicBackend::sendPrompt failure provider=anthropic model=%1 status=%2 message=%3")
+                                          .arg(resolvedModel)
+                                          .arg(response.status_code)
+                                          .arg(result.errorMsg);
             result.content = result.errorMsg;
         }
     } catch (const std::exception& e) {
         result.hasError = true;
         result.errorMsg = QString::fromStdString(e.what());
+        CP_WARN.noquote() << QStringLiteral("AnthropicBackend::sendPrompt failure provider=anthropic model=%1 transport=exception message=%2")
+                                      .arg(resolvedModel, result.errorMsg);
         result.content = result.errorMsg;
     }
 

@@ -45,6 +45,7 @@ public:
 
     // Dynamic discovery API (async)
     QFuture<QStringList> fetchModelList() override;
+    QFuture<QStringList> fetchRawModelList() override;
 
     LLMResult sendPrompt(
         const QString& apiKey,

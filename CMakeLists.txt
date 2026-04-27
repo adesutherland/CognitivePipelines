@@ -200,12 +200,16 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/ai/backends/GoogleBackend.h
     ${SRC_DIR}/ai/backends/AnthropicBackend.cpp
     ${SRC_DIR}/ai/backends/AnthropicBackend.h
+    ${SRC_DIR}/ai/backends/OllamaBackend.cpp
+    ${SRC_DIR}/ai/backends/OllamaBackend.h
     ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.cpp
     ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.h
     ${SRC_DIR}/ai/capabilities/ModelCaps.cpp
     ${SRC_DIR}/ai/capabilities/ModelCaps.h
     ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.cpp
     ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.h
+    ${SRC_DIR}/ai/catalog/ModelCatalogService.cpp
+    ${SRC_DIR}/ai/catalog/ModelCatalogService.h
     ${SRC_DIR}/ai/registry/LLMProviderRegistry.cpp
     ${SRC_DIR}/ai/registry/LLMProviderRegistry.h
     ${SRC_DIR}/retrieval/documents/DocumentLoader.cpp
@@ -572,6 +576,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ai/capabilities/ModelCaps.h
             ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.cpp
             ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.h
+            ${SRC_DIR}/ai/catalog/ModelCatalogService.cpp
+            ${SRC_DIR}/ai/catalog/ModelCatalogService.h
             ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.cpp
             ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.h
             ${SRC_DIR}/nodes/ai/image_generation/ImageGenPropertiesWidget.cpp
@@ -600,6 +606,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ai/backends/GoogleBackend.h
             ${SRC_DIR}/ai/backends/AnthropicBackend.cpp
             ${SRC_DIR}/ai/backends/AnthropicBackend.h
+            ${SRC_DIR}/ai/backends/OllamaBackend.cpp
+            ${SRC_DIR}/ai/backends/OllamaBackend.h
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
     )
     target_include_directories(unit_tests PRIVATE ${INCLUDE_DIR} ${CP_PRIVATE_INCLUDE_DIRS})
@@ -651,6 +659,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ai/capabilities/ModelCaps.h
             ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.cpp
             ${SRC_DIR}/ai/capabilities/ModelCapsRegistry.h
+            ${SRC_DIR}/ai/catalog/ModelCatalogService.cpp
+            ${SRC_DIR}/ai/catalog/ModelCatalogService.h
             ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.cpp
             ${SRC_DIR}/nodes/ai/image_generation/ImageGenNode.h
             ${SRC_DIR}/nodes/ai/image_generation/ImageGenPropertiesWidget.cpp
@@ -664,6 +674,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/ai/backends/GoogleBackend.h
             ${SRC_DIR}/ai/backends/AnthropicBackend.cpp
             ${SRC_DIR}/ai/backends/AnthropicBackend.h
+            ${SRC_DIR}/ai/backends/OllamaBackend.cpp
+            ${SRC_DIR}/ai/backends/OllamaBackend.h
             ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.cpp
             ${SRC_DIR}/scripting/hosts/ExecutionScriptHost.h
             ${SRC_DIR}/retrieval/documents/DocumentLoader.cpp

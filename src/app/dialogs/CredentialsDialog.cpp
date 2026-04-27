@@ -25,6 +25,8 @@
 #include "CredentialsDialog.h"
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
+#include "ai/catalog/ModelCatalogService.h"
+#include "ModelCapsRegistry.h"
 
 #include <QVBoxLayout>
 #include <QFormLayout>
@@ -49,16 +51,28 @@ CredentialsDialog::CredentialsDialog(QWidget *parent)
         if (!backend) continue;
 
         QString id = backend->id();
-        QString name = backend->name();
+        const auto settings = ModelCapsRegistry::instance().providerSettings(id);
+        if (settings.has_value() && !settings->enabled) {
+            continue;
+        }
+
+        QString name = settings.has_value() && !settings->name.trimmed().isEmpty()
+                           ? settings->name.trimmed()
+                           : backend->name();
+        const bool required = ModelCatalogService::providerRequiresCredential(id);
         
         auto *lineEdit = new QLineEdit(this);
         lineEdit->setEchoMode(QLineEdit::Password);
-        lineEdit->setPlaceholderText(tr("Enter %1 API Key...").arg(name));
+        lineEdit->setPlaceholderText(required
+                                         ? tr("Enter %1 API Key...").arg(name)
+                                         : tr("Optional %1 API Key...").arg(name));
         
         // Pre-fill with existing credential (if any)
         lineEdit->setText(LLMProviderRegistry::instance().getCredential(id));
         
-        formLayout->addRow(tr("%1 API Key:").arg(name), lineEdit);
+        formLayout->addRow(required ? tr("%1 API Key:").arg(name)
+                                    : tr("%1 API Key (optional):").arg(name),
+                           lineEdit);
         m_edits.insert(id, lineEdit);
     }
 

@@ -125,6 +125,14 @@ public:
     virtual QFuture<QStringList> fetchModelList() = 0;
 
     /**
+     * @brief Asynchronously fetches the raw provider model IDs before catalog filtering.
+     *
+     * Backends may override this when the provider has a model-list endpoint.
+     * The default preserves existing behavior for simple/test backends.
+     */
+    virtual QFuture<QStringList> fetchRawModelList() { return fetchModelList(); }
+
+    /**
      * @brief Sends a prompt to the backend and returns the normalized response.
      *
      * This is a synchronous method that should be called from a background thread

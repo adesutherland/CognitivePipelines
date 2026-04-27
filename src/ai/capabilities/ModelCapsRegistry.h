@@ -29,6 +29,7 @@
 #include <QString>
 #include <QVector>
 #include <QList>
+#include <QMap>
 #include <QReadWriteLock>
 
 #include "ModelCaps.h"
@@ -40,15 +41,20 @@ public:
     struct ResolvedCaps {
         ModelCapsTypes::ModelCaps caps;
         QString ruleId; // empty if no explicit id on rule
+        QString driverProfileId;
     };
 
     bool loadFromFile(const QString& path);
+    bool loadFromFileWithUserOverrides(const QString& path);
+    QStringList userConfigPaths() const;
     std::optional<ResolvedCaps> resolveWithRule(const QString& modelId, const QString& backendId = {}) const;
     std::optional<ModelCapsTypes::ModelCaps> resolve(const QString& modelId, const QString& backendId = {}) const;
     bool isSupported(const QString& backendId, const QString& modelId) const;
 
     QString resolveAlias(const QString& id, const QString& backendId = QString()) const;
     QList<ModelCapsTypes::VirtualModel> virtualModelsForBackend(const QString& backendId = QString()) const;
+    std::optional<ModelCapsTypes::DriverProfile> driverProfile(const QString& id) const;
+    std::optional<ModelCapsTypes::ProviderSettings> providerSettings(const QString& providerId) const;
 
 private:
     ModelCapsRegistry() = default;
@@ -56,6 +62,8 @@ private:
 
     QVector<ModelCapsTypes::ModelRule> rules_;
     QVector<ModelCapsTypes::VirtualModel> virtualModels_;
+    QMap<QString, ModelCapsTypes::DriverProfile> driverProfiles_;
+    QMap<QString, ModelCapsTypes::ProviderSettings> providerSettings_;
     mutable QReadWriteLock lock_;
 };
 

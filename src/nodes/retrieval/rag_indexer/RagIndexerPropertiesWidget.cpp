@@ -22,16 +22,89 @@
 // SOFTWARE.
 //
 #include "RagIndexerPropertiesWidget.h"
-#include "ai/registry/LLMProviderRegistry.h"
-#include "ai/backends/ILLMBackend.h"
+#include "ai/catalog/ModelCatalogService.h"
 
 #include <QFormLayout>
+#include <QFont>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QFileDialog>
 #include <QSignalBlocker>
 #include <QComboBox>
+#include <QStandardItemModel>
+
+namespace {
+
+QString providerDisplayText(const ProviderCatalogEntry& entry)
+{
+    return QStringLiteral("%1 (%2)").arg(entry.name, entry.statusText);
+}
+
+void addSectionHeader(QComboBox* combo, const QString& text)
+{
+    combo->addItem(text, QString());
+    if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+        if (auto* item = model->item(combo->count() - 1)) {
+            QFont font = item->font();
+            font.setBold(true);
+            item->setFont(font);
+            item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+        }
+    }
+}
+
+QString modelDisplayText(const ModelCatalogEntry& entry)
+{
+    QString text = entry.displayName.isEmpty() ? entry.id : entry.displayName;
+    if (!entry.driverProfileId.isEmpty()) {
+        text += QStringLiteral(" - %1").arg(entry.driverProfileId);
+    }
+    if (entry.visibility == ModelCatalogVisibility::Hidden && !entry.filterReason.isEmpty()) {
+        text += QStringLiteral(" - Investigate: %1").arg(entry.filterReason);
+    } else if (!entry.description.isEmpty()) {
+        text += QStringLiteral(" - %1").arg(entry.description);
+    }
+    return text;
+}
+
+void addModelEntry(QComboBox* combo, const ModelCatalogEntry& entry)
+{
+    combo->addItem(modelDisplayText(entry), entry.id);
+    if (entry.visibility == ModelCatalogVisibility::Hidden) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+            if (auto* item = model->item(combo->count() - 1)) {
+                item->setForeground(Qt::darkGray);
+            }
+        }
+    }
+}
+
+void addModelGroup(QComboBox* combo,
+                   const QList<ModelCatalogEntry>& entries,
+                   ModelCatalogVisibility visibility,
+                   const QString& header)
+{
+    bool hasGroup = false;
+    for (const auto& entry : entries) {
+        if (entry.visibility == visibility) {
+            hasGroup = true;
+            break;
+        }
+    }
+    if (!hasGroup) {
+        return;
+    }
+
+    addSectionHeader(combo, header);
+    for (const auto& entry : entries) {
+        if (entry.visibility == visibility) {
+            addModelEntry(combo, entry);
+        }
+    }
+}
+
+} // namespace
 
 RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     : QWidget(parent)
@@ -63,18 +136,27 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     // Provider combo box
     m_providerCombo = new QComboBox(this);
     
-    // Populate providers from LLMProviderRegistry
-    const auto backends = LLMProviderRegistry::instance().allBackends();
-    for (ILLMBackend* backend : backends) {
-        if (backend) {
-            m_providerCombo->addItem(backend->name(), backend->id());
-        }
+    const auto providers = ModelCatalogService::instance().providers(ModelCatalogKind::Embedding);
+    for (const auto& provider : providers) {
+        m_providerCombo->addItem(providerDisplayText(provider), provider.id);
     }
     formLayout->addRow(QStringLiteral("Provider:"), m_providerCombo);
 
     // Model combo box (will be populated when provider is selected)
     m_modelCombo = new QComboBox(this);
     formLayout->addRow(QStringLiteral("Embedding Model:"), m_modelCombo);
+
+    m_showFilteredCheck = new QCheckBox(QStringLiteral("Show filtered models"), this);
+    m_showFilteredCheck->setToolTip(QStringLiteral("Show provider models hidden by embedding capability or driver rules."));
+    formLayout->addRow(QString(), m_showFilteredCheck);
+
+    auto* testLayout = new QHBoxLayout();
+    m_testModelButton = new QPushButton(QStringLiteral("Test Selection"), this);
+    m_testStatusLabel = new QLabel(this);
+    m_testStatusLabel->setWordWrap(true);
+    testLayout->addWidget(m_testModelButton);
+    testLayout->addWidget(m_testStatusLabel, 1);
+    formLayout->addRow(QString(), testLayout);
 
     // Chunk size
     m_chunkSizeSpinBox = new QSpinBox(this);
@@ -130,7 +212,13 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     
     // Connect model combo box
     connect(m_modelCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this]() {
-        if (m_modelCombo->currentIndex() >= 0) {
+        if (m_modelCombo->currentIndex() >= 0 && !m_modelCombo->currentData().toString().isEmpty()) {
+            if (m_testModelButton) {
+                m_testModelButton->setEnabled(true);
+            }
+            if (m_testStatusLabel && !m_modelTester.isRunning()) {
+                m_testStatusLabel->clear();
+            }
             emit modelChanged(m_modelCombo->currentData().toString());
         }
     });
@@ -146,6 +234,12 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     connect(m_chunkingStrategyCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RagIndexerPropertiesWidget::onStrategyChanged);
     connect(m_clearDatabaseCheckBox, &QCheckBox::toggled, this, &RagIndexerPropertiesWidget::clearDatabaseChanged);
+    connect(m_showFilteredCheck, &QCheckBox::toggled, this, &RagIndexerPropertiesWidget::onShowFilteredChanged);
+    connect(m_testModelButton, &QPushButton::clicked, this, &RagIndexerPropertiesWidget::onTestModelClicked);
+    connect(&m_modelTester, &QFutureWatcher<ModelTestResult>::finished,
+            this, &RagIndexerPropertiesWidget::onModelTestFinished);
+    connect(&m_modelFetcher, &QFutureWatcher<QList<ModelCatalogEntry>>::finished,
+            this, &RagIndexerPropertiesWidget::onModelsFetched);
 
     // Initialize model list for the first provider
     if (m_providerCombo->count() > 0) {
@@ -253,6 +347,7 @@ void RagIndexerPropertiesWidget::setProviderId(const QString& id)
 
 void RagIndexerPropertiesWidget::setModelId(const QString& id)
 {
+    m_pendingModelId = id;
     // Find the index with matching data
     for (int i = 0; i < m_modelCombo->count(); ++i) {
         if (m_modelCombo->itemData(i).toString() == id) {
@@ -347,6 +442,72 @@ void RagIndexerPropertiesWidget::onBrowseDatabase()
     }
 }
 
+void RagIndexerPropertiesWidget::populateModelCombo(const QList<ModelCatalogEntry>& models)
+{
+    if (!m_modelCombo) {
+        return;
+    }
+
+    const QString desiredModelId = !m_pendingModelId.isEmpty()
+                                       ? m_pendingModelId
+                                       : m_modelCombo->currentData().toString();
+    bool pendingIsHidden = false;
+    for (const auto& model : models) {
+        if (model.id == desiredModelId && model.visibility == ModelCatalogVisibility::Hidden) {
+            pendingIsHidden = true;
+            break;
+        }
+    }
+
+    const bool includeHidden = (m_showFilteredCheck && m_showFilteredCheck->isChecked()) || pendingIsHidden;
+    int selectedIndex = -1;
+    bool selectedFound = false;
+    {
+        const QSignalBlocker blocker(m_modelCombo);
+        m_modelCombo->clear();
+
+        addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Recommended, QStringLiteral("Recommended"));
+        addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Available, QStringLiteral("Available"));
+        if (includeHidden) {
+            addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Hidden, QStringLiteral("Investigate"));
+        }
+
+        if (!desiredModelId.isEmpty()) {
+            selectedIndex = m_modelCombo->findData(desiredModelId);
+            selectedFound = selectedIndex >= 0;
+        }
+
+        if (selectedIndex < 0) {
+            for (int i = 0; i < m_modelCombo->count(); ++i) {
+                if (!m_modelCombo->itemData(i).toString().isEmpty()) {
+                    selectedIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (selectedIndex >= 0) {
+            m_modelCombo->setCurrentIndex(selectedIndex);
+        }
+    }
+
+    m_modelCombo->setEnabled(selectedIndex >= 0);
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(selectedIndex >= 0);
+    }
+
+    if (selectedIndex >= 0
+        && m_modelCombo->currentIndex() >= 0
+        && !m_modelCombo->currentData().toString().isEmpty()) {
+        if (selectedFound && !m_pendingModelId.isEmpty()) {
+            const QSignalBlocker blocker(this);
+            emit modelChanged(m_modelCombo->currentData().toString());
+        } else {
+            emit modelChanged(m_modelCombo->currentData().toString());
+        }
+    }
+}
+
 void RagIndexerPropertiesWidget::onProviderChanged(int index)
 {
     if (index < 0 || !m_modelCombo) {
@@ -354,34 +515,79 @@ void RagIndexerPropertiesWidget::onProviderChanged(int index)
     }
 
     const QString providerId = m_providerCombo->itemData(index).toString();
-    
-    // Clear existing models and repopulate
+    if (m_testStatusLabel) {
+        m_testStatusLabel->clear();
+    }
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(false);
+    }
+    m_pendingModelId.clear();
     {
         const QSignalBlocker blocker(m_modelCombo);
         m_modelCombo->clear();
-
-        // Get backend and populate embedding models
-        ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId);
-        if (backend) {
-            const QStringList models = backend->availableEmbeddingModels();
-            for (const QString& model : models) {
-                m_modelCombo->addItem(model, model);
-            }
-        }
-        
-        // Set default model to first item if available
-        if (m_modelCombo->count() > 0) {
-            m_modelCombo->setCurrentIndex(0);
-        }
-    } // QSignalBlocker goes out of scope here
+        m_modelCombo->addItem(QStringLiteral("Fetching..."));
+    }
+    m_modelCombo->setEnabled(false);
+    m_modelFetcher.setFuture(ModelCatalogService::instance().fetchModels(providerId, ModelCatalogKind::Embedding));
 
     // Emit provider changed signal
     emit providerChanged(providerId);
-    
-    // Explicitly emit modelChanged signal with the new default model
-    // This is crucial because QSignalBlocker prevented the automatic signal
-    if (m_modelCombo->count() > 0 && m_modelCombo->currentIndex() >= 0) {
-        emit modelChanged(m_modelCombo->currentData().toString());
+}
+
+void RagIndexerPropertiesWidget::onModelsFetched()
+{
+    const QString selectedProviderId = providerId();
+    m_lastModels = m_modelFetcher.result();
+    if (m_lastModels.isEmpty()) {
+        m_lastModels = ModelCatalogService::instance().fallbackModels(selectedProviderId, ModelCatalogKind::Embedding);
+    }
+    populateModelCombo(m_lastModels);
+}
+
+void RagIndexerPropertiesWidget::onShowFilteredChanged(bool checked)
+{
+    Q_UNUSED(checked)
+    m_pendingModelId = m_modelCombo ? m_modelCombo->currentData().toString() : QString();
+    populateModelCombo(m_lastModels);
+}
+
+void RagIndexerPropertiesWidget::onTestModelClicked()
+{
+    if (m_modelTester.isRunning()) {
+        return;
+    }
+
+    const QString selectedProviderId = this->providerId();
+    const QString selectedModelId = this->modelId();
+    if (selectedProviderId.isEmpty() || selectedModelId.isEmpty()) {
+        return;
+    }
+
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(false);
+    }
+    if (m_testStatusLabel) {
+        m_testStatusLabel->setText(QStringLiteral("Testing..."));
+    }
+
+    m_modelTester.setFuture(ModelCatalogService::instance().testModel(selectedProviderId,
+                                                                      selectedModelId,
+                                                                      ModelCatalogKind::Embedding));
+}
+
+void RagIndexerPropertiesWidget::onModelTestFinished()
+{
+    const ModelTestResult result = m_modelTester.result();
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(m_modelCombo && !m_modelCombo->currentData().toString().isEmpty());
+    }
+    if (m_testStatusLabel) {
+        const QString driver = result.driverProfileId.isEmpty()
+                                   ? QString()
+                                   : QStringLiteral(" [%1]").arg(result.driverProfileId);
+        m_testStatusLabel->setText(result.success
+                                       ? QStringLiteral("OK%1: %2").arg(driver, result.message)
+                                       : QStringLiteral("Failed%1: %2").arg(driver, result.message));
     }
 }
 

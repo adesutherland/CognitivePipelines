@@ -31,8 +31,9 @@
   - Execution-state model and status enums used for node/connection highlighting in the UI.
 - `src/ai/`
   - `backends/ILLMBackend.h` defines the provider abstraction for chat, embeddings, and image generation.
-  - `registry/LLMProviderRegistry.*` registers and resolves OpenAI, Google, and Anthropic backends and loads credentials.
-  - `capabilities/ModelCapsRegistry.*` and `ModelCaps.*` normalize model metadata and aliases loaded from resources.
+  - `registry/LLMProviderRegistry.*` registers and resolves OpenAI, Google, Anthropic, and optional Ollama backends and loads credentials.
+  - `capabilities/ModelCapsRegistry.*` and `ModelCaps.*` load provider settings, virtual model aliases, regex capability rules, and driver profiles from the model catalog.
+  - `catalog/ModelCatalogService.*` is the UI-facing model-selection layer. It combines registered backends, credentials, provider settings, dynamic provider model discovery, aliases, capability filtering, hidden-model diagnostics, and lightweight provider/model test calls.
 - `src/retrieval/`
   - `documents/DocumentLoader.*` handles local document ingestion.
   - `chunking/` contains text and code chunkers used by RAG flows.
@@ -70,12 +71,33 @@
 ## AI, Retrieval, and Scripting Layers
 
 - AI execution is routed through `ILLMBackend` implementations rather than a single monolithic API client.
-- `LLMProviderRegistry` registers the built-in OpenAI, Google, and Anthropic backends and resolves credentials per provider id.
-- `UniversalLLMNode` uses the backend registry and `ModelCapsRegistry` to pick models, send prompts, and handle multimodal requests.
-- `ImageGenNode` uses the same provider abstraction for image generation.
-- Retrieval nodes build on `DocumentLoader`, chunkers, and `RagUtils` to populate and query a local RAG database.
+- `LLMProviderRegistry` registers the built-in OpenAI, Google, Anthropic, and Ollama backends and resolves credentials per provider id. Ollama registration can be disabled with `CP_DISABLE_OLLAMA=1` for CI or headless environments without a local daemon.
+- `ModelCapsRegistry` is the rule engine for model behavior. Rules map model-id regexes to capabilities, role modes, parameter constraints, and driver profiles. Broad provider-specific rules can set `requires_backend` so they only match when a provider has already been selected.
+- `ModelCatalogService` is the selection facade used by properties widgets. It chooses usable providers, fetches dynamic model lists where available, groups models into recommended/available/hidden sections, exposes hidden filter reasons, filters by required capability, and runs small chat/embedding test calls for selected provider/model pairs.
+- `UniversalLLMNode` uses the backend registry, `ModelCatalogService`, and `ModelCapsRegistry` to pick models, send prompts, adapt request parameters, and handle multimodal requests.
+- `ImageGenNode` uses capability-filtered image model selection through the same catalog and provider abstraction.
+- Retrieval nodes build on `DocumentLoader`, chunkers, and `RagUtils` to populate and query a local RAG database. RAG indexing and querying now use catalog-selected embedding providers/models; OpenAI and Ollama embedding drivers are implemented.
 - `UniversalScriptNode` requests a runtime from `ScriptEngineRegistry`, then executes the script through `ExecutionScriptHost`.
 - `QuickJSRuntime` is the bundled default runtime; additional runtimes can be added by registering more `IScriptEngine` factories.
+
+## Model Catalog and Driver Mapping
+
+- The shipped catalog lives at `resources/model_caps.json`.
+- Application startup calls `ModelCapsRegistry::loadFromFileWithUserOverrides(":/resources/model_caps.json")`.
+- User override files are merged by `id` from:
+  - macOS: `~/Library/Application Support/CognitivePipelines/model_catalog.json`
+  - Linux/Windows: the Qt generic config location under `CognitivePipelines/model_catalog.json`
+  - current working directory: `model_catalog.json`
+- Catalog arrays are merged by `id`; an override entry with `"disabled": true` removes a shipped `provider`, `driver_profile`, `virtual_model`, or `rule`.
+- `providers` configure backend visibility, display names, local base URLs, whether credentials are required, optional API keys, and custom headers.
+- `driver_profiles` name protocol families such as OpenAI chat completions, OpenAI assistants, OpenAI embeddings, OpenAI images, Anthropic messages, Google generate-content, Ollama chat, and Ollama embeddings.
+- `rules` are regex mappings from concrete provider model IDs to:
+  - capability flags such as `chat`, `vision`, `reasoning`, `longcontext`, `embedding`, `image`, and `pdf`
+  - role mode and parameter constraints
+  - a `driver` profile id
+  - optional `requires_backend` gating for broad local/provider-specific patterns
+- `virtual_models` provide curated aliases such as flagship, reasoning, coding, cost-optimized, and high-throughput choices. Aliases resolve to concrete provider model IDs before capability matching.
+- Properties widgets currently expose the catalog through provider/model selectors, `Show filtered models`, and `Test Selection`. Full provider-management UI is the next natural layer: it should edit the same catalog concepts without requiring the user to hand-edit JSON.
 
 ## Build System and Dependencies
 
@@ -103,6 +125,9 @@
   - `OPENAI_API_KEY`
   - `GOOGLE_API_KEY`, `GOOGLE_GENAI_API_KEY`, `GOOGLE_AI_API_KEY`
   - `ANTHROPIC_API_KEY`
+  - `OLLAMA_BASE_URL`
+  - `OLLAMA_API_KEY`
+  - `CP_DISABLE_OLLAMA`
 - Canonical `accounts.json` locations:
   - macOS: `~/Library/Application Support/CognitivePipelines/accounts.json`
   - Linux: `~/.config/CognitivePipelines/accounts.json`
@@ -115,6 +140,7 @@
   - `openai`
   - `google`
   - `anthropic`
+  - `ollama` (optional; only needed for proxied/hosted Ollama endpoints that require a key)
 
 Example:
 
@@ -132,7 +158,23 @@ Example:
     {
       "name": "anthropic",
       "api_key": "YOUR_ANTHROPIC_KEY"
+    },
+    {
+      "name": "ollama",
+      "api_key": "OPTIONAL_OLLAMA_PROXY_KEY"
     }
   ]
 }
 ```
+
+Model/provider behavior that is not secret material belongs in `model_catalog.json`, not `accounts.json`. See `docs/model_catalog_config.md` for examples.
+
+## Near-Term Architecture Work
+
+- Add a Provider Management dialog backed by the same catalog structures:
+  - enable/disable providers
+  - edit Ollama/local gateway base URL, optional headers, and optional key use
+  - inspect discovered models and filtered-out models with reasons
+  - edit or add virtual aliases, regex rules, capabilities, and driver mappings
+  - run provider/model test calls from the management UI
+- Keep execution nodes consuming `ModelCatalogService` and `ModelCapsRegistry`; the management UI should write catalog overrides rather than adding node-specific configuration paths.

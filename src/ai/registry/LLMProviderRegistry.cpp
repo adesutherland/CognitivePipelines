@@ -27,8 +27,11 @@
 #include "../backends/OpenAIBackend.h"
 #include "../backends/GoogleBackend.h"
 #include "../backends/AnthropicBackend.h"
+#include "../backends/OllamaBackend.h"
+#include "ModelCapsRegistry.h"
 
 #include <QMutexLocker>
+#include <QByteArray>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -51,6 +54,11 @@ LLMProviderRegistry& LLMProviderRegistry::instance() {
         instance.registerBackend(std::make_shared<OpenAIBackend>());
         instance.registerBackend(std::make_shared<GoogleBackend>());
         instance.registerBackend(std::make_shared<AnthropicBackend>());
+        const QByteArray disableOllama = qgetenv("CP_DISABLE_OLLAMA");
+        if (disableOllama != QByteArrayLiteral("1")
+            && disableOllama.compare(QByteArrayLiteral("true"), Qt::CaseInsensitive) != 0) {
+            instance.registerBackend(std::make_shared<OllamaBackend>());
+        }
         backendsRegistered = true;
     }
     
@@ -210,6 +218,11 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
         if (!m_anthropicApiKey.isEmpty()) {
             return m_anthropicApiKey;
         }
+    } else if (providerId.compare(QStringLiteral("ollama"), Qt::CaseInsensitive) == 0) {
+        const QString envKey = readEnv({ "OLLAMA_API_KEY" });
+        if (!envKey.isEmpty()) {
+            return envKey;
+        }
     }
 
     // Fall back to accounts.json file
@@ -275,6 +288,12 @@ QString LLMProviderRegistry::getCredential(const QString& providerId) {
                     return key;
                 }
             }
+        }
+    }
+
+    if (const auto settings = ModelCapsRegistry::instance().providerSettings(providerId)) {
+        if (!settings->apiKey.trimmed().isEmpty()) {
+            return settings->apiKey.trimmed();
         }
     }
 

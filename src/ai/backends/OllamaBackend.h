@@ -24,27 +24,19 @@
 #pragma once
 
 #include "ILLMBackend.h"
+
 #include <QMutex>
-#include <QByteArray>
 #include <QStringList>
 
-/**
- * @brief OpenAI backend implementation using the Chat Completions API.
- *
- * This backend communicates with OpenAI's API endpoints and supports
- * models including gpt-4o, o1-preview, and legacy models.
- */
-class OpenAIBackend : public ILLMBackend {
+class OllamaBackend : public ILLMBackend {
 public:
-    OpenAIBackend();
-    ~OpenAIBackend() override = default;
+    OllamaBackend();
+    ~OllamaBackend() override = default;
 
     QString id() const override;
     QString name() const override;
     QStringList availableModels() const override;
     QStringList availableEmbeddingModels() const override;
-
-    // Dynamic discovery API (async)
     QFuture<QStringList> fetchModelList() override;
     QFuture<QStringList> fetchRawModelList() override;
 
@@ -73,11 +65,9 @@ public:
         const QString& targetDir = QString()
     ) override;
 
-protected:
-    // Test seam: allows tests to override the raw JSON fetcher without real network
-    virtual QFuture<QByteArray> fetchRawModelListJson();
-
 private:
+    QString baseUrl() const;
+
     mutable QMutex m_cacheMutex;
     QStringList m_cachedModels;
 };

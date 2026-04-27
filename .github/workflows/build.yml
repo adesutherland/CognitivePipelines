@@ -52,6 +52,7 @@ jobs:
       NUGET_CREDENTIALPROVIDERS_PATH: ''
       NUGET_PLUGIN_PATHS: ''
       VCPKG_NUGET_EXTRA_ARGS: "-NonInteractive -ForceEnglishOutput -Verbosity detailed -Timeout 600"
+      CP_DISABLE_OLLAMA: "1"
 
     steps:
       - name: Checkout repository

@@ -25,6 +25,7 @@
 #include "ImageGenPropertiesWidget.h"
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
+#include "Logger.h"
 
 #include <QJsonObject>
 #include <QFileInfo>
@@ -150,6 +151,8 @@ TokenList ImageGenNode::execute(const TokenList& incomingTokens)
         const QString err = imagePath.trimmed().isEmpty()
             ? QStringLiteral("ERROR: Image generation failed.")
             : imagePath;
+        CP_WARN.noquote() << QStringLiteral("ImageGenNode: generation failure provider=%1 model=%2 message=%3")
+                                      .arg(providerId, model, err);
         output.insert(outputPinId, err);
         output.insert(QStringLiteral("__error"), err);
     } else {
@@ -164,6 +167,7 @@ TokenList ImageGenNode::execute(const TokenList& incomingTokens)
 QJsonObject ImageGenNode::saveState() const
 {
     QJsonObject obj;
+    obj.insert(QStringLiteral("provider"), m_providerId);
     obj.insert(QStringLiteral("model"), m_model);
     obj.insert(QStringLiteral("size"), m_size);
     obj.insert(QStringLiteral("quality"), m_quality);
@@ -173,6 +177,9 @@ QJsonObject ImageGenNode::saveState() const
 
 void ImageGenNode::loadState(const QJsonObject& data)
 {
+    if (data.contains(QStringLiteral("provider"))) {
+        m_providerId = data.value(QStringLiteral("provider")).toString(m_providerId);
+    }
     if (data.contains(QStringLiteral("model"))) {
         m_model = data.value(QStringLiteral("model")).toString(m_model);
     }
@@ -187,6 +194,7 @@ void ImageGenNode::loadState(const QJsonObject& data)
     }
 
     if (m_widget) {
+        m_widget->setProvider(m_providerId);
         m_widget->setModel(m_model);
         m_widget->setSize(m_size);
         m_widget->setQuality(m_quality);

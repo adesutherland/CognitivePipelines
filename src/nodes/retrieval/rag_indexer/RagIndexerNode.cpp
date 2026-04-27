@@ -28,6 +28,7 @@
 #include "retrieval/storage/RagUtils.h"
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
+#include "ai/catalog/ModelCatalogService.h"
 
 #include <QtConcurrent>
 #include <QSqlDatabase>
@@ -43,6 +44,17 @@
 RagIndexerNode::RagIndexerNode(QObject* parent)
     : QObject(parent)
 {
+    const QString providerId = ModelCatalogService::instance().defaultProvider(ModelCatalogKind::Embedding);
+    if (!providerId.isEmpty()) {
+        m_providerId = providerId;
+        const auto models = ModelCatalogService::instance().fallbackModels(providerId, ModelCatalogKind::Embedding);
+        for (const auto& model : models) {
+            if (model.visibility != ModelCatalogVisibility::Hidden) {
+                m_modelId = model.id;
+                break;
+            }
+        }
+    }
 }
 
 NodeDescriptor RagIndexerNode::getDescriptor() const
@@ -215,7 +227,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
 
         // Resolve credentials and backend via LLMProviderRegistry
         QString apiKey = LLMProviderRegistry::instance().getCredential(m_providerId);
-        if (apiKey.isEmpty()) {
+        if (apiKey.isEmpty() && ModelCatalogService::providerRequiresCredential(m_providerId)) {
             CP_WARN << "RagIndexerNode: No API key found for provider:" << m_providerId;
             return output;
         }
@@ -491,13 +503,17 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                     EmbeddingResult embResult = backend->getEmbedding(apiKey, m_modelId, chunk);
                     
                     if (embResult.hasError) {
-                        CP_WARN << "RagIndexerNode: Embedding error for chunk" << i << "of" << filePath 
-                                   << ":" << embResult.errorMsg;
+                        CP_WARN.noquote() << QStringLiteral("RagIndexerNode: embedding failure provider=%1 model=%2 file=%3 chunk=%4 message=%5")
+                                                      .arg(m_providerId, m_modelId, filePath)
+                                                      .arg(i)
+                                                      .arg(embResult.errorMsg);
                         continue;
                     }
 
                     if (embResult.vector.empty()) {
-                        CP_WARN << "RagIndexerNode: Empty embedding vector for chunk" << i << "of" << filePath;
+                        CP_WARN.noquote() << QStringLiteral("RagIndexerNode: empty embedding provider=%1 model=%2 file=%3 chunk=%4")
+                                                      .arg(m_providerId, m_modelId, filePath)
+                                                      .arg(i);
                         continue;
                     }
 

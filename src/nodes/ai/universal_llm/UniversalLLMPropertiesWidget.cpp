@@ -22,8 +22,6 @@
 // SOFTWARE.
 //
 #include "UniversalLLMPropertiesWidget.h"
-#include "ai/registry/LLMProviderRegistry.h"
-#include "ai/backends/ILLMBackend.h"
 #include "ModelCapsRegistry.h"
 
 #include <QVBoxLayout>
@@ -34,11 +32,90 @@
 #include <QSpinBox>
 #include <QCheckBox>
 #include <QLineEdit>
+#include <QFont>
 #include <QGroupBox>
 #include <QFormLayout>
+#include <QHBoxLayout>
+#include <QPushButton>
 #include <QSignalBlocker>
+#include <QStandardItemModel>
 #include "Logger.h"
 #include "LoggingCategories.h"
+
+namespace {
+
+QString providerDisplayText(const ProviderCatalogEntry& entry)
+{
+    return QStringLiteral("%1 (%2)").arg(entry.name, entry.statusText);
+}
+
+void addSectionHeader(QComboBox* combo, const QString& text)
+{
+    combo->addItem(text, QString());
+    if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+        if (auto* item = model->item(combo->count() - 1)) {
+            QFont font = item->font();
+            font.setBold(true);
+            item->setFont(font);
+            item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
+        }
+    }
+}
+
+QString modelDisplayText(const ModelCatalogEntry& entry)
+{
+    QString text = entry.displayName.isEmpty() ? entry.id : entry.displayName;
+    if (text != entry.id) {
+        text += QStringLiteral(" [%1]").arg(entry.id);
+    }
+    if (!entry.driverProfileId.isEmpty()) {
+        text += QStringLiteral(" - %1").arg(entry.driverProfileId);
+    }
+    if (entry.visibility == ModelCatalogVisibility::Hidden && !entry.filterReason.isEmpty()) {
+        text += QStringLiteral(" - Investigate: %1").arg(entry.filterReason);
+    } else if (!entry.description.isEmpty()) {
+        text += QStringLiteral(" - %1").arg(entry.description);
+    }
+    return text;
+}
+
+void addModelEntry(QComboBox* combo, const ModelCatalogEntry& entry)
+{
+    combo->addItem(modelDisplayText(entry), entry.id);
+    if (entry.visibility == ModelCatalogVisibility::Hidden) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+            if (auto* item = model->item(combo->count() - 1)) {
+                item->setForeground(Qt::darkGray);
+            }
+        }
+    }
+}
+
+void addModelGroup(QComboBox* combo,
+                   const QList<ModelCatalogEntry>& entries,
+                   ModelCatalogVisibility visibility,
+                   const QString& header)
+{
+    bool hasGroup = false;
+    for (const auto& entry : entries) {
+        if (entry.visibility == visibility) {
+            hasGroup = true;
+            break;
+        }
+    }
+    if (!hasGroup) {
+        return;
+    }
+
+    addSectionHeader(combo, header);
+    for (const auto& entry : entries) {
+        if (entry.visibility == visibility) {
+            addModelEntry(combo, entry);
+        }
+    }
+}
+
+} // namespace
 
 UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
     : QWidget(parent)
@@ -54,12 +131,9 @@ UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
     // Provider combo box
     m_providerCombo = new QComboBox(this);
     
-    // Populate providers from LLMProviderRegistry
-    const auto backends = LLMProviderRegistry::instance().allBackends();
-    for (ILLMBackend* backend : backends) {
-        if (backend) {
-            m_providerCombo->addItem(backend->name(), backend->id());
-        }
+    const auto providers = ModelCatalogService::instance().providers(ModelCatalogKind::Chat);
+    for (const auto& provider : providers) {
+        m_providerCombo->addItem(providerDisplayText(provider), provider.id);
     }
     layout->addWidget(m_providerCombo);
 
@@ -70,6 +144,18 @@ UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
     // Model combo box
     m_modelCombo = new QComboBox(this);
     layout->addWidget(m_modelCombo);
+
+    m_showFilteredCheck = new QCheckBox(tr("Show filtered models"), this);
+    m_showFilteredCheck->setToolTip(tr("Show provider models that were hidden by capability or driver rules."));
+    layout->addWidget(m_showFilteredCheck);
+
+    auto* testRow = new QHBoxLayout();
+    m_testModelButton = new QPushButton(tr("Test Selection"), this);
+    m_testStatusLabel = new QLabel(this);
+    m_testStatusLabel->setWordWrap(true);
+    testRow->addWidget(m_testModelButton);
+    testRow->addWidget(m_testStatusLabel, 1);
+    layout->addLayout(testRow);
 
     // System Prompt label
     auto* systemPromptLabel = new QLabel(tr("System Prompt:"), this);
@@ -142,8 +228,14 @@ UniversalLLMPropertiesWidget::UniversalLLMPropertiesWidget(QWidget* parent)
             this, &UniversalLLMPropertiesWidget::onModelChanged);
 
     // Async model discovery watcher
-    connect(&m_modelFetcher, &QFutureWatcher<QStringList>::finished,
+    connect(&m_modelFetcher, &QFutureWatcher<QList<ModelCatalogEntry>>::finished,
             this, &UniversalLLMPropertiesWidget::onModelsFetched);
+    connect(&m_modelTester, &QFutureWatcher<ModelTestResult>::finished,
+            this, &UniversalLLMPropertiesWidget::onModelTestFinished);
+    connect(m_showFilteredCheck, &QCheckBox::toggled,
+            this, &UniversalLLMPropertiesWidget::onShowFilteredChanged);
+    connect(m_testModelButton, &QPushButton::clicked,
+            this, &UniversalLLMPropertiesWidget::onTestModelClicked);
 
     connect(m_systemPromptEdit, &QTextEdit::textChanged, this, [this]() {
         emit systemPromptChanged(m_systemPromptEdit->toPlainText());
@@ -191,14 +283,16 @@ void UniversalLLMPropertiesWidget::onProviderChanged(int index)
         m_modelCombo->addItem(tr("Fetching..."));
     }
     m_modelCombo->setEnabled(false);
-
-    // Kick off async fetch via backend
-    if (ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId)) {
-        CP_CLOG(cp_discovery).noquote() << QStringLiteral("Requesting live Model List for Provider [%1]...")
-                                 .arg(backend->name());
-        QFuture<QStringList> fut = backend->fetchModelList();
-        m_modelFetcher.setFuture(fut);
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(false);
     }
+    if (m_testStatusLabel) {
+        m_testStatusLabel->clear();
+    }
+
+    CP_CLOG(cp_discovery).noquote() << QStringLiteral("Requesting catalog Model List for Provider [%1]...")
+                             .arg(providerId);
+    m_modelFetcher.setFuture(ModelCatalogService::instance().fetchModels(providerId, ModelCatalogKind::Chat));
 
     // Emit provider changed signal (capabilities will be re-evaluated after models arrive)
     emit providerChanged(providerId);
@@ -211,9 +305,18 @@ void UniversalLLMPropertiesWidget::onModelChanged(int index)
     }
 
     const QString modelId = m_modelCombo->itemData(index).toString();
+    if (modelId.isEmpty()) {
+        return;
+    }
     // Instrumentation: log model selection from the UI (debug‑gated)
     CP_CLOG(cp_lifecycle).noquote() << "[ModelLifecycle] UI: modelChanged -> modelId=" << modelId;
     emit modelChanged(modelId);
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(true);
+    }
+    if (m_testStatusLabel && !m_modelTester.isRunning()) {
+        m_testStatusLabel->clear();
+    }
 
     const QString providerId = m_providerCombo ? m_providerCombo->currentData().toString() : QString();
     const auto caps = ModelCapsRegistry::instance().resolve(modelId, providerId);
@@ -247,59 +350,128 @@ void UniversalLLMPropertiesWidget::onModelChanged(int index)
     CP_CLOG(cp_lifecycle).noquote() << logLine;
 }
 
-void UniversalLLMPropertiesWidget::onModelsFetched()
+void UniversalLLMPropertiesWidget::populateModelCombo(const QList<ModelCatalogEntry>& models)
 {
-    // Obtain latest provider/ backend for potential fallback
-    const QString providerId = m_providerCombo ? m_providerCombo->currentData().toString() : QString();
-    ILLMBackend* backend = providerId.isEmpty() ? nullptr : LLMProviderRegistry::instance().getBackend(providerId);
-
-    QStringList models = m_modelFetcher.result();
-    if (models.isEmpty() && backend) {
-        CP_WARN.noquote() << QStringLiteral("Async fetch returned empty model list for provider [%1]; falling back to static list")
-                                    .arg(backend->name());
-        models = backend->availableModels();
+    if (!m_modelCombo) {
+        return;
     }
 
-    bool pendingFound = false;
-    int pendingIndex = -1;
-    if (!m_pendingModelId.isEmpty()) {
-        for (int i = 0; i < models.size(); ++i) {
-            if (models[i] == m_pendingModelId) {
-                pendingFound = true;
-                pendingIndex = i;
-                break;
-            }
+    const QString desiredModelId = !m_pendingModelId.isEmpty()
+                                       ? m_pendingModelId
+                                       : m_modelCombo->currentData().toString();
+    bool pendingIsHidden = false;
+    for (const auto& model : models) {
+        if (model.id == desiredModelId && model.visibility == ModelCatalogVisibility::Hidden) {
+            pendingIsHidden = true;
+            break;
         }
     }
+
+    const bool includeHidden = (m_showFilteredCheck && m_showFilteredCheck->isChecked()) || pendingIsHidden;
+    int selectedIndex = -1;
+    bool selectedFound = false;
 
     {
         const QSignalBlocker blocker(m_modelCombo);
         m_modelCombo->clear();
-        for (const QString& m : models) {
-            m_modelCombo->addItem(m, m);
+
+        addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Recommended, tr("Recommended"));
+        addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Available, tr("Available"));
+        if (includeHidden) {
+            addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Hidden, tr("Investigate"));
         }
 
-        if (pendingFound) {
-            m_modelCombo->setCurrentIndex(pendingIndex);
-        } else if (m_modelCombo->count() > 0) {
-            m_modelCombo->setCurrentIndex(0);
+        if (!desiredModelId.isEmpty()) {
+            selectedIndex = m_modelCombo->findData(desiredModelId);
+            selectedFound = selectedIndex >= 0;
+        }
+
+        if (selectedIndex < 0) {
+            for (int i = 0; i < m_modelCombo->count(); ++i) {
+                if (!m_modelCombo->itemData(i).toString().isEmpty()) {
+                    selectedIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (selectedIndex >= 0) {
+            m_modelCombo->setCurrentIndex(selectedIndex);
         }
     }
 
-    m_modelCombo->setEnabled(true);
+    m_modelCombo->setEnabled(selectedIndex >= 0);
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(selectedIndex >= 0);
+    }
 
-    // Trigger downstream updates for the newly selected model
-    if (m_modelCombo->count() > 0 && m_modelCombo->currentIndex() >= 0) {
-        if (pendingFound) {
-            // Scenario A (Found): Set current index to m_pendingModelId.
-            // Crucial: Use QSignalBlocker or simply do not emit modelChanged.
-            // The Node already has this value; we are just restoring the View to match the Model.
+    if (selectedIndex >= 0) {
+        if (selectedFound && !m_pendingModelId.isEmpty()) {
             const QSignalBlocker blocker(this);
-            onModelChanged(m_modelCombo->currentIndex());
+            onModelChanged(selectedIndex);
         } else {
-            // Scenario B (Not Found): Select index 0 (if available) and emit modelChanged (default behavior).
-            onModelChanged(m_modelCombo->currentIndex());
+            onModelChanged(selectedIndex);
         }
+    }
+}
+
+void UniversalLLMPropertiesWidget::onModelsFetched()
+{
+    // Obtain latest provider for potential fallback
+    const QString providerId = m_providerCombo ? m_providerCombo->currentData().toString() : QString();
+
+    m_lastModels = m_modelFetcher.result();
+    if (m_lastModels.isEmpty()) {
+        CP_WARN.noquote() << QStringLiteral("Async catalog fetch returned empty model list for provider [%1]; falling back to static list")
+                                    .arg(providerId);
+        m_lastModels = ModelCatalogService::instance().fallbackModels(providerId, ModelCatalogKind::Chat);
+    }
+
+    populateModelCombo(m_lastModels);
+}
+
+void UniversalLLMPropertiesWidget::onShowFilteredChanged(bool checked)
+{
+    Q_UNUSED(checked)
+    m_pendingModelId = m_modelCombo ? m_modelCombo->currentData().toString() : QString();
+    populateModelCombo(m_lastModels);
+}
+
+void UniversalLLMPropertiesWidget::onTestModelClicked()
+{
+    if (!m_providerCombo || !m_modelCombo || m_modelTester.isRunning()) {
+        return;
+    }
+
+    const QString providerId = m_providerCombo->currentData().toString();
+    const QString modelId = m_modelCombo->currentData().toString();
+    if (providerId.isEmpty() || modelId.isEmpty()) {
+        return;
+    }
+
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(false);
+    }
+    if (m_testStatusLabel) {
+        m_testStatusLabel->setText(tr("Testing..."));
+    }
+
+    m_modelTester.setFuture(ModelCatalogService::instance().testModel(providerId, modelId, ModelCatalogKind::Chat));
+}
+
+void UniversalLLMPropertiesWidget::onModelTestFinished()
+{
+    const ModelTestResult result = m_modelTester.result();
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(m_modelCombo && !m_modelCombo->currentData().toString().isEmpty());
+    }
+    if (m_testStatusLabel) {
+        const QString driver = result.driverProfileId.isEmpty()
+                                   ? QString()
+                                   : tr(" [%1]").arg(result.driverProfileId);
+        m_testStatusLabel->setText(result.success
+                                       ? tr("OK%1: %2").arg(driver, result.message)
+                                       : tr("Failed%1: %2").arg(driver, result.message));
     }
 }
 

@@ -26,9 +26,14 @@
 #include <QWidget>
 #include <QLineEdit>
 #include <QComboBox>
+#include <QFutureWatcher>
 #include <QSpinBox>
 #include <QPushButton>
 #include <QCheckBox>
+
+#include "ai/catalog/ModelCatalogService.h"
+
+class QLabel;
 
 /**
  * @brief Properties widget for RagIndexerNode configuration.
@@ -37,8 +42,8 @@
  * - Input directory selection (with browse button)
  * - Database file path (with browse button)
  * - Index metadata (JSON string)
- * - Provider selection (via LLMProviderRegistry)
- * - Embedding model selection (dynamically populated)
+ * - Provider selection (via model catalog)
+ * - Embedding model selection (catalog populated)
  * - Chunk size and overlap parameters
  */
 class RagIndexerPropertiesWidget : public QWidget {
@@ -89,9 +94,15 @@ private slots:
     void onBrowseDirectory();
     void onBrowseDatabase();
     void onProviderChanged(int index);
+    void onModelsFetched();
     void onStrategyChanged(int index);
+    void onShowFilteredChanged(bool checked);
+    void onTestModelClicked();
+    void onModelTestFinished();
 
 private:
+    void populateModelCombo(const QList<ModelCatalogEntry>& models);
+
     QLineEdit* m_directoryEdit {nullptr};
     QLineEdit* m_databaseEdit {nullptr};
     QLineEdit* m_metadataEdit {nullptr};
@@ -104,4 +115,11 @@ private:
     QLineEdit* m_fileFilterEdit {nullptr};
     QComboBox* m_chunkingStrategyCombo {nullptr};
     QCheckBox* m_clearDatabaseCheckBox {nullptr};
+    QCheckBox* m_showFilteredCheck {nullptr};
+    QPushButton* m_testModelButton {nullptr};
+    QLabel* m_testStatusLabel {nullptr};
+    QFutureWatcher<ModelTestResult> m_modelTester;
+    QFutureWatcher<QList<ModelCatalogEntry>> m_modelFetcher;
+    QList<ModelCatalogEntry> m_lastModels;
+    QString m_pendingModelId;
 };

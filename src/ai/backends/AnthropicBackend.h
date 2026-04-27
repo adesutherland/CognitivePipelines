@@ -37,6 +37,7 @@ public:
     QStringList availableModels() const override;
     QStringList availableEmbeddingModels() const override;
     QFuture<QStringList> fetchModelList() override;
+    QFuture<QStringList> fetchRawModelList() override;
     
     LLMResult sendPrompt(
         const QString& apiKey,

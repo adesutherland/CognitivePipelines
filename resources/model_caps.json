@@ -1,5 +1,103 @@
 {
   "version": 3,
+  "providers": [
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "enabled": true,
+      "requiresCredential": true
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "enabled": true,
+      "requiresCredential": true
+    },
+    {
+      "id": "google",
+      "name": "Google Gemini",
+      "enabled": true,
+      "requiresCredential": true
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama (Local)",
+      "enabled": true,
+      "requiresCredential": false,
+      "baseUrl": "http://127.0.0.1:11434"
+    }
+  ],
+  "driver_profiles": [
+    {
+      "id": "openai-chat-completions",
+      "name": "OpenAI Chat Completions",
+      "provider": "openai",
+      "protocol": "chat",
+      "endpoint": "/v1/chat/completions"
+    },
+    {
+      "id": "openai-completions",
+      "name": "OpenAI Legacy Completions",
+      "provider": "openai",
+      "protocol": "completion",
+      "endpoint": "/v1/completions"
+    },
+    {
+      "id": "openai-assistants",
+      "name": "OpenAI Assistants",
+      "provider": "openai",
+      "protocol": "assistant",
+      "endpoint": "/v1/assistants",
+      "headers": {
+        "OpenAI-Beta": "assistants=v2"
+      }
+    },
+    {
+      "id": "openai-images",
+      "name": "OpenAI Images",
+      "provider": "openai",
+      "protocol": "image",
+      "endpoint": "/v1/images/generations"
+    },
+    {
+      "id": "openai-embeddings",
+      "name": "OpenAI Embeddings",
+      "provider": "openai",
+      "protocol": "embedding",
+      "endpoint": "/v1/embeddings"
+    },
+    {
+      "id": "google-generate-content",
+      "name": "Google Generate Content",
+      "provider": "google",
+      "protocol": "chat",
+      "endpoint": ":generateContent"
+    },
+    {
+      "id": "anthropic-messages",
+      "name": "Anthropic Messages",
+      "provider": "anthropic",
+      "protocol": "chat",
+      "endpoint": "/v1/messages",
+      "headers": {
+        "anthropic-version": "2023-06-01"
+      }
+    },
+    {
+      "id": "ollama-chat",
+      "name": "Ollama Chat",
+      "provider": "ollama",
+      "protocol": "chat",
+      "endpoint": "/api/chat"
+    },
+    {
+      "id": "ollama-embed",
+      "name": "Ollama Embeddings",
+      "provider": "ollama",
+      "protocol": "embedding",
+      "endpoint": "/api/embed"
+    }
+  ],
   "virtual_models": [
     {
       "id": "gpt-flagship",
@@ -69,16 +167,20 @@
       "priority": 1,
       "notes": "Default properties. Excludes legacy codex but ALLOWS codex-max.",
       "rag_default_embedding": "text-embedding-3-small",
-      "pattern": "^(?!.*(?:tts|audio|realtime|search|transcribe|embedding|whisper|dall-e|moderation|codex(?!-max)|nano|babbage|davinci|curie|instruct-beta)).*$",
-      "role_mode": "system"
+      "pattern": "^(?!.*(?:tts|audio|realtime|search|transcribe|embedding|whisper|dall-e|image|moderation|codex(?!-max)|nano|babbage|davinci|curie|instruct-beta)).*$",
+      "driver": "openai-chat-completions",
+      "role_mode": "system",
+      "capabilities": ["chat"]
     },
     {
       "id": "openai-gpt5.2-pro-assistant",
       "backend": "openai",
       "priority": 200,
       "pattern": "^gpt-5\\.2-pro$",
+      "driver": "openai-assistants",
       "endpoint": "assistant",
       "role_mode": "system",
+      "capabilities": ["chat", "reasoning", "longcontext"],
       "parameter_constraints": {
         "omitTemperature": true,
         "tokenFieldName": "max_tokens"
@@ -90,8 +192,9 @@
       "priority": 110,
       "notes": "Specialized rule for Codex Max",
       "pattern": "^gpt-5\\.1-codex-max$",
+      "driver": "openai-chat-completions",
       "role_mode": "developer",
-      "capabilities": ["reasoning", "longcontext"],
+      "capabilities": ["chat", "reasoning", "longcontext"],
       "parameter_constraints": {
         "temperature": { "default": 0.2 },
         "tokenFieldName": "max_completion_tokens"
@@ -103,8 +206,9 @@
       "priority": 100,
       "notes": "General GPT-5 family (5.2, 5.1, Mini, Nano)",
       "pattern": "^gpt-5(?:\\.(?:2|1))?(?:-mini|-nano)?(?!.*(?:tts|audio|realtime|search|transcribe|embedding|whisper|dall-e|moderation))(?:$|[-.].*)",
+      "driver": "openai-chat-completions",
       "role_mode": "system",
-      "capabilities": ["vision"],
+      "capabilities": ["chat", "vision"],
       "parameter_constraints": {
         "temperature": { "default": 0.7 },
         "omitTemperature": true,
@@ -116,17 +220,37 @@
       "backend": "openai",
       "priority": 90,
       "pattern": "^gpt-4o(?:-mini)?(?!.*(?:tts|audio|realtime|search|transcribe))(?:$|[-.].*)",
+      "driver": "openai-chat-completions",
       "role_mode": "system",
-      "capabilities": ["vision"],
+      "capabilities": ["chat", "vision"],
       "parameter_constraints": { "temperature": { "default": 0.7 } }
+    },
+    {
+      "id": "openai-image-generation",
+      "backend": "openai",
+      "priority": 120,
+      "pattern": "^(?:dall-e-3|gpt-image-1(?:-mini)?)$",
+      "driver": "openai-images",
+      "role_mode": "system",
+      "capabilities": ["image"]
+    },
+    {
+      "id": "openai-embedding-models",
+      "backend": "openai",
+      "priority": 120,
+      "pattern": "^text-embedding-(?:3-(?:small|large)|ada-002)$",
+      "driver": "openai-embeddings",
+      "role_mode": "system",
+      "capabilities": ["embedding"]
     },
     {
       "id": "openai-o-series-deep-research",
       "backend": "openai",
       "priority": 95,
       "pattern": "^o(3|4)-(?:mini-)?deep-research(?:$|[-.].*)",
+      "driver": "openai-chat-completions",
       "role_mode": "developer",
-      "capabilities": ["reasoning"],
+      "capabilities": ["chat", "reasoning"],
       "parameter_constraints": {
         "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
         "reasoning_effort": { "default": "medium", "allowed": ["low", "medium", "high"] },
@@ -139,8 +263,9 @@
       "priority": 85,
       "pattern": "^o(1|3|4)(?:-mini)?(?!.*(?:deep-research|audio|realtime|search|transcribe))(?:$|[-.].*)",
       "backend": "openai",
+      "driver": "openai-chat-completions",
       "role_mode": "developer",
-      "capabilities": ["reasoning"],
+      "capabilities": ["chat", "reasoning"],
       "parameter_constraints": {
         "temperature": { "default": 1.0, "min": 1.0, "max": 1.0 },
         "omitTemperature": true,
@@ -151,9 +276,10 @@
       "id": "google-gemini-2-to-3",
       "pattern": "^gemini-(2(?:\\.0)?|2\\.5|3)-(pro|pro-image|flash|flash-lite)(?:$|[-.].*)",
       "backend": "google",
+      "driver": "google-generate-content",
       "role_mode": "system_instruction",
       "priority": 110,
-      "capabilities": ["vision"],
+      "capabilities": ["chat", "vision"],
       "parameter_constraints": {
         "temperature": { "default": 0.7, "max": 2.0 }
       }
@@ -163,8 +289,9 @@
       "priority": 100,
       "pattern": "^claude-(opus|sonnet|haiku)-(3|3-5|4|4-5|5)(?:$|[-.].*)",
       "backend": "anthropic",
+      "driver": "anthropic-messages",
       "role_mode": "system_parameter",
-      "capabilities": ["vision"],
+      "capabilities": ["chat", "vision"],
       "headers": {
         "anthropic-version": "2023-06-01"
       },
@@ -172,6 +299,26 @@
         "maxInputTokens": 200000,
         "temperature": { "default": 0.7 }
       }
+    },
+    {
+      "id": "ollama-chat-models",
+      "priority": 10,
+      "pattern": "^(?!.*(?:embed|embedding)).+$",
+      "backend": "ollama",
+      "requires_backend": true,
+      "driver": "ollama-chat",
+      "role_mode": "system",
+      "capabilities": ["chat"]
+    },
+    {
+      "id": "ollama-embedding-models",
+      "priority": 20,
+      "pattern": "^(?:nomic-embed-text|mxbai-embed-large|.*(?:embed|embedding).*)$",
+      "backend": "ollama",
+      "requires_backend": true,
+      "driver": "ollama-embed",
+      "role_mode": "system",
+      "capabilities": ["embedding"]
     }
   ]
 }
