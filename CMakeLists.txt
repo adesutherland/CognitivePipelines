@@ -231,10 +231,18 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
     ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
     ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.h
+    ${SRC_DIR}/nodes/io/ingest_input/IngestInputNode.cpp
+    ${SRC_DIR}/nodes/io/ingest_input/IngestInputNode.h
+    ${SRC_DIR}/nodes/io/ingest_input/IngestInputPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/io/ingest_input/IngestInputPropertiesWidget.h
     ${SRC_DIR}/nodes/io/text_output/TextOutputNode.cpp
     ${SRC_DIR}/nodes/io/text_output/TextOutputNode.h
     ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.cpp
     ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.h
+    ${SRC_DIR}/nodes/io/vault_output/VaultOutputNode.cpp
+    ${SRC_DIR}/nodes/io/vault_output/VaultOutputNode.h
+    ${SRC_DIR}/nodes/io/vault_output/VaultOutputPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/io/vault_output/VaultOutputPropertiesWidget.h
     ${SRC_DIR}/nodes/io/image/ImageNode.cpp
     ${SRC_DIR}/nodes/io/image/ImageNode.h
     ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.cpp
@@ -419,6 +427,7 @@ if(ENABLE_TESTING)
             tests/test_universal_llm.cpp
             tests/test_logging.cpp
             tests/test_image_node.cpp
+            tests/test_ingest_input.cpp
             tests/test_mermaid_node.cpp
             tests/test_mermaid_repro.cpp
             tests/test_pdf_node.cpp
@@ -442,6 +451,7 @@ if(ENABLE_TESTING)
             tests/test_dynamic_discovery.cpp
             tests/test_model_selection.cpp
             tests/test_backend_discovery.cpp
+            tests/test_vault_output.cpp
             tests/test_string_utils.cpp
             tests/test_anthropic_foundation.cpp
             tests/test_anthropic_chat.cpp
@@ -469,10 +479,18 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
             ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
             ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/ingest_input/IngestInputNode.cpp
+            ${SRC_DIR}/nodes/io/ingest_input/IngestInputNode.h
+            ${SRC_DIR}/nodes/io/ingest_input/IngestInputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/ingest_input/IngestInputPropertiesWidget.h
             ${SRC_DIR}/nodes/io/text_output/TextOutputNode.cpp
             ${SRC_DIR}/nodes/io/text_output/TextOutputNode.h
             ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.cpp
             ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/vault_output/VaultOutputNode.cpp
+            ${SRC_DIR}/nodes/io/vault_output/VaultOutputNode.h
+            ${SRC_DIR}/nodes/io/vault_output/VaultOutputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/vault_output/VaultOutputPropertiesWidget.h
             ${SRC_DIR}/nodes/io/image/ImageNode.cpp
             ${SRC_DIR}/nodes/io/image/ImageNode.h
             ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.cpp
@@ -667,10 +685,18 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
             ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
             ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/ingest_input/IngestInputNode.cpp
+            ${SRC_DIR}/nodes/io/ingest_input/IngestInputNode.h
+            ${SRC_DIR}/nodes/io/ingest_input/IngestInputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/ingest_input/IngestInputPropertiesWidget.h
             ${SRC_DIR}/nodes/io/text_output/TextOutputNode.cpp
             ${SRC_DIR}/nodes/io/text_output/TextOutputNode.h
             ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.cpp
             ${SRC_DIR}/nodes/io/text_output/TextOutputPropertiesWidget.h
+            ${SRC_DIR}/nodes/io/vault_output/VaultOutputNode.cpp
+            ${SRC_DIR}/nodes/io/vault_output/VaultOutputNode.h
+            ${SRC_DIR}/nodes/io/vault_output/VaultOutputPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/io/vault_output/VaultOutputPropertiesWidget.h
             ${SRC_DIR}/nodes/io/image/ImageNode.cpp
             ${SRC_DIR}/nodes/io/image/ImageNode.h
             ${SRC_DIR}/nodes/io/image/ImagePropertiesWidget.cpp
@@ -795,8 +821,8 @@ if(APPLE)
             MACOSX_BUNDLE_BUNDLE_NAME CognitivePipelines
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
             MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
-            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
+            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>;$<TARGET_FILE_DIR:QtNodes::QtNodes>"
+            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>;$<TARGET_FILE_DIR:QtNodes::QtNodes>"
         )
     endif()
     if(TARGET unit_tests)
@@ -812,8 +838,8 @@ if(APPLE)
             MACOSX_BUNDLE_BUNDLE_NAME unit_tests
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
             MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
-            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
+            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>;$<TARGET_FILE_DIR:QtNodes::QtNodes>"
+            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>;$<TARGET_FILE_DIR:QtNodes::QtNodes>"
         )
     endif()
     if(TARGET integration_tests)
@@ -829,8 +855,8 @@ if(APPLE)
             MACOSX_BUNDLE_BUNDLE_NAME integration_tests
             MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
             MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
-            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>"
+            BUILD_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>;$<TARGET_FILE_DIR:QtNodes::QtNodes>"
+            INSTALL_RPATH "@executable_path/../Frameworks;$<TARGET_FILE_DIR:cpr::cpr>;$<TARGET_FILE_DIR:QtNodes::QtNodes>"
         )
     endif()
 

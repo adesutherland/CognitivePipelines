@@ -68,6 +68,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QSaveFile>
+#include <limits>
 #include "ExecutionIdUtils.h"
 
 #include "CredentialsDialog.h"
@@ -557,23 +558,28 @@ void MainWindow::onSaveAs()
 
 void MainWindow::onRunPipeline()
 {
-    // Clear the stage output before running the pipeline
+    runScenarioFromNodeId(std::numeric_limits<unsigned int>::max());
+}
+
+void MainWindow::runScenarioFromNodeId(unsigned int nodeId)
+{
     if (stageOutputText_) {
         stageOutputText_->clear();
     }
-    
-    // Clear all TextOutputNode instances before running
+
     clearAllTextOutputNodes();
-    
-    // Execute the pipeline
-    if (execEngine_) {
-        if (m_currentFileName.isEmpty()) {
-            execEngine_->setProjectName(QStringLiteral("Untitled"));
-        } else {
-            execEngine_->setProjectName(QFileInfo(m_currentFileName).baseName());
-        }
-        execEngine_->Run();
+
+    if (!execEngine_) {
+        return;
     }
+
+    if (m_currentFileName.isEmpty()) {
+        execEngine_->setProjectName(QStringLiteral("Untitled"));
+    } else {
+        execEngine_->setProjectName(QFileInfo(m_currentFileName).baseName());
+    }
+
+    execEngine_->Run(nodeId);
 }
 
 void MainWindow::onStopPipeline() {
@@ -595,16 +601,8 @@ void MainWindow::populateRunMenu()
         const QString label = pair.second;
         QAction* act = runMenu_->addAction(tr("Run: %1").arg(label));
         connect(act, &QAction::triggered, this, [this, uuid]() {
-            // clear stage output and text output nodes before run
-            if (stageOutputText_) stageOutputText_->clear();
-            clearAllTextOutputNodes();
             if (execEngine_) {
-                if (m_currentFileName.isEmpty()) {
-                    execEngine_->setProjectName(QStringLiteral("Untitled"));
-                } else {
-                    execEngine_->setProjectName(QFileInfo(m_currentFileName).baseName());
-                }
-                execEngine_->runPipeline({ uuid });
+                runScenarioFromNodeId(execEngine_->nodeIdForUuid(uuid));
             }
         });
     }

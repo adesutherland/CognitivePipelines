@@ -68,6 +68,7 @@ public slots:
     void onPipelineFinished(const DataPacket& finalOutput);
     // Per-node debug logging
     void onNodeLog(const QString& message);
+    void runScenarioFromNodeId(unsigned int nodeId);
 
     // Global static access for logging from anywhere
     static void logMessage(const QString& message);

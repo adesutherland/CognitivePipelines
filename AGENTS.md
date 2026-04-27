@@ -10,6 +10,7 @@ This file is the source of truth for repository-specific agent guidance in `Cogn
   - `cmake --build <build-dir> --target CognitivePipelines`
   - `cmake --build <build-dir> --target unit_tests`
 - On macOS, start with a `Debug` profile. `Release` enables additional signing and deployment logic in `CMakeLists.txt`.
+- When changing provider auth behavior or docs, verify the current implementation first. This app uses provider API keys; do not document ChatGPT/Codex account sign-in as a supported OpenAI auth flow unless the code explicitly adds an official implementation.
 - When behavior changes, update the docs that users and agents will actually read:
   - `README.md`
   - `AGENTS.md`
@@ -94,6 +95,8 @@ ctest --test-dir <build-dir> -V
 
 Credentials are resolved by provider id.
 
+OpenAI access in this app is API-key based. ChatGPT or Codex sign-in is not a supported authentication path for desktop pipeline execution.
+
 Environment variables checked first:
 
 - `OPENAI_API_KEY`
@@ -128,7 +131,9 @@ Provider names expected in `accounts.json`:
   - `third_party/quickjs`: vendored QuickJS sources
 - `NodeGraphModel` registers the current node set and category layout. Prefer reading it before updating capability docs.
 - `ExecutionEngine` owns pipeline execution order and asynchronous fan-out behavior.
+- `IngestInputNode` is the capture-first intake node. It emits typed outputs including an explicit `pdf` pin and requests an immediate run from its own node when a file or clipboard payload is ingested in the GUI.
 - `ToolNodeDelegate` is the adapter between QtNodes and `IToolNode` implementations.
+- `VaultOutputNode` writes markdown into a user-selected vault root after asking an LLM to choose the relative subfolder and filename from the existing vault structure and note content.
 - QuickJS is the bundled default scripting runtime registered in `NodeGraphModel`.
 
 ## Documentation Ownership

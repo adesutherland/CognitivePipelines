@@ -8,7 +8,7 @@ Cognitive Pipelines is a Qt 6 desktop application for composing and running node
 - Save/load pipeline support from the main window
 - Asynchronous graph execution via `ExecutionEngine` and `QtConcurrent`
 - Built-in node categories:
-  - `Input / Output`: text, image, PDF-to-image, human input, text output
+  - `Input / Output`: text, ingest input, image, PDF-to-image, human input, text output, vault output
   - `Text Utilities`: prompt building
   - `Visualization`: Mermaid rendering
   - `External Tools`: process execution and Python script execution
@@ -23,6 +23,13 @@ Cognitive Pipelines is a Qt 6 desktop application for composing and running node
 - Test targets:
   - `unit_tests` (GoogleTest)
   - `integration_tests` (Qt Test / CTest)
+
+## Capture Workflows
+
+- `Ingest Input` is a capture-first entry node for quick intake. It accepts file selection, file drop, and clipboard paste, classifies the payload, and immediately runs the downstream graph when used inside the main application window.
+- The node exposes explicit typed outputs for `markdown`, `text`, `image`, and `pdf`, plus `file_path`, `mime_type`, and `kind` metadata so downstream routing can stay simple.
+- `Vault Output` is a markdown writer for knowledge-vault workflows. It sends the incoming markdown, the current vault folder shape, and a routing prompt to the selected LLM backend, then writes the note as `.md` into the chosen subfolder.
+- A typical capture pipeline is now `Ingest Input -> route by typed pin -> processing -> Vault Output`.
 
 ## Dependencies
 
@@ -165,6 +172,8 @@ If you are using vcpkg in CLion, add:
 ## Credentials and Runtime Configuration
 
 The application supports provider credentials through environment variables and `accounts.json`.
+
+OpenAI authentication in this application is API-key based. ChatGPT or Codex account sign-in is not used to authenticate requests from the desktop app; configure `OPENAI_API_KEY` or an `accounts.json` entry instead.
 
 Environment variables checked first:
 

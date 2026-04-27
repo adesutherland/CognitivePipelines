@@ -27,6 +27,7 @@
 #include "PromptBuilderNode.h"
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
+#include "IngestInputNode.h"
 #include "ImageNode.h"
 #include "MermaidNode.h"
 #include "ProcessNode.h"
@@ -35,6 +36,7 @@
 #include "PythonScriptNode.h"
 #include "DatabaseNode.h"
 #include "TextOutputNode.h"
+#include "VaultOutputNode.h"
 #include "HumanInputNode.h"
 #include "PdfToImageNode.h"
 #include "RagIndexerNode.h"
@@ -76,6 +78,11 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Input / Output"));
 
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<IngestInputNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Input / Output"));
+
     // Register ImageNode under the "Input / Output" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto tool = std::make_shared<ImageNode>();
@@ -97,6 +104,11 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // Register TextOutputNode under the "Input / Output" category via ToolNodeDelegate
     registry->registerModel([this]() {
         auto tool = std::make_shared<TextOutputNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Input / Output"));
+
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<VaultOutputNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Input / Output"));
 
