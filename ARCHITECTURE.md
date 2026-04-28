@@ -82,13 +82,14 @@
 
 ## Model Catalog and Driver Mapping
 
-- The shipped catalog lives at `resources/model_caps.json`.
-- Application startup calls `ModelCapsRegistry::loadFromFileWithUserOverrides(":/resources/model_caps.json")`.
-- User override files are merged by `id` from:
+- The shipped catalog lives in source at `resources/model_caps.json` and is compiled into the binary as `:/resources/model_caps.json`.
+- Application startup calls `ModelCapsRegistry::loadFromFileWithUserOverrides(ModelCapsRegistry::distributionConfigPath())`.
+- A single user catalog copy is merged by `id` from:
   - macOS: `~/Library/Application Support/CognitivePipelines/model_catalog.json`
-  - Linux/Windows: the Qt generic config location under `CognitivePipelines/model_catalog.json`
-  - current working directory: `model_catalog.json`
-- Catalog arrays are merged by `id`; an override entry with `"disabled": true` removes a shipped `provider`, `driver_profile`, `virtual_model`, or `rule`.
+  - Linux: `~/.config/CognitivePipelines/model_catalog.json`
+  - Windows: `%LOCALAPPDATA%/CognitivePipelines/model_catalog.json`
+- The provider-management UI writes only the local user copy. Reset removes that file and reloads the current distribution baseline.
+- Catalog arrays are merged by `id`; a user entry with `"disabled": true` removes a shipped `provider`, `driver_profile`, `virtual_model`, or `rule`.
 - `providers` configure backend visibility, display names, local base URLs, whether credentials are required, optional API keys, and custom headers.
 - `driver_profiles` name protocol families such as OpenAI chat completions, OpenAI assistants, OpenAI embeddings, OpenAI images, Anthropic messages, Google generate-content, Ollama chat, and Ollama embeddings.
 - `rules` are regex mappings from concrete provider model IDs to:
@@ -97,7 +98,8 @@
   - a `driver` profile id
   - optional `requires_backend` gating for broad local/provider-specific patterns
 - `virtual_models` provide curated aliases such as flagship, reasoning, coding, cost-optimized, and high-throughput choices. Aliases resolve to concrete provider model IDs before capability matching.
-- Properties widgets currently expose the catalog through provider/model selectors, `Show filtered models`, and `Test Selection`. Full provider-management UI is the next natural layer: it should edit the same catalog concepts without requiring the user to hand-edit JSON.
+- Properties widgets expose the catalog through provider/model selectors, `Show filtered models`, and `Test Selection`.
+- `Edit -> Manage Providers...` exposes provider overrides, dynamic model inspection, effective regex rules, rule copying into the override editor, catalog save/reload, and reset to the distribution baseline.
 
 ## Build System and Dependencies
 
@@ -168,13 +170,3 @@ Example:
 ```
 
 Model/provider behavior that is not secret material belongs in `model_catalog.json`, not `accounts.json`. See `docs/model_catalog_config.md` for examples.
-
-## Near-Term Architecture Work
-
-- Add a Provider Management dialog backed by the same catalog structures:
-  - enable/disable providers
-  - edit Ollama/local gateway base URL, optional headers, and optional key use
-  - inspect discovered models and filtered-out models with reasons
-  - edit or add virtual aliases, regex rules, capabilities, and driver mappings
-  - run provider/model test calls from the management UI
-- Keep execution nodes consuming `ModelCatalogService` and `ModelCapsRegistry`; the management UI should write catalog overrides rather than adding node-specific configuration paths.

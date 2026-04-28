@@ -83,6 +83,7 @@ private slots:
     void onOpen();
     void onSaveAs();
     void onEditCredentials();
+    void onManageProviders();
     void onClearCanvas();
     void onSaveOutput();
     void onDeleteSelected();
@@ -120,6 +121,7 @@ private:
     QAction* enableDebugLoggingAction_ {nullptr};
     QAction* slowMotionAction_ {nullptr};
     QAction* editCredentialsAction_ {nullptr};
+    QAction* manageProvidersAction_ {nullptr};
     QAction* clearCanvasAction_ {nullptr};
     QAction* deleteAction {nullptr};
     QMenu*   runMenu_ {nullptr};

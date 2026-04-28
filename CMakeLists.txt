@@ -316,6 +316,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/nodes/visualization/mermaid/MermaidRenderService.h
     ${SRC_DIR}/app/dialogs/CredentialsDialog.cpp
     ${SRC_DIR}/app/dialogs/CredentialsDialog.h
+    ${SRC_DIR}/app/dialogs/ProviderManagementDialog.cpp
+    ${SRC_DIR}/app/dialogs/ProviderManagementDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
     ${qtnodes_SOURCE_DIR}/resources/resources.qrc
@@ -525,6 +527,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/app/dialogs/AboutDialog.h
             ${SRC_DIR}/app/dialogs/CredentialsDialog.cpp
             ${SRC_DIR}/app/dialogs/CredentialsDialog.h
+            ${SRC_DIR}/app/dialogs/ProviderManagementDialog.cpp
+            ${SRC_DIR}/app/dialogs/ProviderManagementDialog.h
             ${SRC_DIR}/nodes/external_tools/process/ProcessNode.cpp
             ${SRC_DIR}/nodes/external_tools/process/ProcessNode.h
             ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.cpp
@@ -749,6 +753,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/execution/ExecutionEngine.h
             ${SRC_DIR}/app/dialogs/CredentialsDialog.cpp
             ${SRC_DIR}/app/dialogs/CredentialsDialog.h
+            ${SRC_DIR}/app/dialogs/ProviderManagementDialog.cpp
+            ${SRC_DIR}/app/dialogs/ProviderManagementDialog.h
             ${SRC_DIR}/nodes/external_tools/process/ProcessNode.cpp
             ${SRC_DIR}/nodes/external_tools/process/ProcessNode.h
             ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.cpp

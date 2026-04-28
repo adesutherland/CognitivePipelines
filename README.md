@@ -223,7 +223,7 @@ Example `accounts.json`:
 }
 ```
 
-Provider visibility, Ollama host/port, model alias regex rules, driver profiles, and capability filters can also be overridden with a local model catalog file. See [`docs/model_catalog_config.md`](docs/model_catalog_config.md).
+Provider visibility, Ollama host/port, model alias regex rules, driver profiles, and capability filters can also be overridden with the local model catalog user copy. Use `Edit -> Manage Providers...`, or see [`docs/model_catalog_config.md`](docs/model_catalog_config.md).
 
 Networked tests skip when the required credentials are not available.
 

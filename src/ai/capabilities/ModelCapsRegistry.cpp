@@ -284,10 +284,13 @@ ModelCapsRegistry& ModelCapsRegistry::instance()
     return registry;
 }
 
-QStringList ModelCapsRegistry::userConfigPaths() const
+QString ModelCapsRegistry::distributionConfigPath() const
 {
-    QStringList paths;
+    return QStringLiteral(":/resources/model_caps.json");
+}
 
+QString ModelCapsRegistry::userConfigPath() const
+{
 #if defined(Q_OS_MAC)
     const QString baseDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
 #else
@@ -295,10 +298,16 @@ QStringList ModelCapsRegistry::userConfigPaths() const
 #endif
 
     if (!baseDir.isEmpty()) {
-        paths << QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/model_catalog.json"));
+        return QDir(baseDir).filePath(QStringLiteral("CognitivePipelines/model_catalog.json"));
     }
 
-    paths << QDir::current().filePath(QStringLiteral("model_catalog.json"));
+    return QDir::current().filePath(QStringLiteral("model_catalog.json"));
+}
+
+QStringList ModelCapsRegistry::userConfigPaths() const
+{
+    QStringList paths;
+    paths << userConfigPath();
     paths.removeDuplicates();
     return paths;
 }
@@ -780,6 +789,12 @@ QString ModelCapsRegistry::resolveAlias(const QString& id, const QString& backen
     return current;
 }
 
+QVector<ModelCapsTypes::ModelRule> ModelCapsRegistry::modelRulesList() const
+{
+    QReadLocker readLocker(&lock_);
+    return rules_;
+}
+
 QList<ModelCapsTypes::VirtualModel> ModelCapsRegistry::virtualModelsForBackend(const QString& backendId) const
 {
     QReadLocker readLocker(&lock_);
@@ -814,4 +829,10 @@ std::optional<ModelCapsTypes::ProviderSettings> ModelCapsRegistry::providerSetti
         return std::nullopt;
     }
     return it.value();
+}
+
+QList<ModelCapsTypes::ProviderSettings> ModelCapsRegistry::providerSettingsList() const
+{
+    QReadLocker readLocker(&lock_);
+    return providerSettings_.values();
 }

@@ -46,15 +46,19 @@ public:
 
     bool loadFromFile(const QString& path);
     bool loadFromFileWithUserOverrides(const QString& path);
+    QString distributionConfigPath() const;
+    QString userConfigPath() const;
     QStringList userConfigPaths() const;
     std::optional<ResolvedCaps> resolveWithRule(const QString& modelId, const QString& backendId = {}) const;
     std::optional<ModelCapsTypes::ModelCaps> resolve(const QString& modelId, const QString& backendId = {}) const;
     bool isSupported(const QString& backendId, const QString& modelId) const;
 
     QString resolveAlias(const QString& id, const QString& backendId = QString()) const;
+    QVector<ModelCapsTypes::ModelRule> modelRulesList() const;
     QList<ModelCapsTypes::VirtualModel> virtualModelsForBackend(const QString& backendId = QString()) const;
     std::optional<ModelCapsTypes::DriverProfile> driverProfile(const QString& id) const;
     std::optional<ModelCapsTypes::ProviderSettings> providerSettings(const QString& providerId) const;
+    QList<ModelCapsTypes::ProviderSettings> providerSettingsList() const;
 
 private:
     ModelCapsRegistry() = default;

@@ -72,6 +72,7 @@
 #include "ExecutionIdUtils.h"
 
 #include "CredentialsDialog.h"
+#include "ProviderManagementDialog.h"
 #include "UserInputDialog.h"
 #include "Logger.h"
 
@@ -243,6 +244,10 @@ void MainWindow::createActions() {
     editCredentialsAction_->setStatusTip(tr("Open or create accounts.json in the standard app data location"));
     connect(editCredentialsAction_, &QAction::triggered, this, &MainWindow::onEditCredentials);
 
+    manageProvidersAction_ = new QAction(tr("Manage Providers..."), this);
+    manageProvidersAction_->setStatusTip(tr("Configure provider availability, endpoints, model filters, and test probes"));
+    connect(manageProvidersAction_, &QAction::triggered, this, &MainWindow::onManageProviders);
+
     // Delete action
     deleteAction = new QAction(tr("Delete"), this);
     deleteAction->setShortcuts({QKeySequence::Delete, Qt::Key_Backspace});
@@ -309,6 +314,7 @@ void MainWindow::createMenus() {
     // Edit menu
     QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
     editMenu->addAction(editCredentialsAction_);
+    editMenu->addAction(manageProvidersAction_);
     editMenu->addSeparator();
     editMenu->addAction(deleteAction);
     editMenu->addAction(clearCanvasAction_);
@@ -611,6 +617,12 @@ void MainWindow::populateRunMenu()
 void MainWindow::onEditCredentials()
 {
     CredentialsDialog dialog(this);
+    dialog.exec();
+}
+
+void MainWindow::onManageProviders()
+{
+    ProviderManagementDialog dialog(this);
     dialog.exec();
 }
 
