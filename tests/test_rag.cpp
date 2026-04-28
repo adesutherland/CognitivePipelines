@@ -297,11 +297,13 @@ TEST(RagUtilsTest, FindMostRelevantChunksSimple)
 
         QSqlQuery insertFrag(db);
         insertFrag.prepare(QStringLiteral(
-            "INSERT INTO fragments (file_id, chunk_index, content, embedding) "
-            "VALUES (:file_id, :chunk_index, :content, :embedding)"));
+            "INSERT INTO fragments (file_id, chunk_index, start_line, end_line, content, embedding) "
+            "VALUES (:file_id, :chunk_index, :start_line, :end_line, :content, :embedding)"));
 
         insertFrag.bindValue(QStringLiteral(":file_id"), fileId);
         insertFrag.bindValue(QStringLiteral(":chunk_index"), 0);
+        insertFrag.bindValue(QStringLiteral(":start_line"), 3);
+        insertFrag.bindValue(QStringLiteral(":end_line"), 5);
         insertFrag.bindValue(QStringLiteral(":content"), QStringLiteral("chunk A"));
         insertFrag.bindValue(QStringLiteral(":embedding"), blobA);
         ASSERT_TRUE(insertFrag.exec())
@@ -309,6 +311,8 @@ TEST(RagUtilsTest, FindMostRelevantChunksSimple)
 
         insertFrag.bindValue(QStringLiteral(":file_id"), fileId);
         insertFrag.bindValue(QStringLiteral(":chunk_index"), 1);
+        insertFrag.bindValue(QStringLiteral(":start_line"), 8);
+        insertFrag.bindValue(QStringLiteral(":end_line"), 9);
         insertFrag.bindValue(QStringLiteral(":content"), QStringLiteral("chunk B"));
         insertFrag.bindValue(QStringLiteral(":embedding"), blobB);
         ASSERT_TRUE(insertFrag.exec())
@@ -323,5 +327,7 @@ TEST(RagUtilsTest, FindMostRelevantChunksSimple)
 
     ASSERT_EQ(results.size(), 2u);
     EXPECT_EQ(results.front().chunkIndex, 0);
+    EXPECT_EQ(results.front().startLine, 3);
+    EXPECT_EQ(results.front().endLine, 5);
     EXPECT_GE(results.front().score, results.back().score);
 }

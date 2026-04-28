@@ -101,6 +101,7 @@ signals:
     void fileFilterChanged(const QString& filter);
     void chunkingStrategyChanged(const QString& strategy);
     void clearDatabaseChanged(bool clear);
+    void statusChanged(const QString& message);
 
     // Emitted periodically while indexing is running to report progress
     // (e.g., current file/chunk and totals). The ExecutionEngine listens

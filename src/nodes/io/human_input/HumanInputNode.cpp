@@ -44,7 +44,7 @@ NodeDescriptor HumanInputNode::getDescriptor() const
     NodeDescriptor desc;
     desc.id = QStringLiteral("human-input");
     desc.name = QStringLiteral("Human Input");
-    desc.category = QStringLiteral("I/O");
+    desc.category = QStringLiteral("Input / Output");
 
     // Input pin for prompt
     PinDefinition in;

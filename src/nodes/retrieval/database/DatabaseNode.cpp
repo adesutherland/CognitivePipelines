@@ -46,7 +46,7 @@ NodeDescriptor DatabaseNode::getDescriptor() const
     // Preserve the legacy id for saved-pipeline compatibility.
     desc.id = QStringLiteral("database-connector");
     desc.name = QStringLiteral("Database");
-    desc.category = QStringLiteral("Data");
+    desc.category = QStringLiteral("Persistence");
 
     // Input pin: database (text)
     PinDefinition inDatabase;
@@ -140,6 +140,7 @@ TokenList DatabaseNode::execute(const TokenList& incomingTokens)
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
             packet.insert(QStringLiteral("database"), dbPath);
+            packet.insert(QStringLiteral("__error"), msg);
             CP_WARN << "DatabaseNode:" << msg;
             return packet;
         }
@@ -148,6 +149,7 @@ TokenList DatabaseNode::execute(const TokenList& incomingTokens)
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
             packet.insert(QStringLiteral("database"), dbPath);
+            packet.insert(QStringLiteral("__error"), msg);
             CP_WARN << "DatabaseNode:" << msg;
             return packet;
         }
@@ -286,6 +288,9 @@ TokenList DatabaseNode::execute(const TokenList& incomingTokens)
         packet.insert(QStringLiteral("stdout"), stdoutText);
         packet.insert(QStringLiteral("stderr"), stderrText);
         packet.insert(QStringLiteral("database"), dbPath);
+        if (!stderrText.trimmed().isEmpty()) {
+            packet.insert(QStringLiteral("__error"), stderrText);
+        }
         return packet;
     };
 

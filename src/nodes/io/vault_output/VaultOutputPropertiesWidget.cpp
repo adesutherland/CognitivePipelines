@@ -129,6 +129,10 @@ VaultOutputPropertiesWidget::VaultOutputPropertiesWidget(QWidget* parent)
     testRow->addWidget(m_testStatusLabel, 1);
     form->addRow(QString(), testRow);
 
+    m_statusLabel = new QLabel(tr("Status: idle"), this);
+    m_statusLabel->setWordWrap(true);
+    form->addRow(tr("Run Status:"), m_statusLabel);
+
     m_temperatureSpinBox = new QDoubleSpinBox(this);
     m_temperatureSpinBox->setRange(0.0, 2.0);
     m_temperatureSpinBox->setDecimals(2);
@@ -250,6 +254,15 @@ void VaultOutputPropertiesWidget::setMaxTokens(int value)
 
     const QSignalBlocker blocker(m_maxTokensSpinBox);
     m_maxTokensSpinBox->setValue(value);
+}
+
+void VaultOutputPropertiesWidget::setStatusMessage(const QString& message)
+{
+    if (!m_statusLabel) {
+        return;
+    }
+
+    m_statusLabel->setText(message.trimmed().isEmpty() ? tr("Status: idle") : message);
 }
 
 QString VaultOutputPropertiesWidget::vaultRoot() const

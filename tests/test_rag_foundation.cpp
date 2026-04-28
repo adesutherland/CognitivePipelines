@@ -111,11 +111,19 @@ TEST(RagFoundationTest, SchemaCreatesFragmentsTable)
     EXPECT_TRUE(fragmentsColumns.contains(QStringLiteral("id"))) << "Missing 'id' column in fragments";
     EXPECT_TRUE(fragmentsColumns.contains(QStringLiteral("file_id"))) << "Missing 'file_id' column in fragments";
     EXPECT_TRUE(fragmentsColumns.contains(QStringLiteral("chunk_index"))) << "Missing 'chunk_index' column in fragments";
+    EXPECT_TRUE(fragmentsColumns.contains(QStringLiteral("start_line"))) << "Missing 'start_line' column in fragments";
+    EXPECT_TRUE(fragmentsColumns.contains(QStringLiteral("end_line"))) << "Missing 'end_line' column in fragments";
     EXPECT_TRUE(fragmentsColumns.contains(QStringLiteral("content"))) << "Missing 'content' column in fragments";
     EXPECT_TRUE(fragmentsColumns.contains(QStringLiteral("embedding"))) << "Missing 'embedding' column in fragments";
     
     // Clean up
+    query = QSqlQuery();
+    sourceFilesCheckQuery = QSqlQuery();
+    sourceFilesColumnQuery = QSqlQuery();
+    fragmentsCheckQuery = QSqlQuery();
+    fragmentsColumnQuery = QSqlQuery();
     db.close();
+    db = QSqlDatabase();
     QSqlDatabase::removeDatabase(QStringLiteral("test_rag_schema"));
 }
 

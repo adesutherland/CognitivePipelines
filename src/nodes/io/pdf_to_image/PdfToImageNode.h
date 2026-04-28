@@ -59,6 +59,8 @@ public slots:
 public:
     static constexpr const char* kPdfPathPinId = "pdf_path";
     static constexpr const char* kImagePathPinId = "image_path";
+    static constexpr const char* kImagePathsPinId = "image_paths";
+    static constexpr const char* kPageCountPinId = "page_count";
 
 private:
     QPointer<PdfToImagePropertiesWidget> m_widget;

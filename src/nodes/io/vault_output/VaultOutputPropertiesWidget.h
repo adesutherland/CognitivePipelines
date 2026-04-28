@@ -26,6 +26,7 @@ public:
     void setRoutingPrompt(const QString& prompt);
     void setTemperature(double value);
     void setMaxTokens(int value);
+    void setStatusMessage(const QString& message);
 
     QString vaultRoot() const;
     QString provider() const;
@@ -61,6 +62,7 @@ private:
     QCheckBox* m_showFilteredCheck {nullptr};
     QPushButton* m_testModelButton {nullptr};
     QLabel* m_testStatusLabel {nullptr};
+    QLabel* m_statusLabel {nullptr};
     QTextEdit* m_routingPromptEdit {nullptr};
     QDoubleSpinBox* m_temperatureSpinBox {nullptr};
     QSpinBox* m_maxTokensSpinBox {nullptr};

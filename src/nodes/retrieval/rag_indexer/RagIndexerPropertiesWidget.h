@@ -76,6 +76,7 @@ public slots:
     void setFileFilter(const QString& filter);
     void setChunkingStrategy(const QString& strategy);
     void setClearDatabase(bool clear);
+    void setStatusMessage(const QString& message);
 
 signals:
     // Emitted when properties change
@@ -118,6 +119,7 @@ private:
     QCheckBox* m_showFilteredCheck {nullptr};
     QPushButton* m_testModelButton {nullptr};
     QLabel* m_testStatusLabel {nullptr};
+    QLabel* m_statusLabel {nullptr};
     QFutureWatcher<ModelTestResult> m_modelTester;
     QFutureWatcher<QList<ModelCatalogEntry>> m_modelFetcher;
     QList<ModelCatalogEntry> m_lastModels;

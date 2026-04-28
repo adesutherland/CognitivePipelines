@@ -15,6 +15,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMetaObject>
 #include <QMimeDatabase>
 #include <QRegularExpression>
 #include <QSaveFile>
@@ -355,56 +356,52 @@ TokenList VaultOutputNode::execute(const TokenList& incomingTokens)
         : inputs.value(QString::fromLatin1(kInputPromptId)).toString().trimmed();
 
     DataPacket output;
+    output.insert(QStringLiteral("_provider"), m_providerId);
+    output.insert(QStringLiteral("_model"), m_modelId);
 
-    if (markdown.trimmed().isEmpty()) {
-        output.insert(QStringLiteral("__error"), QStringLiteral("Vault Output requires markdown input."));
+    auto fail = [this, &output](const QString& message) {
+        output.insert(QStringLiteral("__error"), message);
+        setStatusMessage(QStringLiteral("Status: %1").arg(message));
         ExecutionToken token;
         token.data = output;
         return TokenList{token};
+    };
+
+    setStatusMessage(QStringLiteral("Status: routing note to vault..."));
+
+    if (markdown.trimmed().isEmpty()) {
+        return fail(QStringLiteral("Vault Output requires markdown input."));
     }
 
     if (vaultRoot.isEmpty()) {
-        output.insert(QStringLiteral("__error"), QStringLiteral("Vault Output requires a vault root path."));
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("Vault Output requires a vault root path."));
     }
 
     if (m_providerId.trimmed().isEmpty() || m_modelId.trimmed().isEmpty()) {
-        output.insert(QStringLiteral("__error"), QStringLiteral("Vault Output requires a configured provider and model."));
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("Vault Output requires a configured provider and model."));
     }
 
     QDir rootDir(vaultRoot);
     if (!rootDir.exists() && !QDir().mkpath(vaultRoot)) {
-        output.insert(QStringLiteral("__error"),
-                      QStringLiteral("Failed to create vault root directory: %1").arg(vaultRoot));
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("Failed to create vault root directory: %1").arg(vaultRoot));
     }
 
     ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(m_providerId);
     if (!backend) {
-        output.insert(QStringLiteral("__error"),
-                      QStringLiteral("Vault Output backend '%1' is not available.").arg(m_providerId));
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("Vault Output backend '%1' is not available.").arg(m_providerId));
     }
 
     const QString apiKey = LLMProviderRegistry::instance().getCredential(m_providerId);
     if (apiKey.isEmpty() && ModelCatalogService::providerRequiresCredential(m_providerId)) {
-        output.insert(QStringLiteral("__error"),
-                      QStringLiteral("API key not found for provider '%1'.").arg(m_providerId));
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("API key not found for provider '%1'.").arg(m_providerId));
     }
 
     const QString resolvedModel = ModelCapsRegistry::instance().resolveAlias(m_modelId, m_providerId);
+    output.insert(QStringLiteral("_model"), resolvedModel);
+    if (const auto resolvedRule = ModelCapsRegistry::instance().resolveWithRule(resolvedModel, m_providerId);
+        resolvedRule.has_value() && !resolvedRule->driverProfileId.isEmpty()) {
+        output.insert(QStringLiteral("_driver"), resolvedRule->driverProfileId);
+    }
     const QString vaultSummary = trimForPrompt(buildVaultSummary(vaultRoot), 14000);
     const QString trimmedMarkdown = trimForPrompt(markdown, 16000);
     const QString systemPrompt = QStringLiteral(
@@ -432,11 +429,7 @@ TokenList VaultOutputNode::execute(const TokenList& incomingTokens)
         const QString errorForLog = result.errorMsg.isEmpty() ? result.content : result.errorMsg;
         CP_WARN.noquote() << QStringLiteral("VaultOutputNode: backend failure provider=%1 model=%2 message=%3")
                                       .arg(m_providerId, resolvedModel, errorForLog);
-        output.insert(QStringLiteral("__error"),
-                      result.errorMsg.isEmpty() ? result.content : result.errorMsg);
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(result.errorMsg.isEmpty() ? result.content : result.errorMsg);
     }
 
     const QJsonObject decision = parseDecisionObject(result.content);
@@ -450,29 +443,17 @@ TokenList VaultOutputNode::execute(const TokenList& incomingTokens)
         ? rootDir.absolutePath()
         : rootDir.filePath(relativeSubfolder);
     if (!QDir().mkpath(targetDirPath)) {
-        output.insert(QStringLiteral("__error"),
-                      QStringLiteral("Failed to create vault subfolder: %1").arg(targetDirPath));
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("Failed to create vault subfolder: %1").arg(targetDirPath));
     }
 
     const QString targetPath = uniqueMarkdownPath(targetDirPath, filenameBase);
     QSaveFile file(targetPath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        output.insert(QStringLiteral("__error"),
-                      QStringLiteral("Failed to open vault output file: %1").arg(targetPath));
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("Failed to open vault output file: %1").arg(targetPath));
     }
     file.write(markdown.toUtf8());
     if (!file.commit()) {
-        output.insert(QStringLiteral("__error"),
-                      QStringLiteral("Failed to save vault output file: %1").arg(targetPath));
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("Failed to save vault output file: %1").arg(targetPath));
     }
 
     QVariantMap decisionMap = decision.toVariantMap();
@@ -486,6 +467,7 @@ TokenList VaultOutputNode::execute(const TokenList& incomingTokens)
     output.insert(QString::fromLatin1(kOutputSubfolderId), relativeSubfolder);
     output.insert(QString::fromLatin1(kOutputFilenameId), QFileInfo(targetPath).fileName());
     output.insert(QString::fromLatin1(kOutputDecisionId), decisionMap);
+    setStatusMessage(QStringLiteral("Status: saved %1").arg(QFileInfo(targetPath).absoluteFilePath()));
 
     ExecutionToken token;
     token.data = output;
@@ -555,4 +537,16 @@ void VaultOutputNode::setTemperature(double value)
 void VaultOutputNode::setMaxTokens(int value)
 {
     m_maxTokens = value;
+}
+
+void VaultOutputNode::setStatusMessage(const QString& message)
+{
+    auto* widget = m_widget.data();
+    if (!widget) {
+        return;
+    }
+
+    QMetaObject::invokeMethod(widget, [widget, message]() {
+        widget->setStatusMessage(message);
+    }, Qt::QueuedConnection);
 }

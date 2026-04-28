@@ -23,9 +23,13 @@
 //
 #include "ImageGenPropertiesWidget.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QFont>
 #include <QFormLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
 #include <QSignalBlocker>
 #include <QStandardItemModel>
 #include <QVBoxLayout>
@@ -59,7 +63,24 @@ QString modelDisplayText(const ModelCatalogEntry& entry)
     if (!entry.driverProfileId.isEmpty()) {
         text += QStringLiteral(" - %1").arg(entry.driverProfileId);
     }
+    if (entry.visibility == ModelCatalogVisibility::Hidden && !entry.filterReason.isEmpty()) {
+        text += QStringLiteral(" - Investigate: %1").arg(entry.filterReason);
+    } else if (!entry.description.isEmpty()) {
+        text += QStringLiteral(" - %1").arg(entry.description);
+    }
     return text;
+}
+
+void addModelEntry(QComboBox* combo, const ModelCatalogEntry& entry)
+{
+    combo->addItem(modelDisplayText(entry), entry.id);
+    if (entry.visibility == ModelCatalogVisibility::Hidden) {
+        if (auto* model = qobject_cast<QStandardItemModel*>(combo->model())) {
+            if (auto* item = model->item(combo->count() - 1)) {
+                item->setForeground(Qt::darkGray);
+            }
+        }
+    }
 }
 
 void addModelGroup(QComboBox* combo,
@@ -81,7 +102,7 @@ void addModelGroup(QComboBox* combo,
     addSectionHeader(combo, header);
     for (const auto& entry : entries) {
         if (entry.visibility == visibility) {
-            combo->addItem(modelDisplayText(entry), entry.id);
+            addModelEntry(combo, entry);
         }
     }
 }
@@ -107,6 +128,18 @@ ImageGenPropertiesWidget::ImageGenPropertiesWidget(QWidget* parent)
     // Model
     m_modelCombo = new QComboBox(this);
     layout->addRow(tr("Model:"), m_modelCombo);
+
+    m_showFilteredCheck = new QCheckBox(tr("Show filtered models"), this);
+    m_showFilteredCheck->setToolTip(tr("Show provider image models hidden by capability or driver rules."));
+    layout->addRow(QString(), m_showFilteredCheck);
+
+    auto* testRow = new QHBoxLayout();
+    m_testModelButton = new QPushButton(tr("Test Selection"), this);
+    m_testStatusLabel = new QLabel(this);
+    m_testStatusLabel->setWordWrap(true);
+    testRow->addWidget(m_testModelButton);
+    testRow->addWidget(m_testStatusLabel, 1);
+    layout->addRow(QString(), testRow);
 
     // Size
     m_sizeCombo = new QComboBox(this);
@@ -152,6 +185,12 @@ ImageGenPropertiesWidget::ImageGenPropertiesWidget(QWidget* parent)
             this, &ImageGenPropertiesWidget::onProviderChanged);
     connect(&m_modelFetcher, &QFutureWatcher<QList<ModelCatalogEntry>>::finished,
             this, &ImageGenPropertiesWidget::onModelsFetched);
+    connect(m_showFilteredCheck, &QCheckBox::toggled,
+            this, &ImageGenPropertiesWidget::onShowFilteredChanged);
+    connect(m_testModelButton, &QPushButton::clicked,
+            this, &ImageGenPropertiesWidget::onTestModelClicked);
+    connect(&m_modelTester, &QFutureWatcher<ModelTestResult>::finished,
+            this, &ImageGenPropertiesWidget::onModelTestFinished);
 
     if (m_providerCombo->count() > 0) {
         onProviderChanged(m_providerCombo->currentIndex());
@@ -266,15 +305,30 @@ void ImageGenPropertiesWidget::populateModelCombo(const QList<ModelCatalogEntry>
         return;
     }
 
+    const QString desiredModelId = !m_pendingModelId.isEmpty()
+                                       ? m_pendingModelId
+                                       : m_modelCombo->currentData().toString();
+    bool pendingIsHidden = false;
+    for (const auto& model : models) {
+        if (model.id == desiredModelId && model.visibility == ModelCatalogVisibility::Hidden) {
+            pendingIsHidden = true;
+            break;
+        }
+    }
+
+    const bool includeHidden = (m_showFilteredCheck && m_showFilteredCheck->isChecked()) || pendingIsHidden;
     int selectedIndex = -1;
     {
         const QSignalBlocker blocker(m_modelCombo);
         m_modelCombo->clear();
         addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Recommended, tr("Recommended"));
         addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Available, tr("Available"));
+        if (includeHidden) {
+            addModelGroup(m_modelCombo, models, ModelCatalogVisibility::Hidden, tr("Investigate"));
+        }
 
-        if (!m_pendingModelId.isEmpty()) {
-            selectedIndex = m_modelCombo->findData(m_pendingModelId);
+        if (!desiredModelId.isEmpty()) {
+            selectedIndex = m_modelCombo->findData(desiredModelId);
         }
         if (selectedIndex < 0) {
             for (int i = 0; i < m_modelCombo->count(); ++i) {
@@ -290,6 +344,9 @@ void ImageGenPropertiesWidget::populateModelCombo(const QList<ModelCatalogEntry>
     }
 
     m_modelCombo->setEnabled(selectedIndex >= 0);
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(selectedIndex >= 0);
+    }
     if (selectedIndex >= 0) {
         emit configChanged();
     }
@@ -308,6 +365,13 @@ void ImageGenPropertiesWidget::onProviderChanged(int index)
         m_modelCombo->addItem(tr("Fetching..."), QString());
     }
     m_modelCombo->setEnabled(false);
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(false);
+    }
+    if (m_testStatusLabel) {
+        m_testStatusLabel->clear();
+    }
+    m_pendingModelId.clear();
     m_modelFetcher.setFuture(ModelCatalogService::instance().fetchModels(providerId, ModelCatalogKind::Image));
 }
 
@@ -319,4 +383,49 @@ void ImageGenPropertiesWidget::onModelsFetched()
         m_lastModels = ModelCatalogService::instance().fallbackModels(providerId, ModelCatalogKind::Image);
     }
     populateModelCombo(m_lastModels);
+}
+
+void ImageGenPropertiesWidget::onShowFilteredChanged(bool checked)
+{
+    Q_UNUSED(checked)
+    m_pendingModelId = m_modelCombo ? m_modelCombo->currentData().toString() : QString();
+    populateModelCombo(m_lastModels);
+}
+
+void ImageGenPropertiesWidget::onTestModelClicked()
+{
+    if (m_modelTester.isRunning()) {
+        return;
+    }
+
+    const QString providerId = provider();
+    const QString modelId = model();
+    if (providerId.isEmpty() || modelId.isEmpty()) {
+        return;
+    }
+
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(false);
+    }
+    if (m_testStatusLabel) {
+        m_testStatusLabel->setText(tr("Testing..."));
+    }
+
+    m_modelTester.setFuture(ModelCatalogService::instance().testModel(providerId, modelId, ModelCatalogKind::Image));
+}
+
+void ImageGenPropertiesWidget::onModelTestFinished()
+{
+    const ModelTestResult result = m_modelTester.result();
+    if (m_testModelButton) {
+        m_testModelButton->setEnabled(m_modelCombo && !m_modelCombo->currentData().toString().isEmpty());
+    }
+    if (m_testStatusLabel) {
+        const QString driver = result.driverProfileId.isEmpty()
+                                   ? QString()
+                                   : tr(" [%1]").arg(result.driverProfileId);
+        m_testStatusLabel->setText(result.success
+                                       ? tr("OK%1: %2").arg(driver, result.message)
+                                       : tr("Failed%1: %2").arg(driver, result.message));
+    }
 }

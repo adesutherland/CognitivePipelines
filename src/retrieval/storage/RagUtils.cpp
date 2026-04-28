@@ -154,7 +154,28 @@ std::vector<RagUtils::SearchResult> RagUtils::findMostRelevantChunks(
             hadError = true;
         } else {
             QSqlQuery query(db);
-            if (!query.exec(QStringLiteral("SELECT id, file_id, chunk_index, content, embedding FROM fragments"))) {
+            bool hasLineColumns = false;
+            if (query.exec(QStringLiteral("PRAGMA table_info(fragments)"))) {
+                bool hasStartLine = false;
+                bool hasEndLine = false;
+                while (query.next()) {
+                    const QString name = query.value(1).toString();
+                    hasStartLine = hasStartLine || name == QStringLiteral("start_line");
+                    hasEndLine = hasEndLine || name == QStringLiteral("end_line");
+                }
+                hasLineColumns = hasStartLine && hasEndLine;
+            }
+
+            const QString selectSql = hasLineColumns
+                ? QStringLiteral(
+                    "SELECT id, file_id, chunk_index, "
+                    "COALESCE(start_line, 0), COALESCE(end_line, 0), "
+                    "content, embedding FROM fragments")
+                : QStringLiteral(
+                    "SELECT id, file_id, chunk_index, "
+                    "0, 0, content, embedding FROM fragments");
+
+            if (!query.exec(selectSql)) {
                 errorMessage = QStringLiteral("Failed to query fragments for similarity search: %1")
                                    .arg(query.lastError().text());
                 hadError = true;
@@ -163,8 +184,10 @@ std::vector<RagUtils::SearchResult> RagUtils::findMostRelevantChunks(
                     const qint64 fragmentId = query.value(0).toLongLong();
                     const qint64 fileId = query.value(1).toLongLong();
                     const int chunkIndex = query.value(2).toInt();
-                    const QString content = query.value(3).toString();
-                    const QByteArray embeddingBlob = query.value(4).toByteArray();
+                    const int startLine = query.value(3).toInt();
+                    const int endLine = query.value(4).toInt();
+                    const QString content = query.value(5).toString();
+                    const QByteArray embeddingBlob = query.value(6).toByteArray();
 
                     const vector<float> embeddingVec = blobToVectorFloat(embeddingBlob);
                     if (embeddingVec.empty() || embeddingVec.size() != queryEmbedding.size()) {
@@ -180,6 +203,8 @@ std::vector<RagUtils::SearchResult> RagUtils::findMostRelevantChunks(
                     sr.fragmentId = fragmentId;
                     sr.fileId = fileId;
                     sr.chunkIndex = chunkIndex;
+                    sr.startLine = startLine;
+                    sr.endLine = endLine;
                     sr.content = content;
                     sr.score = score;
                     results.push_back(std::move(sr));

@@ -60,7 +60,9 @@ void ExecutionScriptHost::setOutput(const QString& key, const QVariant& value)
 
 void ExecutionScriptHost::setError(const QString& message)
 {
-    m_logs.append(QString("Error: %1").arg(message));
+    m_outputPacket.insert(QStringLiteral("__error"), message);
+    m_outputPacket.insert(QStringLiteral("status"), QStringLiteral("FAIL"));
+    log(QStringLiteral("Error: %1").arg(message));
 }
 
 QString ExecutionScriptHost::getTempDir() const

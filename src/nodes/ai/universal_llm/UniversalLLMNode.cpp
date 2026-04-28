@@ -194,6 +194,12 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
     DataPacket output;
     // Clear the output pin at the start
     output.insert(QString::fromLatin1(kOutputResponseId), QVariant());
+    output.insert(QStringLiteral("_provider"), providerId);
+    output.insert(QStringLiteral("_model"), modelId);
+    if (const auto resolvedRule = ModelCapsRegistry::instance().resolveWithRule(modelId, providerId);
+        resolvedRule.has_value() && !resolvedRule->driverProfileId.isEmpty()) {
+        output.insert(QStringLiteral("_driver"), resolvedRule->driverProfileId);
+    }
 
     // Use input pins if provided, otherwise fall back to defaults
     const QString systemPrompt = systemInput.trimmed().isEmpty() 
@@ -355,7 +361,7 @@ TokenList UniversalLLMNode::execute(const TokenList& incomingTokens)
             output.insert(QString::fromLatin1(kOutputResponseId), m_fallbackString);
         } else {
             output.insert(QString::fromLatin1(kOutputResponseId), result.content);
-            output.insert(QStringLiteral("__error"), result.errorMsg);
+            output.insert(QStringLiteral("__error"), errorForLog);
         }
         // Still include raw response for debugging
         output.insert(QStringLiteral("_raw_response"), result.rawResponse);

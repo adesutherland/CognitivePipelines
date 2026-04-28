@@ -76,7 +76,7 @@ NodeDescriptor PromptBuilderNode::getDescriptor() const
     NodeDescriptor desc;
     desc.id = QStringLiteral("prompt-builder");
     desc.name = QStringLiteral("Prompt Builder");
-    desc.category = QStringLiteral("Text");
+    desc.category = QStringLiteral("Text Utilities");
 
     // Only declare the static output pin here. Inputs are dynamic and managed via ToolNodeDelegate.
     PinDefinition out;

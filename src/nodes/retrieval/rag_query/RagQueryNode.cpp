@@ -29,6 +29,7 @@
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
 #include "ai/catalog/ModelCatalogService.h"
+#include "ModelCapsRegistry.h"
 
 #include <QtConcurrent>
 #include <QJsonArray>
@@ -117,6 +118,10 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
 {
     return QtConcurrent::run([this, inputs]() -> DataPacket {
         DataPacket output;
+        auto fail = [&output](const QString& message) {
+            output.insert(QStringLiteral("__error"), message);
+            return output;
+        };
 
         QString queryText = inputs.value(QString::fromLatin1(kInputQuery)).toString().trimmed();
         if (queryText.isEmpty()) {
@@ -129,45 +134,58 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
         }
 
         if (queryText.isEmpty()) {
-            CP_WARN << "RagQueryNode: Query text is empty";
-            return output;
+            const QString msg = QStringLiteral("RAG Query text is empty.");
+            CP_WARN << msg;
+            return fail(msg);
         }
 
         if (dbPath.isEmpty()) {
-            CP_WARN << "RagQueryNode: Database path is empty";
-            return output;
+            const QString msg = QStringLiteral("RAG Query database path is empty.");
+            CP_WARN << msg;
+            return fail(msg);
         }
 
         QFileInfo fi(dbPath);
         if (!fi.exists() || !fi.isFile()) {
-            CP_WARN << "RagQueryNode: Database file does not exist:" << dbPath;
-            return output;
+            const QString msg = QStringLiteral("RAG Query database file does not exist: %1").arg(dbPath);
+            CP_WARN << msg;
+            return fail(msg);
         }
 
         RagUtils::IndexConfig indexCfg;
         try {
             indexCfg = RagUtils::getIndexConfig(dbPath);
         } catch (const std::exception& ex) {
-            CP_WARN << "RagQueryNode: Failed to inspect index config:" << ex.what();
-            return output;
+            const QString msg = QStringLiteral("Failed to inspect RAG index config: %1").arg(QString::fromUtf8(ex.what()));
+            CP_WARN << "RagQueryNode:" << msg;
+            return fail(msg);
+        }
+        output.insert(QStringLiteral("_provider"), indexCfg.providerId);
+        output.insert(QStringLiteral("_model"), indexCfg.modelId);
+        if (const auto resolvedRule = ModelCapsRegistry::instance().resolveWithRule(indexCfg.modelId, indexCfg.providerId);
+            resolvedRule.has_value() && !resolvedRule->driverProfileId.isEmpty()) {
+            output.insert(QStringLiteral("_driver"), resolvedRule->driverProfileId);
         }
 
         if (indexCfg.providerId.isEmpty() || indexCfg.modelId.isEmpty()) {
-            CP_WARN << "RagQueryNode: Index configuration returned empty provider/model";
-            return output;
+            const QString msg = QStringLiteral("RAG index configuration returned an empty provider or model.");
+            CP_WARN << "RagQueryNode:" << msg;
+            return fail(msg);
         }
 
         // Resolve credentials and backend via LLMProviderRegistry
         QString apiKey = LLMProviderRegistry::instance().getCredential(indexCfg.providerId);
         if (apiKey.isEmpty() && ModelCatalogService::providerRequiresCredential(indexCfg.providerId)) {
-            CP_WARN << "RagQueryNode: No API key found for provider:" << indexCfg.providerId;
-            return output;
+            const QString msg = QStringLiteral("No API key found for provider '%1'.").arg(indexCfg.providerId);
+            CP_WARN << "RagQueryNode:" << msg;
+            return fail(msg);
         }
 
         ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(indexCfg.providerId);
         if (!backend) {
-            CP_WARN << "RagQueryNode: Backend not found for provider:" << indexCfg.providerId;
-            return output;
+            const QString msg = QStringLiteral("Backend not found for provider '%1'.").arg(indexCfg.providerId);
+            CP_WARN << "RagQueryNode:" << msg;
+            return fail(msg);
         }
 
         // Vectorization
@@ -175,13 +193,15 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
         if (embResult.hasError) {
             CP_WARN.noquote() << QStringLiteral("RagQueryNode: embedding failure provider=%1 model=%2 message=%3")
                                           .arg(indexCfg.providerId, indexCfg.modelId, embResult.errorMsg);
-            return output;
+            return fail(QStringLiteral("Embedding failure for provider '%1' model '%2': %3")
+                            .arg(indexCfg.providerId, indexCfg.modelId, embResult.errorMsg));
         }
 
         if (embResult.vector.empty()) {
             CP_WARN.noquote() << QStringLiteral("RagQueryNode: empty embedding provider=%1 model=%2")
                                           .arg(indexCfg.providerId, indexCfg.modelId);
-            return output;
+            return fail(QStringLiteral("Embedding result was empty for provider '%1' model '%2'.")
+                            .arg(indexCfg.providerId, indexCfg.modelId));
         }
 
         // Search
@@ -189,8 +209,9 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
         try {
             searchResults = RagUtils::findMostRelevantChunks(dbPath, embResult.vector, m_maxResults, m_minRelevance);
         } catch (const std::exception& ex) {
-            CP_WARN << "RagQueryNode: Search error:" << ex.what();
-            return output;
+            const QString msg = QStringLiteral("RAG search error: %1").arg(QString::fromUtf8(ex.what()));
+            CP_WARN << "RagQueryNode:" << msg;
+            return fail(msg);
         }
 
         // Optionally resolve file paths for nicer "Source" labels.
@@ -241,15 +262,18 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
                 sourceLabel = QStringLiteral("file_id=%1").arg(r.fileId);
             }
 
-            contextText += QStringLiteral("[Source: %1 (Score: %2)]\n")
+            const QString lineSuffix = (r.startLine > 0 && r.endLine > 0)
+                ? QStringLiteral(", Lines: %1-%2").arg(r.startLine).arg(r.endLine)
+                : QString();
+            contextText += QStringLiteral("[Source: %1 (Score: %2%3)]\n")
                                .arg(sourceLabel)
-                               .arg(r.score, 0, 'f', 4);
+                               .arg(r.score, 0, 'f', 4)
+                               .arg(lineSuffix);
             contextText += r.content;
             contextText += QStringLiteral("\n\n");
         }
 
-        // Serialize results to JSON
-        QJsonArray resultsArray;
+        QVariantList results;
         for (const auto& r : searchResults) {
             QString sourceLabel;
             if (filePathById.contains(r.fileId)) {
@@ -258,17 +282,26 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
                 sourceLabel = QStringLiteral("file_id=%1").arg(r.fileId);
             }
 
-            QJsonObject obj;
-            obj.insert(QStringLiteral("source"), sourceLabel);
-            obj.insert(QStringLiteral("score"), r.score);
-            obj.insert(QStringLiteral("text"), r.content);
-            resultsArray.append(obj);
+            QVariantMap item;
+            item.insert(QStringLiteral("source"), sourceLabel);
+            item.insert(QStringLiteral("score"), r.score);
+            item.insert(QStringLiteral("text"), r.content);
+            item.insert(QStringLiteral("fragment_id"), r.fragmentId);
+            item.insert(QStringLiteral("file_id"), r.fileId);
+            item.insert(QStringLiteral("chunk_index"), r.chunkIndex);
+            if (r.startLine > 0) {
+                item.insert(QStringLiteral("start_line"), r.startLine);
+            }
+            if (r.endLine > 0) {
+                item.insert(QStringLiteral("end_line"), r.endLine);
+            }
+            results.append(item);
         }
 
-        QJsonDocument doc(resultsArray);
-
         output.insert(QString::fromLatin1(kOutputContext), contextText);
-        output.insert(QString::fromLatin1(kOutputResults), QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+        output.insert(QString::fromLatin1(kOutputResults), results);
+        output.insert(QStringLiteral("_results_json"),
+                      QString::fromUtf8(QJsonDocument::fromVariant(results).toJson(QJsonDocument::Compact)));
 
         return output;
     });

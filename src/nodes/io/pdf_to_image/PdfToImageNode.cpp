@@ -59,13 +59,27 @@ NodeDescriptor PdfToImageNode::getDescriptor() const
     inPin.type = QStringLiteral("text");
     desc.inputPins.insert(inPin.id, inPin);
 
-    // Output pin: Image
+    // Output pin: stitched image or first page image path
     PinDefinition outPin;
     outPin.direction = PinDirection::Output;
     outPin.id = QString::fromLatin1(kImagePathPinId);
     outPin.name = QStringLiteral("Image");
     outPin.type = QStringLiteral("text");
     desc.outputPins.insert(outPin.id, outPin);
+
+    PinDefinition outPathsPin;
+    outPathsPin.direction = PinDirection::Output;
+    outPathsPin.id = QString::fromLatin1(kImagePathsPinId);
+    outPathsPin.name = QStringLiteral("Images");
+    outPathsPin.type = QStringLiteral("json");
+    desc.outputPins.insert(outPathsPin.id, outPathsPin);
+
+    PinDefinition pageCountPin;
+    pageCountPin.direction = PinDirection::Output;
+    pageCountPin.id = QString::fromLatin1(kPageCountPinId);
+    pageCountPin.name = QStringLiteral("Page Count");
+    pageCountPin.type = QStringLiteral("text");
+    desc.outputPins.insert(pageCountPin.id, pageCountPin);
 
     return desc;
 }
@@ -109,6 +123,15 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
     }
 
     DataPacket output;
+    auto fail = [&output](const QString& message) {
+        output.insert(QString::fromLatin1(PdfToImageNode::kImagePathPinId), QString());
+        output.insert(QString::fromLatin1(PdfToImageNode::kImagePathsPinId), QStringList{});
+        output.insert(QString::fromLatin1(PdfToImageNode::kPageCountPinId), 0);
+        output.insert(QStringLiteral("__error"), message);
+        ExecutionToken token;
+        token.data = output;
+        return TokenList{token};
+    };
 
     // Step 1: Resolve Output Path
     QString sysOutDir = inputs.value(QStringLiteral("_sys_node_output_dir")).toString();
@@ -132,10 +155,10 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         tempFile = std::make_unique<QTemporaryFile>(tempDir + QDir::separator() + templateStr);
         tempFile->setAutoRemove(false);
         if (!tempFile->open()) {
-            CP_CLOG(PDF_DEBUG) << "Failed to create temporary file:" << tempFile->errorString();
-            ExecutionToken token;
-            token.data = output;
-            return TokenList{token};
+            const QString msg = QStringLiteral("Failed to create temporary file for PDF render: %1")
+                                    .arg(tempFile->errorString());
+            CP_CLOG(PDF_DEBUG) << msg;
+            return fail(msg);
         }
         outPath = tempFile->fileName();
         tempFile->close();
@@ -171,9 +194,11 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
 
     // If still no path, return empty packet
     if (pdfPath.isEmpty()) {
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("PDF to Image requires a PDF path."));
+    }
+
+    if (!pdfInfo.exists() || !pdfInfo.isFile() || !pdfInfo.isReadable()) {
+        return fail(QStringLiteral("PDF file is not readable: %1").arg(absolutePdfPath));
     }
 
     // Step 3: Load PDF document
@@ -189,17 +214,12 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
             CP_CLOG(PDF_DEBUG) << "PDF Error:" << static_cast<int>(pdfDoc.error());
         }
 
-        // Failed to load PDF - return empty packet
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("Failed to load PDF: %1").arg(absolutePdfPath));
     }
 
     const int pageCount = pdfDoc.pageCount();
     if (pageCount == 0) {
-        ExecutionToken token;
-        token.data = output;
-        return TokenList{token};
+        return fail(QStringLiteral("PDF has no pages: %1").arg(absolutePdfPath));
     }
 
     // Step 5: Render and Save
@@ -226,10 +246,9 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
                 generatedPaths << pagePath;
                 CP_CLOG(PDF_DEBUG) << "Saved page" << (i + 1) << "to:" << pagePath;
             } else {
-                CP_CLOG(PDF_DEBUG) << "Failed to save page image to:" << pagePath;
-                ExecutionToken token;
-                token.data = output;
-                return TokenList{token};
+                const QString msg = QStringLiteral("Failed to save rendered PDF page image: %1").arg(pagePath);
+                CP_CLOG(PDF_DEBUG) << msg;
+                return fail(msg);
             }
         }
 
@@ -238,7 +257,9 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
             QFile::remove(outPath);
         }
 
-        output.insert(imagePathPinId, generatedPaths);
+        output.insert(QString::fromLatin1(kImagePathsPinId), generatedPaths);
+        output.insert(imagePathPinId, generatedPaths.isEmpty() ? QString() : generatedPaths.first());
+        output.insert(QString::fromLatin1(kPageCountPinId), pageCount);
     } else {
         // Mode: Stitch all pages into one tall image
         qreal totalHeight = 0.0;
@@ -273,14 +294,15 @@ TokenList PdfToImageNode::execute(const TokenList& incomingTokens)
         painter.end();
 
         if (!stitchedImage.save(outPath, "PNG")) {
-            CP_CLOG(PDF_DEBUG) << "Failed to save stitched image to:" << outPath;
-            ExecutionToken token;
-            token.data = output;
-            return TokenList{token};
+            const QString msg = QStringLiteral("Failed to save stitched PDF image: %1").arg(outPath);
+            CP_CLOG(PDF_DEBUG) << msg;
+            return fail(msg);
         }
 
         CP_CLOG(PDF_DEBUG) << "Saved stitched output to:" << outPath;
         output.insert(imagePathPinId, outPath);
+        output.insert(QString::fromLatin1(kImagePathsPinId), QStringList{outPath});
+        output.insert(QString::fromLatin1(kPageCountPinId), pageCount);
     }
 
     ExecutionToken token;

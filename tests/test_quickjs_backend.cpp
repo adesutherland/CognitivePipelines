@@ -105,6 +105,19 @@ TEST(QuickJSBackendTest, ObjectOutput) {
     EXPECT_EQ(map["y"].toString(), "two");
 }
 
+TEST(QuickJSBackendTest, PipelineSetError) {
+    QuickJSRuntime runtime;
+    MockScriptHost host;
+
+    QString script = "pipeline.setError(\"manual failure\");";
+
+    bool success = runtime.execute(script, &host);
+
+    EXPECT_TRUE(success);
+    ASSERT_EQ(host.errors.size(), 1);
+    EXPECT_EQ(host.errors[0], "manual failure");
+}
+
 TEST(QuickJSBackendTest, SyntaxError) {
     QuickJSRuntime runtime;
     MockScriptHost host;

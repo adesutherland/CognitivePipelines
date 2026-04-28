@@ -85,9 +85,12 @@ TokenList UniversalScriptNode::execute(const TokenList& incomingTokens)
     std::unique_ptr<IScriptEngine> engine = ScriptEngineRegistry::instance().createEngine(m_engineId);
 
     if (!engine) {
-        CP_WARN << "Engine not found:" << m_engineId;
-        // Optionally log error via output if appropriate, but following instructions
-        return {};
+        const QString msg = QStringLiteral("Script engine not found: %1").arg(m_engineId);
+        CP_WARN << msg;
+        ExecutionToken token;
+        token.data.insert(QStringLiteral("__error"), msg);
+        token.data.insert(QStringLiteral("status"), QStringLiteral("FAIL"));
+        return TokenList{token};
     }
 
     // Step 3: Create the bridge
@@ -98,6 +101,9 @@ TokenList UniversalScriptNode::execute(const TokenList& incomingTokens)
 
     if (!success) {
         CP_WARN << "Script execution failed";
+        if (!output.contains(QStringLiteral("__error"))) {
+            output.insert(QStringLiteral("__error"), QStringLiteral("Script execution failed"));
+        }
     }
 
     // Handle Status

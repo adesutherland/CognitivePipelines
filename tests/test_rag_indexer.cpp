@@ -144,7 +144,7 @@ TEST_F(RagIndexerNodeTest, IndexesSingleTextFile) {
 
     // Verify a sample fragment has all required fields (using JOIN to get file_path)
     ASSERT_TRUE(query.exec(QStringLiteral(
-        "SELECT f.file_id, f.chunk_index, f.content, f.embedding, sf.file_path "
+        "SELECT f.file_id, f.chunk_index, f.content, f.embedding, sf.file_path, f.start_line, f.end_line "
         "FROM fragments f "
         "JOIN source_files sf ON f.file_id = sf.id "
         "LIMIT 1"
@@ -156,12 +156,16 @@ TEST_F(RagIndexerNodeTest, IndexesSingleTextFile) {
     QString content = query.value(2).toString();
     QByteArray embedding = query.value(3).toByteArray();
     QString fragmentFilePath = query.value(4).toString();
+    int startLine = query.value(5).toInt();
+    int endLine = query.value(6).toInt();
 
     EXPECT_GT(fileId, 0) << "file_id should be a valid foreign key";
     EXPECT_GE(chunkIndex, 0);
     EXPECT_FALSE(content.isEmpty());
     EXPECT_FALSE(embedding.isEmpty()) << "Embedding should not be empty";
     EXPECT_FALSE(fragmentFilePath.isEmpty());
+    EXPECT_GT(startLine, 0);
+    EXPECT_GE(endLine, startLine);
 
     // Verify embedding is a valid float array
     EXPECT_EQ(embedding.size() % sizeof(float), 0) << "Embedding size should be multiple of sizeof(float)";

@@ -158,6 +158,10 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     testLayout->addWidget(m_testStatusLabel, 1);
     formLayout->addRow(QString(), testLayout);
 
+    m_statusLabel = new QLabel(QStringLiteral("Status: idle"), this);
+    m_statusLabel->setWordWrap(true);
+    formLayout->addRow(QStringLiteral("Run Status:"), m_statusLabel);
+
     // Chunk size
     m_chunkSizeSpinBox = new QSpinBox(this);
     m_chunkSizeSpinBox->setRange(100, 10000);
@@ -411,6 +415,15 @@ void RagIndexerPropertiesWidget::setClearDatabase(bool clear)
         m_clearDatabaseCheckBox->setChecked(clear);
         m_clearDatabaseCheckBox->blockSignals(false);
     }
+}
+
+void RagIndexerPropertiesWidget::setStatusMessage(const QString& message)
+{
+    if (!m_statusLabel) {
+        return;
+    }
+
+    m_statusLabel->setText(message.trimmed().isEmpty() ? QStringLiteral("Status: idle") : message);
 }
 
 // Browse handlers

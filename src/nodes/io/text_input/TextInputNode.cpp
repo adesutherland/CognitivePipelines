@@ -43,7 +43,7 @@ NodeDescriptor TextInputNode::getDescriptor() const
     NodeDescriptor desc;
     desc.id = QStringLiteral("text-input");
     desc.name = QStringLiteral("Text Input");
-    desc.category = QStringLiteral("Inputs");
+    desc.category = QStringLiteral("Input / Output");
 
     // No input pins
 

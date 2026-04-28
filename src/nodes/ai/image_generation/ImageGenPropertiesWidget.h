@@ -29,6 +29,9 @@
 #include "ai/catalog/ModelCatalogService.h"
 
 class QComboBox;
+class QCheckBox;
+class QLabel;
+class QPushButton;
 
 // Properties widget for configuring ImageGenNode
 class ImageGenPropertiesWidget : public QWidget {
@@ -60,14 +63,21 @@ private:
 private slots:
     void onProviderChanged(int index);
     void onModelsFetched();
+    void onShowFilteredChanged(bool checked);
+    void onTestModelClicked();
+    void onModelTestFinished();
 
 private:
     QComboBox* m_providerCombo {nullptr};
     QComboBox* m_modelCombo {nullptr};
+    QCheckBox* m_showFilteredCheck {nullptr};
+    QPushButton* m_testModelButton {nullptr};
+    QLabel* m_testStatusLabel {nullptr};
     QComboBox* m_sizeCombo {nullptr};
     QComboBox* m_qualityCombo {nullptr};
     QComboBox* m_styleCombo {nullptr};
     QFutureWatcher<QList<ModelCatalogEntry>> m_modelFetcher;
+    QFutureWatcher<ModelTestResult> m_modelTester;
     QList<ModelCatalogEntry> m_lastModels;
     QString m_pendingModelId;
 };

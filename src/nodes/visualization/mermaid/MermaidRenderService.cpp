@@ -207,7 +207,7 @@ MermaidRenderService::RenderSizing MermaidRenderService::planRenderSizing(double
     }
 
     if (clampScale < kMinClampScale) {
-        sizing.error = QStringLiteral("Requested render size %.0fx%.0f (scale %.2f, dpr %.2f) exceeds safe limits; reduce the resolution scale.")
+        sizing.error = QStringLiteral("Requested render size %1x%2 (scale %3, dpr %4) exceeds safe limits; reduce the resolution scale.")
                            .arg(std::ceil(requestedWidthPixels))
                            .arg(std::ceil(requestedHeightPixels))
                            .arg(scaleFactor, 0, 'f', 2)

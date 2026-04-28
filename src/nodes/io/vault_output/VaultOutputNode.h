@@ -38,6 +38,8 @@ public slots:
     void setMaxTokens(int value);
 
 private:
+    void setStatusMessage(const QString& message);
+
     QString m_vaultRoot;
     QString m_providerId;
     QString m_modelId;

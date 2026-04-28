@@ -40,6 +40,10 @@ IngestInputPropertiesWidget::IngestInputPropertiesWidget(QWidget* parent)
     m_statusLabel->setWordWrap(true);
     layout->addWidget(m_statusLabel);
 
+    m_runStatusLabel = new QLabel(tr("Status: idle"), this);
+    m_runStatusLabel->setWordWrap(true);
+    layout->addWidget(m_runStatusLabel);
+
     m_pathLabel = new QLabel(tr("Source: <none>"), this);
     m_pathLabel->setWordWrap(true);
     layout->addWidget(m_pathLabel);
@@ -98,10 +102,20 @@ void IngestInputPropertiesWidget::setPayload(const QString& kind,
 void IngestInputPropertiesWidget::clearPayload()
 {
     m_statusLabel->setText(tr("Nothing ingested yet."));
+    setStatusMessage(tr("Status: idle"));
     m_pathLabel->setText(tr("Source: <none>"));
     m_imagePreviewLabel->clear();
     m_textPreviewEdit->clear();
     updatePreviewVisibility(false, false);
+}
+
+void IngestInputPropertiesWidget::setStatusMessage(const QString& message)
+{
+    if (!m_runStatusLabel) {
+        return;
+    }
+
+    m_runStatusLabel->setText(message.trimmed().isEmpty() ? tr("Status: idle") : message);
 }
 
 void IngestInputPropertiesWidget::dragEnterEvent(QDragEnterEvent* event)

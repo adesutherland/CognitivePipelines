@@ -25,6 +25,7 @@
 #include "ImagePropertiesWidget.h"
 
 #include <QtConcurrent/QtConcurrent>
+#include <QFileInfo>
 #include <QJsonObject>
 
 ImageNode::ImageNode(QObject* parent)
@@ -143,6 +144,12 @@ TokenList ImageNode::execute(const TokenList& incomingTokens)
     // Step 3: Output
     // Send the resolved path to the output pin
     output.insert(pinId, resolvedPath);
+    if (resolvedPath.trimmed().isEmpty()) {
+        output.insert(QStringLiteral("__error"), QStringLiteral("Image node has no image path."));
+    } else if (!QFileInfo::exists(resolvedPath)) {
+        output.insert(QStringLiteral("__error"),
+                      QStringLiteral("Image path does not exist: %1").arg(resolvedPath));
+    }
 
     ExecutionToken token;
     token.data = output;

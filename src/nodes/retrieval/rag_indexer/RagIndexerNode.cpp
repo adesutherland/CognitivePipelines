@@ -29,6 +29,7 @@
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
 #include "ai/catalog/ModelCatalogService.h"
+#include "ModelCapsRegistry.h"
 
 #include <QtConcurrent>
 #include <QSqlDatabase>
@@ -40,6 +41,129 @@
 #include "Logger.h"
 #include <QUuid>
 #include <QElapsedTimer>
+#include <QVector>
+
+namespace {
+
+struct ChunkLineRange {
+    int startLine {0};
+    int endLine {0};
+};
+
+FileType fileTypeForChunkingStrategy(const QString& strategy, const QString& filePath)
+{
+    const QString normalized = strategy.trimmed().toLower();
+    if (normalized.isEmpty() || normalized == QStringLiteral("auto")) {
+        return DocumentLoader::getFileTypeFromExtension(filePath);
+    }
+    if (normalized == QStringLiteral("plain text")) {
+        return FileType::PlainText;
+    }
+    if (normalized == QStringLiteral("markdown")) {
+        return FileType::CodeMarkdown;
+    }
+    if (normalized == QStringLiteral("c++")) {
+        return FileType::CodeCpp;
+    }
+    if (normalized == QStringLiteral("python")) {
+        return FileType::CodePython;
+    }
+    if (normalized == QStringLiteral("rexx")) {
+        return FileType::CodeRexx;
+    }
+    if (normalized == QStringLiteral("sql")) {
+        return FileType::CodeSql;
+    }
+    if (normalized == QStringLiteral("cobol")) {
+        return FileType::CodeCobol;
+    }
+    return DocumentLoader::getFileTypeFromExtension(filePath);
+}
+
+int lineNumberForOffset(const QString& text, int offset)
+{
+    if (text.isEmpty()) {
+        return 0;
+    }
+    const int safeOffset = qBound(0, offset, text.size() - 1);
+    return text.left(safeOffset).count(QLatin1Char('\n')) + 1;
+}
+
+QVector<ChunkLineRange> calculateChunkLineRanges(const QString& content, const QStringList& chunks)
+{
+    QVector<ChunkLineRange> ranges;
+    ranges.reserve(chunks.size());
+
+    int searchFrom = 0;
+    int previousStartLine = 1;
+    int previousEndLine = 1;
+
+    for (const QString& chunk : chunks) {
+        ChunkLineRange range;
+        if (chunk.isEmpty() || content.isEmpty()) {
+            ranges.append(range);
+            continue;
+        }
+
+        const int lookupStart = qMax(0, searchFrom - 1024);
+        int found = content.indexOf(chunk, lookupStart);
+        if (found < 0) {
+            const QString prefix = chunk.left(qMin(160, chunk.size()));
+            if (!prefix.isEmpty()) {
+                found = content.indexOf(prefix, lookupStart);
+            }
+        }
+
+        if (found < 0) {
+            range.startLine = previousStartLine;
+            range.endLine = previousEndLine;
+        } else {
+            const int endOffset = qMax(found, found + chunk.size() - 1);
+            range.startLine = lineNumberForOffset(content, found);
+            range.endLine = lineNumberForOffset(content, endOffset);
+            previousStartLine = range.startLine;
+            previousEndLine = range.endLine;
+            searchFrom = found + 1;
+        }
+
+        ranges.append(range);
+    }
+
+    return ranges;
+}
+
+bool ensureFragmentLineColumns(QSqlDatabase& db)
+{
+    QSqlQuery pragmaQuery(db);
+    bool hasStartLine = false;
+    bool hasEndLine = false;
+    if (!pragmaQuery.exec(QStringLiteral("PRAGMA table_info(fragments)"))) {
+        CP_WARN << "RagIndexerNode: Failed to inspect fragments table columns:" << pragmaQuery.lastError().text();
+        return false;
+    }
+
+    while (pragmaQuery.next()) {
+        const QString column = pragmaQuery.value(1).toString();
+        hasStartLine = hasStartLine || column == QStringLiteral("start_line");
+        hasEndLine = hasEndLine || column == QStringLiteral("end_line");
+    }
+
+    QSqlQuery alterQuery(db);
+    if (!hasStartLine
+        && !alterQuery.exec(QStringLiteral("ALTER TABLE fragments ADD COLUMN start_line INTEGER"))) {
+        CP_WARN << "RagIndexerNode: Failed to add fragments.start_line:" << alterQuery.lastError().text();
+        return false;
+    }
+    if (!hasEndLine
+        && !alterQuery.exec(QStringLiteral("ALTER TABLE fragments ADD COLUMN end_line INTEGER"))) {
+        CP_WARN << "RagIndexerNode: Failed to add fragments.end_line:" << alterQuery.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+} // namespace
 
 RagIndexerNode::RagIndexerNode(QObject* parent)
     : QObject(parent)
@@ -145,6 +269,8 @@ QWidget* RagIndexerNode::createConfigurationWidget(QWidget* parent)
                      widget, &RagIndexerPropertiesWidget::setChunkingStrategy);
     QObject::connect(this, &RagIndexerNode::clearDatabaseChanged,
                      widget, &RagIndexerPropertiesWidget::setClearDatabase);
+    QObject::connect(this, &RagIndexerNode::statusChanged,
+                     widget, &RagIndexerPropertiesWidget::setStatusMessage);
 
     return widget;
 }
@@ -206,36 +332,57 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
         if (!dbPath.isEmpty()) {
             output.insert(QString::fromLatin1(kOutputDatabasePath), dbPath);
         }
+        output.insert(QStringLiteral("_provider"), m_providerId);
+        output.insert(QStringLiteral("_model"), m_modelId);
+        if (const auto resolvedRule = ModelCapsRegistry::instance().resolveWithRule(m_modelId, m_providerId);
+            resolvedRule.has_value() && !resolvedRule->driverProfileId.isEmpty()) {
+            output.insert(QStringLiteral("_driver"), resolvedRule->driverProfileId);
+        }
+
+        auto fail = [this, &output](const QString& message) {
+            output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
+            output.insert(QStringLiteral("__error"), message);
+            emit statusChanged(QStringLiteral("Status: %1").arg(message));
+            return output;
+        };
+
+        emit statusChanged(QStringLiteral("Status: preparing index run..."));
 
         // Validate inputs
         if (dirPath.isEmpty()) {
-            CP_WARN << "RagIndexerNode: Directory path is empty";
-            return output;
+            const QString msg = QStringLiteral("RAG Indexer directory path is empty.");
+            CP_WARN << msg;
+            return fail(msg);
         }
         if (dbPath.isEmpty()) {
-            CP_WARN << "RagIndexerNode: Database path is empty";
-            return output;
+            const QString msg = QStringLiteral("RAG Indexer database path is empty.");
+            CP_WARN << msg;
+            return fail(msg);
         }
         if (m_providerId.isEmpty()) {
-            CP_WARN << "RagIndexerNode: Provider ID is empty";
-            return output;
+            const QString msg = QStringLiteral("RAG Indexer provider ID is empty.");
+            CP_WARN << msg;
+            return fail(msg);
         }
         if (m_modelId.isEmpty()) {
-            CP_WARN << "RagIndexerNode: Model ID is empty";
-            return output;
+            const QString msg = QStringLiteral("RAG Indexer model ID is empty.");
+            CP_WARN << msg;
+            return fail(msg);
         }
 
         // Resolve credentials and backend via LLMProviderRegistry
         QString apiKey = LLMProviderRegistry::instance().getCredential(m_providerId);
         if (apiKey.isEmpty() && ModelCatalogService::providerRequiresCredential(m_providerId)) {
-            CP_WARN << "RagIndexerNode: No API key found for provider:" << m_providerId;
-            return output;
+            const QString msg = QStringLiteral("No API key found for provider '%1'.").arg(m_providerId);
+            CP_WARN << "RagIndexerNode:" << msg;
+            return fail(msg);
         }
 
         ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(m_providerId);
         if (!backend) {
-            CP_WARN << "RagIndexerNode: Backend not found for provider:" << m_providerId;
-            return output;
+            const QString msg = QStringLiteral("Backend not found for provider '%1'.").arg(m_providerId);
+            CP_WARN << "RagIndexerNode:" << msg;
+            return fail(msg);
         }
 
         if (verbose) {
@@ -248,13 +395,13 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
         db.setDatabaseName(dbPath);
 
         if (!db.open()) {
-            CP_WARN << "RagIndexerNode: Failed to open database:" << db.lastError().text();
-            output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
+            const QString msg = QStringLiteral("Failed to open RAG database: %1").arg(db.lastError().text());
+            CP_WARN << "RagIndexerNode:" << msg;
             // Reset handle before removing the connection to avoid
             // QSqlDatabasePrivate::removeDatabase "still in use" warnings.
             db = QSqlDatabase();
             QSqlDatabase::removeDatabase(connectionName);
-            return output;
+            return fail(msg);
         }
 
         // Check if tables exist and create schema if needed
@@ -263,12 +410,13 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
             
             // Enable foreign keys
             if (!checkQuery.exec(QString::fromLatin1(kRagSchemaPragma))) {
-                CP_WARN << "RagIndexerNode: Failed to enable foreign keys:" << checkQuery.lastError().text();
+                const QString msg = QStringLiteral("Failed to enable RAG database foreign keys: %1")
+                                        .arg(checkQuery.lastError().text());
+                CP_WARN << "RagIndexerNode:" << msg;
                 db.close();
                 db = QSqlDatabase();
                 QSqlDatabase::removeDatabase(connectionName);
-                output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
-                return output;
+                return fail(msg);
             }
             
             // Check if source_files table exists
@@ -284,12 +432,13 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
             // Create source_files table if it doesn't exist
             if (!sourceFilesExists) {
                 if (!checkQuery.exec(QString::fromLatin1(kRagSchemaSourceFiles))) {
-                    CP_WARN << "RagIndexerNode: Failed to create source_files table:" << checkQuery.lastError().text();
+                    const QString msg = QStringLiteral("Failed to create source_files table: %1")
+                                            .arg(checkQuery.lastError().text());
+                    CP_WARN << "RagIndexerNode:" << msg;
                     db.close();
                     db = QSqlDatabase();
                     QSqlDatabase::removeDatabase(connectionName);
-                    output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
-                    return output;
+                    return fail(msg);
                 }
             }
             
@@ -306,34 +455,53 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
             // Create fragments table if it doesn't exist
             if (!fragmentsExists) {
                 if (!checkQuery.exec(QString::fromLatin1(kRagSchemaFragments))) {
-                    CP_WARN << "RagIndexerNode: Failed to create fragments table:" << checkQuery.lastError().text();
+                    const QString msg = QStringLiteral("Failed to create fragments table: %1")
+                                            .arg(checkQuery.lastError().text());
+                    CP_WARN << "RagIndexerNode:" << msg;
                     db.close();
                     db = QSqlDatabase();
                     QSqlDatabase::removeDatabase(connectionName);
-                    output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
-                    return output;
+                    return fail(msg);
                 }
+            }
+
+            if (!ensureFragmentLineColumns(db)) {
+                const QString msg = QStringLiteral("Failed to migrate fragments table for source line references.");
+                db.close();
+                db = QSqlDatabase();
+                QSqlDatabase::removeDatabase(connectionName);
+                return fail(msg);
             }
         } // checkQuery goes out of scope here
 
         // Clear database if requested (after schema creation to ensure tables exist)
         if (m_clearDatabase) {
+            emit statusChanged(QStringLiteral("Status: clearing existing RAG index..."));
             if (!db.transaction()) {
-                CP_WARN << "RagIndexerNode: Failed to start transaction for clearing database:" << db.lastError().text();
+                const QString msg = QStringLiteral("Failed to start transaction for clearing RAG database: %1")
+                                        .arg(db.lastError().text());
+                CP_WARN << "RagIndexerNode:" << msg;
+                db.close();
+                db = QSqlDatabase();
+                QSqlDatabase::removeDatabase(connectionName);
+                return fail(msg);
             } else {
                 QSqlQuery clearQuery(db);
                 bool clearSuccess = true;
+                QString clearError;
                 
                 // Delete all fragments
                 if (!clearQuery.exec(QStringLiteral("DELETE FROM fragments"))) {
-                    CP_WARN << "RagIndexerNode: Failed to delete fragments:" << clearQuery.lastError().text();
+                    clearError = QStringLiteral("Failed to delete fragments: %1").arg(clearQuery.lastError().text());
+                    CP_WARN << "RagIndexerNode:" << clearError;
                     clearSuccess = false;
                 }
                 
                 // Delete all source files
                 if (clearSuccess) {
                     if (!clearQuery.exec(QStringLiteral("DELETE FROM source_files"))) {
-                        CP_WARN << "RagIndexerNode: Failed to delete source_files:" << clearQuery.lastError().text();
+                        clearError = QStringLiteral("Failed to delete source_files: %1").arg(clearQuery.lastError().text());
+                        CP_WARN << "RagIndexerNode:" << clearError;
                         clearSuccess = false;
                     }
                 }
@@ -341,7 +509,8 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 // Reset AUTOINCREMENT counters
                 if (clearSuccess) {
                     if (!clearQuery.exec(QStringLiteral("DELETE FROM sqlite_sequence WHERE name IN ('fragments', 'source_files')"))) {
-                        CP_WARN << "RagIndexerNode: Failed to reset AUTOINCREMENT counters:" << clearQuery.lastError().text();
+                        clearError = QStringLiteral("Failed to reset AUTOINCREMENT counters: %1").arg(clearQuery.lastError().text());
+                        CP_WARN << "RagIndexerNode:" << clearError;
                         clearSuccess = false;
                     }
                 }
@@ -353,16 +522,16 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                     db.close();
                     db = QSqlDatabase();
                     QSqlDatabase::removeDatabase(connectionName);
-                    output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
-                    return output;
+                    return fail(clearError.isEmpty() ? QStringLiteral("Failed to clear RAG database.") : clearError);
                 } else {
                     if (!db.commit()) {
-                        CP_WARN << "RagIndexerNode: Failed to commit clear transaction:" << db.lastError().text();
+                        const QString msg = QStringLiteral("Failed to commit clear transaction: %1")
+                                                .arg(db.lastError().text());
+                        CP_WARN << "RagIndexerNode:" << msg;
                         db.close();
                         db = QSqlDatabase();
                         QSqlDatabase::removeDatabase(connectionName);
-                        output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
-                        return output;
+                        return fail(msg);
                     }
                 }
             }
@@ -388,22 +557,33 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
         }
 
         if (files.isEmpty()) {
-            CP_WARN << "RagIndexerNode: No files found in directory";
+            const QString msg = QStringLiteral("No files found in directory: %1").arg(dirPath);
+            CP_WARN << "RagIndexerNode:" << msg;
             db.close();
             db = QSqlDatabase();
             QSqlDatabase::removeDatabase(connectionName);
             output.insert(QString::fromLatin1(kOutputCount), QString::number(0));
             output.insert(QString::fromLatin1(kOutputDatabasePath), dbPath);
+            emit statusChanged(QStringLiteral("Status: %1").arg(msg));
             return output;
         }
 
         int totalChunks = 0;
+        int embeddingFailures = 0;
+        int skippedFiles = 0;
+        int databaseInsertFailures = 0;
 
         // Scope for database operations to ensure all QSqlQuery objects are destroyed before removeDatabase
         {
             // Start transaction for bulk insert
             if (!db.transaction()) {
-                CP_WARN << "RagIndexerNode: Failed to start transaction:" << db.lastError().text();
+                const QString msg = QStringLiteral("Failed to start RAG index transaction: %1")
+                                        .arg(db.lastError().text());
+                CP_WARN << "RagIndexerNode:" << msg;
+                db.close();
+                db = QSqlDatabase();
+                QSqlDatabase::removeDatabase(connectionName);
+                return fail(msg);
             }
             
             // Prepare queries for the new two-table schema
@@ -418,8 +598,8 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
             
             QSqlQuery fragmentQuery(db);
             fragmentQuery.prepare(QStringLiteral(
-                "INSERT INTO fragments (file_id, chunk_index, content, embedding) "
-                "VALUES (:file_id, :chunk_index, :content, :embedding)"));
+                "INSERT INTO fragments (file_id, chunk_index, start_line, end_line, content, embedding) "
+                "VALUES (:file_id, :chunk_index, :start_line, :end_line, :content, :embedding)"));
 
             const int totalFiles = files.size();
 
@@ -427,6 +607,10 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
             int fileIndex = 0;
             for (const QString& filePath : files) {
                 ++fileIndex;
+                emit statusChanged(QStringLiteral("Status: indexing file %1 of %2: %3")
+                                       .arg(fileIndex)
+                                       .arg(totalFiles)
+                                       .arg(filePath));
                 if (verbose) {
                     CP_LOG << "RagIndexerNode: Processing file" << filePath;
                 }
@@ -434,6 +618,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 // Read file content
                 QString content = DocumentLoader::readTextFile(filePath);
                 if (content.isEmpty()) {
+                    ++skippedFiles;
                     if (verbose) {
                         CP_LOG << "RagIndexerNode: Skipping empty file:" << filePath;
                     }
@@ -450,6 +635,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 if (!fileQuery.exec()) {
                     CP_WARN << "RagIndexerNode: Failed to insert source file" << filePath 
                                << ":" << fileQuery.lastError().text();
+                    ++databaseInsertFailures;
                     continue;
                 }
 
@@ -458,15 +644,16 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                 if (!fileIdQuery.exec() || !fileIdQuery.next()) {
                     CP_WARN << "RagIndexerNode: Failed to retrieve file_id for" << filePath 
                                << ":" << fileIdQuery.lastError().text();
+                    ++databaseInsertFailures;
                     continue;
                 }
                 qint64 fileId = fileIdQuery.value(0).toLongLong();
 
-                // Detect file type
-                FileType fileType = DocumentLoader::getFileTypeFromExtension(filePath);
+                const FileType fileType = fileTypeForChunkingStrategy(m_chunkingStrategy, filePath);
 
                 // Chunk the text
                 QStringList chunks = TextChunker::split(content, m_chunkSize, m_chunkOverlap, fileType);
+                const QVector<ChunkLineRange> lineRanges = calculateChunkLineRanges(content, chunks);
                 if (verbose) {
                     CP_LOG << "RagIndexerNode: Generated" << chunks.size() << "chunks for" << filePath;
                 }
@@ -507,6 +694,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                                                       .arg(m_providerId, m_modelId, filePath)
                                                       .arg(i)
                                                       .arg(embResult.errorMsg);
+                        ++embeddingFailures;
                         continue;
                     }
 
@@ -514,6 +702,7 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                         CP_WARN.noquote() << QStringLiteral("RagIndexerNode: empty embedding provider=%1 model=%2 file=%3 chunk=%4")
                                                       .arg(m_providerId, m_modelId, filePath)
                                                       .arg(i);
+                        ++embeddingFailures;
                         continue;
                     }
 
@@ -524,12 +713,18 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
                     // Step 3: Insert fragment with file_id reference
                     fragmentQuery.bindValue(QStringLiteral(":file_id"), fileId);
                     fragmentQuery.bindValue(QStringLiteral(":chunk_index"), i);
+                    const ChunkLineRange lineRange = (i < lineRanges.size()) ? lineRanges.at(i) : ChunkLineRange{};
+                    fragmentQuery.bindValue(QStringLiteral(":start_line"),
+                                            lineRange.startLine > 0 ? QVariant(lineRange.startLine) : QVariant());
+                    fragmentQuery.bindValue(QStringLiteral(":end_line"),
+                                            lineRange.endLine > 0 ? QVariant(lineRange.endLine) : QVariant());
                     fragmentQuery.bindValue(QStringLiteral(":content"), chunk);
                     fragmentQuery.bindValue(QStringLiteral(":embedding"), embeddingBlob);
 
                     if (!fragmentQuery.exec()) {
                         CP_WARN << "RagIndexerNode: Failed to insert chunk" << i << "of" << filePath 
                                    << ":" << fragmentQuery.lastError().text();
+                        ++databaseInsertFailures;
                         continue;
                     }
 
@@ -544,8 +739,12 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
 
             // Commit transaction
             if (!db.commit()) {
-                CP_WARN << "RagIndexerNode: Failed to commit transaction:" << db.lastError().text();
+                const QString msg = QStringLiteral("Failed to commit RAG index transaction: %1")
+                                        .arg(db.lastError().text());
+                CP_WARN << "RagIndexerNode:" << msg;
                 db.rollback();
+                output.insert(QStringLiteral("__error"), msg);
+                totalChunks = 0;
             } else {
                 if (verbose) {
                     CP_LOG << "RagIndexerNode: Successfully indexed" << totalChunks << "chunks from" 
@@ -562,6 +761,24 @@ QFuture<DataPacket> RagIndexerNode::Execute(const DataPacket& inputs)
         // Set outputs
         output.insert(QString::fromLatin1(kOutputDatabasePath), dbPath);
         output.insert(QString::fromLatin1(kOutputCount), QString::number(totalChunks));
+        output.insert(QStringLiteral("embedding_failures"), embeddingFailures);
+        output.insert(QStringLiteral("database_insert_failures"), databaseInsertFailures);
+        output.insert(QStringLiteral("skipped_files"), skippedFiles);
+        output.insert(QStringLiteral("chunking_strategy"), m_chunkingStrategy);
+
+        if (!output.contains(QStringLiteral("__error")) && totalChunks == 0
+            && (embeddingFailures > 0 || databaseInsertFailures > 0)) {
+            output.insert(QStringLiteral("__error"),
+                          QStringLiteral("RAG indexing completed with no inserted chunks. Embedding failures: %1; database failures: %2.")
+                              .arg(embeddingFailures)
+                              .arg(databaseInsertFailures));
+        }
+
+        emit statusChanged(QStringLiteral("Status: indexed %1 chunks from %2 files. Embedding failures: %3; database failures: %4.")
+                               .arg(totalChunks)
+                               .arg(files.size())
+                               .arg(embeddingFailures)
+                               .arg(databaseInsertFailures));
 
         return output;
     });

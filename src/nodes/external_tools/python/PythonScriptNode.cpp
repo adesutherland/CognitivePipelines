@@ -28,8 +28,12 @@
 #include <QLineEdit>
 #include <QTextEdit>
 #include <QtConcurrent/QtConcurrent>
+#include <QDir>
+#include <QFile>
 #include <QProcess>
+#include <QStandardPaths>
 #include <QTemporaryFile>
+#include <QUuid>
 #include "Logger.h"
 
 PythonScriptNode::PythonScriptNode(QObject* parent)
@@ -44,7 +48,7 @@ NodeDescriptor PythonScriptNode::getDescriptor() const
     NodeDescriptor desc;
     desc.id = QStringLiteral("python-script");
     desc.name = QStringLiteral("Python Script");
-    desc.category = QStringLiteral("Scripting");
+    desc.category = QStringLiteral("External Tools");
 
     // Input pin: stdin (text)
     PinDefinition in;
@@ -131,6 +135,7 @@ TokenList PythonScriptNode::execute(const TokenList& incomingTokens)
         const QString msg = QStringLiteral("ERROR: Python executable/command is empty.");
         packet.insert(outKey, QString());
         packet.insert(errKey, msg);
+        packet.insert(QStringLiteral("__error"), msg);
         CP_WARN << "PythonScriptNode:" << msg;
     } else {
         // Create a script file in the node-specific output directory
@@ -142,13 +147,15 @@ TokenList PythonScriptNode::execute(const TokenList& incomingTokens)
             }
         }
         
-        QString scriptPath = outDir + QDir::separator() + QStringLiteral("script.py");
+        QString scriptPath = outDir + QDir::separator()
+            + QStringLiteral("script_%1.py").arg(QUuid::createUuid().toString(QUuid::Id128));
         QFile scriptFile(scriptPath);
 
         if (!scriptFile.open(QIODevice::WriteOnly)) {
             const QString msg = QStringLiteral("Failed to create script file: ") + scriptFile.errorString();
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
+            packet.insert(QStringLiteral("__error"), msg);
             CP_WARN << "PythonScriptNode:" << msg;
         } else {
             // Write script content to file
@@ -157,6 +164,7 @@ TokenList PythonScriptNode::execute(const TokenList& incomingTokens)
                 const QString msg = QStringLiteral("Failed to write script to file: ") + scriptFile.errorString();
                 packet.insert(outKey, QString());
                 packet.insert(errKey, msg);
+                packet.insert(QStringLiteral("__error"), msg);
                 CP_WARN << "PythonScriptNode:" << msg;
             } else {
                 scriptFile.flush();
@@ -173,6 +181,7 @@ TokenList PythonScriptNode::execute(const TokenList& incomingTokens)
                     const QString msg = QStringLiteral("ERROR: Invalid Python executable/command: '") + executable + QStringLiteral("'");
                     packet.insert(outKey, QString());
                     packet.insert(errKey, msg);
+                    packet.insert(QStringLiteral("__error"), msg);
                     CP_WARN << "PythonScriptNode:" << msg;
                 } else {
                     const QString program = tokens.takeFirst();
@@ -191,6 +200,7 @@ TokenList PythonScriptNode::execute(const TokenList& incomingTokens)
                                    << ", state =" << static_cast<int>(proc.state());
                         packet.insert(outKey, QString());
                         packet.insert(errKey, err);
+                        packet.insert(QStringLiteral("__error"), err);
                     } else {
                         // Write stdin and close
                         if (!stdinText.isEmpty()) {
@@ -206,12 +216,21 @@ TokenList PythonScriptNode::execute(const TokenList& incomingTokens)
                             proc.waitForFinished();
                             packet.insert(outKey, QString());
                             packet.insert(errKey, QStringLiteral("Process timed out"));
+                            packet.insert(QStringLiteral("__error"), QStringLiteral("Process timed out"));
                         } else {
                             const QString stdoutStr = QString::fromUtf8(proc.readAllStandardOutput());
                             const QString stderrStr = QString::fromUtf8(proc.readAllStandardError());
+                            const int exitCode = proc.exitCode();
 
                             packet.insert(outKey, stdoutStr);
                             packet.insert(errKey, stderrStr);
+                            packet.insert(QStringLiteral("_exit_code"), exitCode);
+                            if (proc.exitStatus() != QProcess::NormalExit || exitCode != 0) {
+                                const QString msg = QStringLiteral("Python process exited with code %1: %2")
+                                                        .arg(exitCode)
+                                                        .arg(stderrStr.trimmed().isEmpty() ? proc.errorString() : stderrStr.trimmed());
+                                packet.insert(QStringLiteral("__error"), msg);
+                            }
                         }
                     }
                 }

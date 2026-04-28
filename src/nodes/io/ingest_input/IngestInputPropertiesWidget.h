@@ -19,6 +19,7 @@ public:
                     const QString& previewText,
                     const QPixmap& previewPixmap);
     void clearPayload();
+    void setStatusMessage(const QString& message);
 
 signals:
     void fileChosen(const QString& path);
@@ -33,6 +34,7 @@ private:
 
     QLabel* m_dropLabel {nullptr};
     QLabel* m_statusLabel {nullptr};
+    QLabel* m_runStatusLabel {nullptr};
     QLabel* m_pathLabel {nullptr};
     QLabel* m_imagePreviewLabel {nullptr};
     QPlainTextEdit* m_textPreviewEdit {nullptr};

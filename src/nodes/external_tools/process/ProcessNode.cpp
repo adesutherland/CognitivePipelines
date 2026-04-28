@@ -36,7 +36,7 @@ NodeDescriptor ProcessNode::getDescriptor() const
     // Preserve the legacy id for saved-pipeline compatibility.
     desc.id = QStringLiteral("process-connector");
     desc.name = QStringLiteral("Process");
-    desc.category = QStringLiteral("Processes");
+    desc.category = QStringLiteral("External Tools");
 
     // Input pin: stdin (text)
     PinDefinition in;
@@ -101,6 +101,7 @@ TokenList ProcessNode::execute(const TokenList& incomingTokens)
             const QString msg = QStringLiteral("ERROR: Command is empty.");
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
+            packet.insert(QStringLiteral("__error"), msg);
             CP_WARN << "ProcessNode:" << msg;
             return packet;
         }
@@ -115,6 +116,7 @@ TokenList ProcessNode::execute(const TokenList& incomingTokens)
             const QString msg = QStringLiteral("ERROR: Invalid command: '") + command + QStringLiteral("'");
             packet.insert(outKey, QString());
             packet.insert(errKey, msg);
+            packet.insert(QStringLiteral("__error"), msg);
             CP_WARN << "ProcessNode:" << msg;
             return packet;
         }
@@ -132,6 +134,7 @@ TokenList ProcessNode::execute(const TokenList& incomingTokens)
                        << ", state =" << static_cast<int>(proc.state());
             packet.insert(outKey, QString());
             packet.insert(errKey, err);
+            packet.insert(QStringLiteral("__error"), err);
             return packet;
         }
 
@@ -149,14 +152,23 @@ TokenList ProcessNode::execute(const TokenList& incomingTokens)
             proc.waitForFinished();
             packet.insert(outKey, QString());
             packet.insert(errKey, QStringLiteral("Process timed out"));
+            packet.insert(QStringLiteral("__error"), QStringLiteral("Process timed out"));
             return packet;
         }
 
         const QString stdoutStr = QString::fromUtf8(proc.readAllStandardOutput());
         const QString stderrStr = QString::fromUtf8(proc.readAllStandardError());
+        const int exitCode = proc.exitCode();
 
         packet.insert(outKey, stdoutStr);
         packet.insert(errKey, stderrStr);
+        packet.insert(QStringLiteral("_exit_code"), exitCode);
+        if (proc.exitStatus() != QProcess::NormalExit || exitCode != 0) {
+            const QString msg = QStringLiteral("Process exited with code %1: %2")
+                                    .arg(exitCode)
+                                    .arg(stderrStr.trimmed().isEmpty() ? proc.errorString() : stderrStr.trimmed());
+            packet.insert(QStringLiteral("__error"), msg);
+        }
         return packet;
     });
 

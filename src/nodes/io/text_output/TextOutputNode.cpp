@@ -41,7 +41,7 @@ NodeDescriptor TextOutputNode::getDescriptor() const
     NodeDescriptor desc;
     desc.id = QStringLiteral("text-output");
     desc.name = QStringLiteral("Text Output");
-    desc.category = QStringLiteral("Output");
+    desc.category = QStringLiteral("Input / Output");
 
     // Single input pin consuming text
     PinDefinition in;

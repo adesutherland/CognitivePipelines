@@ -148,7 +148,11 @@ TokenList IngestInputNode::execute(const TokenList& /*incomingTokens*/)
 {
     DataPacket output;
 
-    if (!m_sourcePath.trimmed().isEmpty()) {
+    if (m_sourcePath.trimmed().isEmpty()) {
+        const QString msg = QStringLiteral("No ingested content selected.");
+        output.insert(QStringLiteral("__error"), msg);
+        setStatusMessage(QStringLiteral("Status: %1").arg(msg));
+    } else {
         output.insert(QString::fromLatin1(kOutputFilePathId), m_sourcePath);
         output.insert(QString::fromLatin1(kOutputMimeTypeId), m_mimeType);
         output.insert(QString::fromLatin1(kOutputKindId), m_kind);
@@ -161,13 +165,18 @@ TokenList IngestInputNode::execute(const TokenList& /*incomingTokens*/)
                     : QString::fromLatin1(kOutputTextId);
                 output.insert(pinId, content);
             } else {
-                output.insert(QStringLiteral("__error"),
-                              QStringLiteral("Failed to read ingested file: %1").arg(m_sourcePath));
+                const QString msg = QStringLiteral("Failed to read ingested file: %1").arg(m_sourcePath);
+                output.insert(QStringLiteral("__error"), msg);
+                setStatusMessage(QStringLiteral("Status: %1").arg(msg));
             }
         } else if (m_kind == QStringLiteral("image")) {
             output.insert(QString::fromLatin1(kOutputImageId), m_sourcePath);
         } else if (m_kind == QStringLiteral("pdf")) {
             output.insert(QString::fromLatin1(kOutputPdfId), m_sourcePath);
+        }
+
+        if (!output.contains(QStringLiteral("__error"))) {
+            setStatusMessage(QStringLiteral("Status: emitted %1 from %2").arg(m_kind, m_sourcePath));
         }
     }
 
@@ -205,9 +214,11 @@ void IngestInputNode::loadState(const QJsonObject& data)
 void IngestInputNode::ingestFile(const QString& path)
 {
     if (!ingestLocalFile(path)) {
+        setStatusMessage(QStringLiteral("Status: failed to ingest file %1").arg(path));
         return;
     }
 
+    setStatusMessage(QStringLiteral("Status: ingested %1").arg(m_sourcePath));
     requestImmediateRun();
 }
 
@@ -215,17 +226,20 @@ void IngestInputNode::ingestClipboard()
 {
     QClipboard* clipboard = QApplication::clipboard();
     if (!clipboard) {
+        setStatusMessage(QStringLiteral("Status: clipboard is not available."));
         return;
     }
 
     const QMimeData* mimeData = clipboard->mimeData();
     if (!mimeData) {
+        setStatusMessage(QStringLiteral("Status: clipboard is empty."));
         return;
     }
 
     const QList<QUrl> urls = mimeData->urls();
     for (const QUrl& url : urls) {
         if (url.isLocalFile() && ingestLocalFile(url.toLocalFile())) {
+            setStatusMessage(QStringLiteral("Status: ingested clipboard file %1").arg(m_sourcePath));
             requestImmediateRun();
             return;
         }
@@ -233,20 +247,26 @@ void IngestInputNode::ingestClipboard()
 
     const QImage image = clipboard->image();
     if (!image.isNull() && ingestClipboardImage(image)) {
+        setStatusMessage(QStringLiteral("Status: ingested clipboard image."));
         requestImmediateRun();
         return;
     }
 
     const QString text = mimeData->text().trimmed();
     if (!text.isEmpty() && ingestClipboardText(text)) {
+        setStatusMessage(QStringLiteral("Status: ingested clipboard text."));
         requestImmediateRun();
+        return;
     }
+
+    setStatusMessage(QStringLiteral("Status: clipboard did not contain a supported file, image, or text payload."));
 }
 
 bool IngestInputNode::ingestLocalFile(const QString& path)
 {
     const QFileInfo fileInfo(path);
     if (!fileInfo.exists() || !fileInfo.isFile()) {
+        setStatusMessage(QStringLiteral("Status: file does not exist: %1").arg(path));
         return false;
     }
 
@@ -337,6 +357,18 @@ void IngestInputNode::updateWidget()
                          m_mimeType,
                          previewTextForPath(m_sourcePath, m_kind),
                          previewPixmap);
+}
+
+void IngestInputNode::setStatusMessage(const QString& message)
+{
+    auto* widget = m_widget.data();
+    if (!widget) {
+        return;
+    }
+
+    QMetaObject::invokeMethod(widget, [widget, message]() {
+        widget->setStatusMessage(message);
+    }, Qt::QueuedConnection);
 }
 
 void IngestInputNode::requestImmediateRun()

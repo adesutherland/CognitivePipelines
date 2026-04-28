@@ -25,6 +25,8 @@
 #include "ImageGenPropertiesWidget.h"
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
+#include "ai/catalog/ModelCatalogService.h"
+#include "ModelCapsRegistry.h"
 #include "Logger.h"
 
 #include <QJsonObject>
@@ -40,6 +42,17 @@ ImageGenNode::ImageGenNode(QObject* parent)
     , m_quality(QStringLiteral("standard"))
     , m_style(QStringLiteral("vivid"))
 {
+    const QString providerId = ModelCatalogService::instance().defaultProvider(ModelCatalogKind::Image);
+    if (!providerId.isEmpty()) {
+        m_providerId = providerId;
+        const auto models = ModelCatalogService::instance().fallbackModels(providerId, ModelCatalogKind::Image);
+        for (const auto& model : models) {
+            if (model.visibility != ModelCatalogVisibility::Hidden) {
+                m_model = model.id;
+                break;
+            }
+        }
+    }
 }
 
 NodeDescriptor ImageGenNode::getDescriptor() const
@@ -118,9 +131,18 @@ TokenList ImageGenNode::execute(const TokenList& incomingTokens)
     DataPacket output;
     const QString outputPinId = QString::fromLatin1(kOutputImagePathPinId);
     output.insert(outputPinId, QVariant());
+    output.insert(QStringLiteral("_provider"), providerId);
+    output.insert(QStringLiteral("_model"), model);
+    if (const auto resolvedRule = ModelCapsRegistry::instance().resolveWithRule(model, providerId);
+        resolvedRule.has_value() && !resolvedRule->driverProfileId.isEmpty()) {
+        output.insert(QStringLiteral("_driver"), resolvedRule->driverProfileId);
+    }
+    output.insert(QStringLiteral("_size"), size);
+    output.insert(QStringLiteral("_quality"), quality);
+    output.insert(QStringLiteral("_style"), style);
 
     if (prompt.isEmpty()) {
-        const QString err = QStringLiteral("ERROR: Prompt is empty.");
+        const QString err = QStringLiteral("Image generation prompt is empty.");
         output.insert(outputPinId, err);
         output.insert(QStringLiteral("__error"), err);
 
@@ -129,7 +151,8 @@ TokenList ImageGenNode::execute(const TokenList& incomingTokens)
 
     ILLMBackend* backend = LLMProviderRegistry::instance().getBackend(providerId);
     if (!backend) {
-        const QString err = QStringLiteral("ERROR: Backend '%1' not available.").arg(providerId);
+        const QString err = QStringLiteral("Image generation backend '%1' is not available for model '%2'.")
+                                .arg(providerId, model);
         output.insert(outputPinId, err);
         output.insert(QStringLiteral("__error"), err);
 
@@ -149,7 +172,7 @@ TokenList ImageGenNode::execute(const TokenList& incomingTokens)
     QFileInfo fileInfo(imagePath);
     if (imagePath.trimmed().isEmpty() || !fileInfo.exists()) {
         const QString err = imagePath.trimmed().isEmpty()
-            ? QStringLiteral("ERROR: Image generation failed.")
+            ? QStringLiteral("Image generation failed for provider '%1' model '%2'.").arg(providerId, model)
             : imagePath;
         CP_WARN.noquote() << QStringLiteral("ImageGenNode: generation failure provider=%1 model=%2 message=%3")
                                       .arg(providerId, model, err);

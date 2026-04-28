@@ -41,6 +41,8 @@ public:
         qint64 fragmentId {0}; ///< fragments.id
         qint64 fileId {0};     ///< fragments.file_id
         int chunkIndex {0};    ///< fragments.chunk_index
+        int startLine {0};     ///< 1-based source start line, or 0 when unavailable
+        int endLine {0};       ///< 1-based source end line, or 0 when unavailable
         QString content;       ///< fragments.content
         double score {0.0};    ///< Cosine similarity score in [0,1]
     };
@@ -105,6 +107,8 @@ public:
  *    - id: INTEGER PRIMARY KEY AUTOINCREMENT - Unique identifier for each fragment
  *    - file_id: INTEGER - Foreign key to source_files.id
  *    - chunk_index: INTEGER - Order/position within the source file
+ *    - start_line: INTEGER - 1-based source start line for the chunk
+ *    - end_line: INTEGER - 1-based source end line for the chunk
  *    - content: TEXT - The actual text chunk
  *    - embedding: BLOB - The raw binary representation of the vector (float array)
  *
@@ -132,6 +136,8 @@ CREATE TABLE IF NOT EXISTS fragments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL,
     chunk_index INTEGER NOT NULL,
+    start_line INTEGER,
+    end_line INTEGER,
     content TEXT NOT NULL,
     embedding BLOB,
     FOREIGN KEY (file_id) REFERENCES source_files(id) ON DELETE CASCADE
@@ -155,6 +161,8 @@ CREATE TABLE IF NOT EXISTS fragments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     file_id INTEGER NOT NULL,
     chunk_index INTEGER NOT NULL,
+    start_line INTEGER,
+    end_line INTEGER,
     content TEXT NOT NULL,
     embedding BLOB,
     FOREIGN KEY (file_id) REFERENCES source_files(id) ON DELETE CASCADE

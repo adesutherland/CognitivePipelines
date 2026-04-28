@@ -39,6 +39,7 @@ private:
     bool ingestClipboardImage(const QImage& image);
     bool ingestClipboardText(const QString& text);
     void updateWidget();
+    void setStatusMessage(const QString& message);
     void requestImmediateRun();
     MainWindow* findMainWindow() const;
     unsigned int resolveNodeId(const MainWindow* mainWindow) const;

@@ -181,6 +181,14 @@ TEST_F(ScriptNodeIntegrationTest, UnifiedLoggingAndStatus)
     node.loadState(state);
     outTokens = node.execute({});
     EXPECT_EQ(outTokens.front().data.value(QStringLiteral("status")).toString(), QStringLiteral("FAIL"));
+
+    // Test explicit script failure
+    state.insert(QStringLiteral("scriptCode"), QStringLiteral("pipeline.setError('manual failure');"));
+    node.loadState(state);
+    outTokens = node.execute({});
+    ASSERT_EQ(outTokens.size(), 1);
+    EXPECT_EQ(outTokens.front().data.value(QStringLiteral("status")).toString(), QStringLiteral("FAIL"));
+    EXPECT_EQ(outTokens.front().data.value(QStringLiteral("__error")).toString(), QStringLiteral("manual failure"));
 }
 
 TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)
