@@ -13,6 +13,7 @@
 - `src/graph/NodeGraphModel.h/.cpp`
   - Subclass of `QtNodes::DataFlowGraphModel`.
   - Registers the current node palette and categories, manages save/load integration with QtNodes, exposes entry points, and wires graph-level node signals.
+  - Owns nested subgraphs used by scope nodes. Root graph save/load persists those subgraphs under a `subgraphs` JSON object keyed by body id, with each child graph storing its graph kind.
   - Registers the bundled `QuickJSRuntime` with `ScriptEngineRegistry` during graph model construction so scripting nodes can resolve the default engine.
 - `src/graph/ToolNodeDelegate.h/.cpp`
   - Adapter between `IToolNode` implementations and QtNodes `NodeDelegateModel`.
@@ -29,6 +30,7 @@
   - Owns the execution queue, thread pool, data lake, per-node serialization, run identity, and execution lifecycle signals used by the UI.
 - `src/execution/ExecutionState*.h/.cpp`
   - Execution-state model and status enums used for node/connection highlighting in the UI.
+  - Execution IDs are graph-scoped so root nodes and scope-body nodes with the same QtNodes numeric id do not share highlight state.
 - `src/ai/`
   - `backends/ILLMBackend.h` defines the provider abstraction for chat, embeddings, and image generation.
   - `registry/LLMProviderRegistry.*` registers and resolves OpenAI, Google, Anthropic, and optional Ollama backends and loads credentials.
@@ -45,6 +47,13 @@
 - `src/nodes/`
   - Concrete node implementations grouped by domain: `ai`, `control_flow`, `external_tools`, `io`, `retrieval`, `scripting`, `text`, and `visualization`.
   - Representative nodes include `UniversalLLMNode`, `ImageGenNode`, `RagIndexerNode`, `RagQueryNode`, `UniversalScriptNode`, `ProcessNode`, `PythonScriptNode`, `PromptBuilderNode`, and the control-flow nodes.
+- `src/nodes/control_flow/scope/`
+  - Scope model based on explicit parent nodes plus nested body graphs.
+  - `Transform Scope` owns a transform body for one input to one output, optionally retrying until the body accepts the result.
+  - `Iterator Scope` owns an iterator body for list input to list output.
+  - `Get Input`/`Set Output` are registered only in transform-body graphs.
+  - `Get Item`/`Set Item Result` are registered only in iterator-body graphs.
+  - `ScopeSubgraphExecutor` runs child graphs synchronously inside the parent scope execution using an isolated body data lake, and forwards node/connection execution states back through the child `NodeGraphModel` for subcanvas highlighting.
 - `src/logging/`
   - Central logging helpers and categorized logging declarations used across the app.
 
@@ -64,9 +73,17 @@
    - Each task calls the wrapped node's `execute(const TokenList&)` implementation and records outputs into the engine's thread-safe data lake.
    - Nodes can emit one or many output tokens, which enables fan-out and control-flow behavior without relying on direct reactive propagation from QtNodes.
 
-4. UI updates
+4. Scope execution
+   - A `Transform Scope` or `Iterator Scope` node runs its nested body graph synchronously from inside its own `execute()` call.
+   - Each body pass receives a `ScopeFrame` containing body id, activation id, current input/item, index/count when iterating, context, and history.
+   - Body graph source nodes receive the frame through internal `_scope_*`, `_transform_*`, and `_iterator_*` fields.
+   - `Get Input` and `Get Item` convert those fields into visible pins.
+   - `Set Output` and `Set Item Result` return control to the parent scope. Body errors emit `__error`.
+
+5. UI updates
    - `ExecutionEngine` emits `nodeStatusChanged`, `connectionStatusChanged`, `nodeOutputChanged`, `nodeLog`, and `pipelineFinished`.
    - `MainWindow` uses these signals to refresh stage output, debug logging, and live execution highlighting.
+   - `MainWindow` can switch the central canvas between the root graph and a scope body graph. The toolbar breadcrumb/back button tracks the current graph editing context.
 
 ## AI, Retrieval, and Scripting Layers
 

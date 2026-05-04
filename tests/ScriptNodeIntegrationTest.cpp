@@ -83,7 +83,7 @@ TEST_F(ScriptNodeIntegrationTest, SqliteIntegration)
 TEST_F(ScriptNodeIntegrationTest, ArrayPassThrough)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+    QString script = "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -94,7 +94,7 @@ TEST_F(ScriptNodeIntegrationTest, ArrayPassThrough)
     TokenList outTokens = node.execute({});
 
     ASSERT_EQ(outTokens.size(), 1);
-    QVariant outVal = outTokens.front().data.value(QStringLiteral("out"));
+    QVariant outVal = outTokens.front().data.value(QStringLiteral("output"));
     ASSERT_EQ(outVal.typeId(), QMetaType::QVariantList);
     QVariantList list = outVal.toList();
     ASSERT_EQ(list.size(), 2);
@@ -105,7 +105,7 @@ TEST_F(ScriptNodeIntegrationTest, ArrayPassThrough)
 TEST_F(ScriptNodeIntegrationTest, ArrayFanOut)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+    QString script = "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -117,15 +117,15 @@ TEST_F(ScriptNodeIntegrationTest, ArrayFanOut)
 
     ASSERT_EQ(outTokens.size(), 2);
     auto it = outTokens.begin();
-    EXPECT_EQ(it->data.value(QStringLiteral("out")).toString(), QStringLiteral("A"));
+    EXPECT_EQ(it->data.value(QStringLiteral("output")).toString(), QStringLiteral("A"));
     ++it;
-    EXPECT_EQ(it->data.value(QStringLiteral("out")).toString(), QStringLiteral("B"));
+    EXPECT_EQ(it->data.value(QStringLiteral("output")).toString(), QStringLiteral("B"));
 }
 
 TEST_F(ScriptNodeIntegrationTest, MixedTypes)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"out\", \"SingleString\");";
+    QString script = "pipeline.setOutput(\"output\", \"SingleString\");";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -136,7 +136,7 @@ TEST_F(ScriptNodeIntegrationTest, MixedTypes)
     TokenList outTokens = node.execute({});
 
     ASSERT_EQ(outTokens.size(), 1);
-    EXPECT_EQ(outTokens.front().data.value(QStringLiteral("out")).toString(), QStringLiteral("SingleString"));
+    EXPECT_EQ(outTokens.front().data.value(QStringLiteral("output")).toString(), QStringLiteral("SingleString"));
 }
 
 TEST_F(ScriptNodeIntegrationTest, UnifiedLoggingAndStatus)
@@ -195,7 +195,7 @@ TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)
 {
     UniversalScriptNode node;
     QString script = "console.log(\"Log 1\");\n"
-                     "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+                     "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -215,7 +215,7 @@ TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)
 TEST_F(ScriptNodeIntegrationTest, InjectsFanOutSummaryIntoLogs)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+    QString script = "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -228,8 +228,8 @@ TEST_F(ScriptNodeIntegrationTest, InjectsFanOutSummaryIntoLogs)
     ASSERT_EQ(outTokens.size(), 2);
     for (const auto& token : outTokens) {
         QString logs = token.data.value(QStringLiteral("logs")).toString();
-        EXPECT_TRUE(logs.contains(QStringLiteral("out[1]: A")));
-        EXPECT_TRUE(logs.contains(QStringLiteral("out[2]: B")));
+        EXPECT_TRUE(logs.contains(QStringLiteral("output[1]: A")));
+        EXPECT_TRUE(logs.contains(QStringLiteral("output[2]: B")));
         EXPECT_FALSE(logs.contains(QStringLiteral("[0]:")));
     }
 }
@@ -237,7 +237,7 @@ TEST_F(ScriptNodeIntegrationTest, InjectsFanOutSummaryIntoLogs)
 TEST_F(ScriptNodeIntegrationTest, NoSummaryInSingleMode)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"out\", [\"A\", \"B\"]);";
+    QString script = "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -250,5 +250,5 @@ TEST_F(ScriptNodeIntegrationTest, NoSummaryInSingleMode)
     ASSERT_EQ(outTokens.size(), 1);
     QString logs = outTokens.front().data.value(QStringLiteral("logs")).toString();
     EXPECT_FALSE(logs.contains(QStringLiteral("--- Output Data ---")));
-    EXPECT_FALSE(logs.contains(QStringLiteral("out:")));
+    EXPECT_FALSE(logs.contains(QStringLiteral("output:")));
 }

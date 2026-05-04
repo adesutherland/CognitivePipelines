@@ -50,7 +50,8 @@ void ExecutionAwareNodePainter::paint(QPainter *painter, NodeGraphicsObject &ngo
     // Determine execution state and state-dependent color
     ExecutionState st = ExecutionState::Idle;
     if (model_) {
-        const QUuid id = ExecIds::nodeUuid(nodeId);
+        const QString scopeKey = graphModel_ ? graphModel_->executionScopeKey() : QStringLiteral("root");
+        const QUuid id = ExecIds::nodeUuid(scopeKey, nodeId);
         st = model_->stateFor(id);
     }
 
@@ -182,7 +183,8 @@ void ExecutionAwareConnectionPainter::paint(QPainter *painter, ConnectionGraphic
     // Determine execution state (Idle if no model or unknown)
     ExecutionState st = ExecutionState::Idle;
     if (model_) {
-        const QUuid id = ExecIds::connectionUuid(cgo.connectionId());
+        const QString scopeKey = graphModel_ ? graphModel_->executionScopeKey() : QStringLiteral("root");
+        const QUuid id = ExecIds::connectionUuid(scopeKey, cgo.connectionId());
         st = model_->stateFor(id);
     }
 

@@ -11,6 +11,7 @@
 
 #include <QUuid>
 #include <QByteArray>
+#include <QString>
 #include <QtNodes/internal/Definitions.hpp>
 
 namespace ExecIds {
@@ -28,19 +29,31 @@ inline QUuid connectionNamespace()
     return QUuid("{6ba7b811-9dad-11d1-80b4-00c04fd430c8}");
 }
 
-inline QUuid nodeUuid(QtNodes::NodeId n)
+inline QUuid nodeUuid(const QString& scopeKey, QtNodes::NodeId n)
 {
-    const QByteArray key = QByteArray::number(static_cast<qulonglong>(n));
+    const QByteArray key = scopeKey.toUtf8() + ':' +
+                           QByteArray::number(static_cast<qulonglong>(n));
     return QUuid::createUuidV5(nodeNamespace(), key);
 }
 
-inline QUuid connectionUuid(const QtNodes::ConnectionId& c)
+inline QUuid nodeUuid(QtNodes::NodeId n)
 {
-    const QByteArray key = QByteArray::number(static_cast<qulonglong>(c.outNodeId)) + '/' +
+    return nodeUuid(QStringLiteral("root"), n);
+}
+
+inline QUuid connectionUuid(const QString& scopeKey, const QtNodes::ConnectionId& c)
+{
+    const QByteArray key = scopeKey.toUtf8() + ':' +
+                           QByteArray::number(static_cast<qulonglong>(c.outNodeId)) + '/' +
                            QByteArray::number(static_cast<qulonglong>(c.outPortIndex)) + '>' +
                            QByteArray::number(static_cast<qulonglong>(c.inNodeId)) + '/' +
                            QByteArray::number(static_cast<qulonglong>(c.inPortIndex));
     return QUuid::createUuidV5(connectionNamespace(), key);
+}
+
+inline QUuid connectionUuid(const QtNodes::ConnectionId& c)
+{
+    return connectionUuid(QStringLiteral("root"), c);
 }
 
 } // namespace ExecIds

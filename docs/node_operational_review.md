@@ -20,6 +20,7 @@ Scope: this review covers the nodes registered by `src/graph/NodeGraphModel.cpp`
 | # | Palette category | Node | Descriptor id | Primary source | Assessment |
 |---|---|---|---|---|---|
 | 1 | Text Utilities | Prompt Builder | `prompt-builder` | `src/nodes/text/prompt_builder` | Mostly complete |
+| 1a | Text Utilities | Text Chunker | `text-chunker` | `src/nodes/text/text_chunker` | Complete |
 | 2 | Input / Output | Text Input | `text-input` | `src/nodes/io/text_input` | Complete |
 | 3 | Input / Output | Ingest Input | `ingest-input` | `src/nodes/io/ingest_input` | Mostly complete |
 | 4 | Input / Output | Image | `image-node` | `src/nodes/io/image` | Mostly complete |
@@ -36,10 +37,13 @@ Scope: this review covers the nodes registered by `src/graph/NodeGraphModel.cpp`
 | 15 | Retrieval | RAG Query | `rag-query` | `src/nodes/retrieval/rag_query` | Mostly complete |
 | 16 | Input / Output | Human Input | `human-input` | `src/nodes/io/human_input` | Mostly complete |
 | 17 | Control Flow | Conditional Router | `conditional-router` | `src/nodes/control_flow/conditional_router` | Mostly complete |
-| 18 | Control Flow | Loop (For Each) | `loop-foreach` | `src/nodes/control_flow/loop` | Mostly complete |
-| 19 | Control Flow | Loop Until | `loop-until` | `src/nodes/control_flow/loop_until` | Functional but rough |
-| 20 | Control Flow | Retry Loop | `retry-loop` | `src/nodes/control_flow/retry_loop` | Functional but rough |
-| 21 | Scripting | Universal Script | `universal-script` | `src/nodes/scripting/universal_script` | Mostly complete |
+| 18 | Control Flow | Transform Scope | `transform-scope` | `src/nodes/control_flow/scope` | Complete first pass |
+| 19 | Control Flow | Get Input | `scope-get-input` | `src/nodes/control_flow/scope` | Complete |
+| 20 | Control Flow | Set Output | `scope-set-output` | `src/nodes/control_flow/scope` | Complete |
+| 21 | Control Flow | Iterator Scope | `iterator-scope` | `src/nodes/control_flow/scope` | Complete first pass |
+| 22 | Control Flow | Get Item | `iterator-get-item` | `src/nodes/control_flow/scope` | Complete |
+| 23 | Control Flow | Set Item Result | `iterator-set-result` | `src/nodes/control_flow/scope` | Complete |
+| 24 | Scripting | Universal Script | `universal-script` | `src/nodes/scripting/universal_script` | Mostly complete |
 
 ## 1. Prompt Builder
 
@@ -64,6 +68,34 @@ Operational logic:
 - The properties widget reparses placeholders with a debounce and requests dynamic pin updates.
 
 Completeness assessment: mostly complete. It is useful and integrated with dynamic pins. Missing values are silently replaced with an empty string, and there is no escaping/default-value syntax, so future UX work should make missing inputs visible.
+
+## 1a. Text Chunker
+
+Processing status: reviewed after scope redesign.
+
+Purpose: splits incoming text into a list of chunks for iterator or RAG-oriented workflows.
+
+Settings:
+
+- Chunk size, persisted as `chunk_size`.
+- Chunk overlap, persisted as `chunk_overlap`.
+- File type, persisted as `file_type`; supported values are plain, C/C-family, Python, Rexx, SQL, shell, Cobol, Markdown, and YAML/HCL.
+
+Pins:
+
+- Input `text`: source text to split.
+- Output `chunks`: `QVariantList` of chunk strings.
+- Output `text`: same list for convenience when connected to text-first downstream nodes.
+- Output `count`: chunk count.
+- Output `summary`: structured chunking settings and count.
+
+Operational logic:
+
+- Uses the existing `TextChunker::split` engine.
+- Code-aware file types reuse the same separator/comment-glue behavior already tested for RAG chunking.
+- Overlap is clamped below chunk size.
+
+Completeness assessment: complete for the first palette node. It intentionally stays focused on text-to-list conversion; richer document/file chunking should remain with ingest/RAG nodes or a separate file chunker.
 
 ## 2. Text Input
 
@@ -543,95 +575,159 @@ Operational logic:
 
 Completeness assessment: mostly complete. It covers the common routing behavior and has tests. The readiness logic uses connection count as a proxy for condition-connected state, which is pragmatic but fragile if more inputs are added.
 
-## 18. Loop (For Each)
+## 18. Transform Scope
 
-Processing status: reviewed.
+Processing status: implemented after redesign.
 
-Purpose: fans out a list-like text payload into one token per item, plus a final pass-through token with the original input.
-
-Settings:
-
-- No behavior settings.
-- Last item count is persisted as `lastItemCount` for display.
-
-Pins:
-
-- Input `list_in`: list-like text.
-- Output `body`: one emitted token per parsed item.
-- Output `passthrough`: one emitted token containing the original input text.
-
-Operational logic:
-
-- Parses whole-payload JSON arrays first.
-- Then tries fenced `json` markdown arrays.
-- Then markdown bullet/numbered lists.
-- Then markdown tables.
-- Finally splits on newlines.
-- Body tokens carry both `text` and `body`.
-- The pass-through token carries both `text` and `passthrough`.
-
-Completeness assessment: mostly complete. The auto-detection is helpful and well covered by tests. It has no explicit parse-mode setting, so ambiguous inputs may surprise users, and the final pass-through token can look like another body token to downstream nodes that listen only to generic `text`.
-
-## 19. Loop Until
-
-Processing status: reviewed.
-
-Purpose: event-driven loop controller that repeatedly emits the current value until a stop condition is true or max iterations is reached.
+Purpose: parent scope for one input value and one output value. It owns a transform body canvas and can optionally retry until the body marks the result accepted.
 
 Settings:
 
-- Max iterations, persisted as `maxIterations`, default 10.
-- Pending feedback state is also persisted as `pending_feedback` and `has_pending`.
+- Mode, persisted as `mode`: `run_once` or `retry_until_accepted`.
+- Max attempts, persisted as `max_attempts`.
+- Body graph id, persisted as `body_id`.
 
 Pins:
 
-- Input `start`: initial value to begin a loop.
-- Input `feedback`: updated value from the loop body.
-- Input `condition`: stop condition.
-- Output `current`: value to send through the next loop iteration.
-- Output `result`: final value when condition is true or max iterations is reached.
+- Input `input`: value passed into the transform body.
+- Input `context`: optional structured context map.
+- Output `output`: final body output.
+- Output `text`: same final output for text-first downstream nodes.
+- Output `context`: context plus `_scope` metadata and history.
+- Output `status`: `completed`, `accepted`, `completed_unaccepted`, `exhausted`, or `error`.
+- Output `error`: human error message when execution fails.
 
 Operational logic:
 
-- New start values are queued.
-- While processing, feedback is latched and condition triggers evaluation.
-- Truthy condition values include booleans, non-zero numbers, and strings such as `true`, `yes`, `1`, `ok`, and `pass`.
-- If stop condition is false and the max-iteration limit has not been reached, emits `current`.
-- If stop condition is true or the next iteration would exceed the limit, emits `result`.
-- Output tokens also carry generic `text`.
+- The properties panel opens the nested transform body graph.
+- The body is executed with an isolated data lake and a `ScopeFrame`.
+- `Set Output.accepted=false` asks retry mode to run another body pass.
+- `Set Output.next_input` supplies the next attempt input; otherwise the latest output is reused.
+- Body failures emit `__error`, `message`, `error`, and `status=error`.
 
-Completeness assessment: functional but rough. The internal state machine is tested, but it is subtle to operate because readiness depends on trigger pins, latched feedback, and condition arrival order. The UI exposes only max iterations; users need clearer status and documentation for wiring patterns.
+Completeness assessment: complete first pass. It removes the confusing feedback connectors from validation workflows. Future UX work should add body templates and execution highlighting inside child canvases.
 
-## 20. Retry Loop
+User guide: see `docs/ScopeNodes_UserGuide.md`.
 
-Processing status: reviewed.
+## 19. Get Input
 
-Purpose: retries a task when downstream worker feedback contains a configured failure string.
+Processing status: implemented after redesign.
+
+Purpose: source boundary node for transform body graphs.
+
+Settings: none.
+
+Pins:
+
+- Output `input`: current transform input.
+- Output `text`: same current input for text-first nodes.
+- Output `attempt`: zero-based attempt number.
+- Output `previous_output`: prior attempt output when retrying.
+- Output `context`: parent context.
+- Output `history`: prior body-pass summaries.
+
+Completeness assessment: complete. It is registered only in transform body graphs.
+
+## 20. Set Output
+
+Processing status: implemented after redesign.
+
+Purpose: terminal boundary node for one transform body pass.
+
+Settings: none.
+
+Pins:
+
+- Input `output`: candidate/final output.
+- Input `accepted`: optional truthy value; defaults to true.
+- Input `next_input`: optional input for the next retry attempt.
+- Input `context`: context updates to merge into the parent scope.
+- Input `message`: human status/debug message.
+- Input `error`: failure message.
+
+Operational logic:
+
+- Emits an internal `_transform_output` map consumed by the parent `Transform Scope`.
+- `error` also emits `__error` and `message`.
+- The node has no output pins because it terminates a body pass.
+
+Completeness assessment: complete. It intentionally replaces `Loop Decision` with transform-specific language.
+
+## 21. Iterator Scope
+
+Processing status: implemented after redesign.
+
+Purpose: parent scope for processing a list of items with a child body canvas and collecting a result list.
 
 Settings:
 
-- Failure condition string, persisted as `failureString`, default `FAIL`.
-- Max retries, persisted as `maxRetries`, default 3.
+- Failure policy, persisted as `failure_policy`: `stop`, `skip`, or `include_error`.
+- Body graph id, persisted as `body_id`.
 
 Pins:
 
-- Input `task_in`: original task payload.
-- Input `worker_feedback`: downstream result/check text.
-- Output `worker_instruction`: payload to send to the worker.
-- Output `verified_result`: final successful feedback payload.
+- Input `items`: list input. Accepts `QVariantList`, JSON array text, newline text, or a scalar fallback.
+- Input `context`: optional structured context map.
+- Output `results`: result list in input order, excluding skipped items.
+- Output `text`: same result list for text-first downstream nodes.
+- Output `summary`: structured count, skipped, error, and history metadata.
+- Output `errors`: list of item error maps.
+- Output `context`: context plus `_scope` metadata.
+- Output `status`: `completed` or `error`.
 
 Operational logic:
 
-- A `task_in` trigger queues a task.
-- The node emits `worker_instruction` with the original payload and generic `text`.
-- While processing, `worker_feedback` is checked for the failure string case-insensitively.
-- On failure before the retry limit, it re-emits the cached payload with `forceExecution = true`.
-- On success, it emits `verified_result` and generic `text`.
-- On retry exhaustion, it emits `__error` and clears the queue.
+- Runs the iterator body once per item.
+- Each pass receives item, index, count, context, and history.
+- `Set Item Result.skip=true` omits that item from `results`.
+- Failure policy decides whether errors stop execution, skip items, or become error rows.
 
-Completeness assessment: functional but rough. The core retry behavior is present. Gaps: failure detection is substring-only, there is no structured success/failure predicate, queued tasks are cleared on max-retry failure, and task ingestion depends on trigger-pin metadata.
+Completeness assessment: complete first pass. It gives the application a simpler, list-oriented replacement for connector-based loop workflows.
 
-## 21. Universal Script
+## 22. Get Item
+
+Processing status: implemented after redesign.
+
+Purpose: source boundary node for iterator body graphs.
+
+Settings: none.
+
+Pins:
+
+- Output `item`: current item.
+- Output `text`: same item for text-first nodes.
+- Output `index`: zero-based item index.
+- Output `count`: total item count.
+- Output `context`: parent context.
+- Output `history`: prior item summaries.
+
+Completeness assessment: complete. It is registered only in iterator body graphs.
+
+## 23. Set Item Result
+
+Processing status: implemented after redesign.
+
+Purpose: terminal boundary node for one iterator body pass.
+
+Settings: none.
+
+Pins:
+
+- Input `result`: result for the current item.
+- Input `skip`: truthy value that omits the item from the parent result list.
+- Input `context`: context updates to merge into the parent scope.
+- Input `message`: human status/debug message.
+- Input `error`: failure message.
+
+Operational logic:
+
+- Emits an internal `_item_result` map consumed by the parent `Iterator Scope`.
+- `error` also emits `__error` and `message`.
+- The node has no output pins because it terminates an item body pass.
+
+Completeness assessment: complete.
+
+## 24. Universal Script
 
 Processing status: reviewed.
 
@@ -645,8 +741,8 @@ Settings:
 
 Pins:
 
-- Input `in`: generic input value available to the script host.
-- Output `out`: script output value.
+- Input `input`: generic input value available to the script host.
+- Output `output`: script output value.
 - Output `status`: status string, default `OK` or `FAIL`.
 
 Operational logic:
@@ -664,9 +760,9 @@ Completeness assessment: mostly complete. The QuickJS host is tested and support
 
 ## Cross-Cutting Observations
 
-- Palette registration owns the user-facing category, and descriptor categories have been normalized for non-loop nodes. Retry/loop category cleanup is intentionally deferred with the broader loop redesign.
+- Palette registration owns the user-facing category. `Transform Scope` and `Iterator Scope` are the active repeat/validation palette entries, while body-boundary nodes are registered only in their matching child graph kind.
 - Error signaling is now more consistent across non-loop nodes: operational failures should emit `__error`, with provider/model/driver context where relevant.
-- Generic `text` is useful, but it can blur branch-specific semantics. Control-flow and loop nodes should document when downstream nodes should connect to the named pin versus read `text`.
+- Generic `text` is useful, but it can blur branch-specific semantics. Control-flow and scope nodes should document when downstream nodes should connect to the named pin versus read `text`.
 - Structured outputs should use `QVariantMap`/`QVariantList` inside the pipeline. Serialized JSON should be reserved for external boundaries or hidden debug compatibility fields.
 - Provider/model selection is catalog-driven in `Universal AI`, `Vault Output`, `RAG Indexer`, and `Image Generator`.
 - External process nodes need a shared policy for working directory, environment, timeout, exit status, and error pins.
@@ -674,8 +770,8 @@ Completeness assessment: mostly complete. The QuickJS host is tested and support
 
 ## Suggested Follow-Up Backlog
 
-1. Redesign loop nodes as parent/child loop structures with shared context/variables, then revisit their status and category cleanup.
-2. Add shared working-directory, environment, and timeout configuration for external process/script nodes.
-3. Make RAG clear-database behavior more guarded, for example requiring a confirmation or separate maintenance action.
-4. Make image generation size/quality/style controls capability-driven per provider/model.
-5. Add broader user-facing docs for the non-script operational nodes.
+1. Add shared working-directory, environment, and timeout configuration for external process/script nodes.
+2. Make RAG clear-database behavior more guarded, for example requiring a confirmation or separate maintenance action.
+3. Make image generation size/quality/style controls capability-driven per provider/model.
+4. Add broader user-facing docs for the non-script operational nodes.
+5. Add scope-body templates and richer execution/status visualization inside nested scope graphs.

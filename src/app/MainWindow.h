@@ -31,6 +31,9 @@
 
 #include <memory>
 #include <QPointer>
+#include <QPair>
+#include <QSet>
+#include <QVector>
 
 class QAction;
 class QPushButton;
@@ -46,7 +49,7 @@ class NodeGraphModel;
 
 namespace QtNodes {
 class GraphicsView;
-namespace QtNodes { class DataFlowGraphicsScene; }
+class DataFlowGraphicsScene;
 }
 
 namespace QtNodes { namespace QtNodesInternal { class BasicGraphicsScene; } }
@@ -84,6 +87,7 @@ private slots:
     void onSaveAs();
     void onEditCredentials();
     void onManageProviders();
+    void onSyntaxHighlightingOptions();
     void onClearCanvas();
     void onSaveOutput();
     void onDeleteSelected();
@@ -94,6 +98,8 @@ private slots:
     void onNodeSelected(QtNodes::NodeId nodeId);
     void onSelectionChanged();
     void RefreshScenarioList();
+    void openChildGraph(const QString& bodyId, const QString& title, int graphKind);
+    void navigateBackGraph();
 
     // Execution highlighting: repaint a specific node by execution QUuid
     void onNodeRepaint(const QUuid& nodeUuid);
@@ -108,6 +114,11 @@ private:
     void setPropertiesWidget(QWidget* w);
     void refreshStageOutput();
     void clearAllTextOutputNodes();
+    void clearTextOutputNodes(NodeGraphModel* model);
+    void connectGraphModelSignals(NodeGraphModel* model);
+    void installGraphScene(NodeGraphModel* model);
+    void updateGraphNavigation();
+    NodeGraphModel* activeGraphModel() const;
 
     QAction* exitAction {nullptr};
     QAction* openAction_ {nullptr};
@@ -122,6 +133,7 @@ private:
     QAction* slowMotionAction_ {nullptr};
     QAction* editCredentialsAction_ {nullptr};
     QAction* manageProvidersAction_ {nullptr};
+    QAction* syntaxHighlightingOptionsAction_ {nullptr};
     QAction* clearCanvasAction_ {nullptr};
     QAction* deleteAction {nullptr};
     QMenu*   runMenu_ {nullptr};
@@ -130,7 +142,13 @@ private:
     ExecutionEngine* execEngine_ {nullptr};
 
     NodeGraphModel* _graphModel {nullptr};
+    NodeGraphModel* currentGraphModel_ {nullptr};
     QtNodes::GraphicsView* _graphView {nullptr};
+    QVector<QPair<NodeGraphModel*, QString>> graphStack_;
+    QString currentGraphLabel_ {QStringLiteral("Root")};
+    QSet<NodeGraphModel*> connectedGraphModels_;
+    QPushButton* loopBackButton_ {nullptr};
+    QLabel* graphBreadcrumbLabel_ {nullptr};
 
     // Properties dock
     QDockWidget* propertiesDock_ {nullptr};

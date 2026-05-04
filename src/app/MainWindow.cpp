@@ -73,6 +73,7 @@
 
 #include "CredentialsDialog.h"
 #include "ProviderManagementDialog.h"
+#include "SyntaxHighlightingOptionsDialog.h"
 #include "UserInputDialog.h"
 #include "Logger.h"
 
@@ -84,36 +85,25 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowTitle("CognitivePipelines");
     resize(1100, 700);
 
-    // Instantiate the graph model and view, and set as central widget
+    // Instantiate the graph model, execution engine, and view.
     _graphModel = new NodeGraphModel(this);
-    auto* scene = new QtNodes::DataFlowGraphicsScene(*_graphModel, this);
-    _graphView = new QtNodes::GraphicsView(scene, this);
+    currentGraphModel_ = _graphModel;
+    _graphView = new QtNodes::GraphicsView(this);
     setCentralWidget(_graphView);
 
     // Create execution engine
     execEngine_ = new ExecutionEngine(_graphModel, this);
 
-    // Live execution-state highlighting: install custom painters and wire signals
+    // Live execution-state highlighting: custom painters are installed per scene.
     execStateModel_ = std::make_shared<ExecutionStateModel>(this);
-    scene->setNodePainter(std::unique_ptr<QtNodes::AbstractNodePainter>(
-        new ExecutionAwareNodePainter(execStateModel_, _graphModel, scene)));
-    scene->setConnectionPainter(std::unique_ptr<QtNodes::AbstractConnectionPainter>(
-        new ExecutionAwareConnectionPainter(execStateModel_)));
+    connectGraphModelSignals(_graphModel);
+    installGraphScene(_graphModel);
 
     // Forward engine status updates to the state model
     connect(execEngine_, &ExecutionEngine::nodeStatusChanged,
             execStateModel_.get(), &ExecutionStateModel::onNodeStatusChanged);
     connect(execEngine_, &ExecutionEngine::connectionStatusChanged,
             execStateModel_.get(), &ExecutionStateModel::onConnectionStatusChanged);
-
-    // Repaint the scene when any state changes
-    connect(execStateModel_.get(), &ExecutionStateModel::stateChanged, scene, [scene]() { scene->update(); });
-
-    // Refresh scenario list on graph changes
-    connect(_graphModel, &NodeGraphModel::nodeCreated, this, &MainWindow::RefreshScenarioList);
-    connect(_graphModel, &NodeGraphModel::nodeDeleted, this, &MainWindow::RefreshScenarioList);
-    connect(_graphModel, &NodeGraphModel::connectionCreated, this, &MainWindow::RefreshScenarioList);
-    connect(_graphModel, &NodeGraphModel::connectionDeleted, this, &MainWindow::RefreshScenarioList);
 
     createActions();
     createMenus();
@@ -207,11 +197,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(execEngine_, &ExecutionEngine::nodeStatusChanged,
             this, [this](const QUuid &nodeId, int /*state*/) { onNodeRepaint(nodeId); });
 
-    // Connect selection signals
-    connect(scene, &QtNodes::BasicGraphicsScene::nodeSelected,
-            this, &MainWindow::onNodeSelected);
-    connect(scene, &QGraphicsScene::selectionChanged,
-            this, &MainWindow::onSelectionChanged);
+    updateGraphNavigation();
 }
 
 void MainWindow::createActions() {
@@ -247,6 +233,10 @@ void MainWindow::createActions() {
     manageProvidersAction_ = new QAction(tr("Manage Providers..."), this);
     manageProvidersAction_->setStatusTip(tr("Configure provider availability, endpoints, model filters, and test probes"));
     connect(manageProvidersAction_, &QAction::triggered, this, &MainWindow::onManageProviders);
+
+    syntaxHighlightingOptionsAction_ = new QAction(tr("Syntax Highlighting Options..."), this);
+    syntaxHighlightingOptionsAction_->setStatusTip(tr("Configure syntax highlighter commands and test availability"));
+    connect(syntaxHighlightingOptionsAction_, &QAction::triggered, this, &MainWindow::onSyntaxHighlightingOptions);
 
     // Delete action
     deleteAction = new QAction(tr("Delete"), this);
@@ -313,11 +303,15 @@ void MainWindow::createMenus() {
 
     // Edit menu
     QMenu* editMenu = menuBar()->addMenu(tr("&Edit"));
-    editMenu->addAction(editCredentialsAction_);
-    editMenu->addAction(manageProvidersAction_);
-    editMenu->addSeparator();
     editMenu->addAction(deleteAction);
     editMenu->addAction(clearCanvasAction_);
+
+    // Settings menu
+    QMenu* settingsMenu = menuBar()->addMenu(tr("&Settings"));
+    settingsMenu->addAction(editCredentialsAction_);
+    settingsMenu->addAction(manageProvidersAction_);
+    settingsMenu->addSeparator();
+    settingsMenu->addAction(syntaxHighlightingOptionsAction_);
 
     // View menu
     QMenu* viewMenu = menuBar()->addMenu(tr("&View"));
@@ -355,6 +349,15 @@ void MainWindow::createToolBar() {
     QToolBar* toolbar = addToolBar(tr("Main Toolbar"));
     toolbar->setObjectName("MainToolbar");
 
+    loopBackButton_ = new QPushButton(tr("Back"), this);
+    loopBackButton_->setEnabled(false);
+    connect(loopBackButton_, &QPushButton::clicked, this, &MainWindow::navigateBackGraph);
+    toolbar->addWidget(loopBackButton_);
+
+    graphBreadcrumbLabel_ = new QLabel(tr(" Root "), this);
+    toolbar->addWidget(graphBreadcrumbLabel_);
+    toolbar->addSeparator();
+
     toolbar->addWidget(new QLabel(tr(" Scenario: "), this));
     scenarioCombo_ = new QComboBox(this);
     scenarioCombo_->setMinimumWidth(200);
@@ -387,6 +390,7 @@ void MainWindow::createToolBar() {
     toolbar->addAction(stopAction_);
 
     RefreshScenarioList();
+    updateGraphNavigation();
 }
 
 void MainWindow::createStatusBar() {
@@ -395,6 +399,87 @@ void MainWindow::createStatusBar() {
         m_statusLabel = new QLabel(tr("Status: Idle"), this);
     }
     statusBar()->addPermanentWidget(m_statusLabel, 0);
+}
+
+void MainWindow::connectGraphModelSignals(NodeGraphModel* model)
+{
+    if (!model || connectedGraphModels_.contains(model)) {
+        return;
+    }
+    connectedGraphModels_.insert(model);
+
+    connect(model, &NodeGraphModel::childGraphOpenRequested,
+            this, &MainWindow::openChildGraph);
+    connect(model, &NodeGraphModel::executionNodeStatusChanged,
+            execStateModel_.get(), &ExecutionStateModel::onNodeStatusChanged,
+            Qt::UniqueConnection);
+    connect(model, &NodeGraphModel::executionConnectionStatusChanged,
+            execStateModel_.get(), &ExecutionStateModel::onConnectionStatusChanged,
+            Qt::UniqueConnection);
+    connect(model, &NodeGraphModel::executionNodeStatusChanged,
+            this, [this](const QUuid& nodeId, int) { onNodeRepaint(nodeId); });
+    connect(model, &NodeGraphModel::executionNodeOutputChanged,
+            this, [this](QtNodes::NodeId) { refreshStageOutput(); });
+
+    if (model == _graphModel) {
+        connect(model, &NodeGraphModel::nodeCreated, this, &MainWindow::RefreshScenarioList);
+        connect(model, &NodeGraphModel::nodeDeleted, this, &MainWindow::RefreshScenarioList);
+        connect(model, &NodeGraphModel::connectionCreated, this, &MainWindow::RefreshScenarioList);
+        connect(model, &NodeGraphModel::connectionDeleted, this, &MainWindow::RefreshScenarioList);
+    }
+}
+
+void MainWindow::installGraphScene(NodeGraphModel* model)
+{
+    if (!_graphView || !model) {
+        return;
+    }
+
+    auto* oldScene = _graphView->scene();
+    if (oldScene) {
+        static_cast<QGraphicsView*>(_graphView)->setScene(nullptr);
+        delete oldScene;
+    }
+
+    auto* scene = new QtNodes::DataFlowGraphicsScene(*model, this);
+    scene->setNodePainter(std::unique_ptr<QtNodes::AbstractNodePainter>(
+        new ExecutionAwareNodePainter(execStateModel_, model, scene)));
+    scene->setConnectionPainter(std::unique_ptr<QtNodes::AbstractConnectionPainter>(
+        new ExecutionAwareConnectionPainter(execStateModel_, model)));
+
+    connect(execStateModel_.get(), &ExecutionStateModel::stateChanged,
+            scene, [scene]() { scene->update(); });
+    connect(scene, &QtNodes::BasicGraphicsScene::nodeSelected,
+            this, &MainWindow::onNodeSelected);
+    connect(scene, &QGraphicsScene::selectionChanged,
+            this, &MainWindow::onSelectionChanged);
+
+    static_cast<QGraphicsView*>(_graphView)->setScene(scene);
+}
+
+NodeGraphModel* MainWindow::activeGraphModel() const
+{
+    return currentGraphModel_ ? currentGraphModel_ : _graphModel;
+}
+
+void MainWindow::updateGraphNavigation()
+{
+    if (loopBackButton_) {
+        loopBackButton_->setEnabled(!graphStack_.isEmpty());
+    }
+    if (graphBreadcrumbLabel_) {
+        QStringList labels;
+        labels << QStringLiteral("Root");
+        for (const auto& entry : graphStack_) {
+            if (entry.first != _graphModel && !entry.second.isEmpty()) {
+                labels << entry.second;
+            }
+        }
+        if (currentGraphModel_ != _graphModel && !currentGraphLabel_.isEmpty()) {
+            labels << currentGraphLabel_;
+        }
+        graphBreadcrumbLabel_->setText(QStringLiteral(" %1 ").arg(labels.join(QStringLiteral(" / "))));
+    }
 }
 
 void MainWindow::setPropertiesWidget(QWidget* w)
@@ -431,7 +516,8 @@ void MainWindow::setPropertiesWidget(QWidget* w)
 
 void MainWindow::onNodeSelected(QtNodes::NodeId nodeId)
 {
-    if (!_graphModel) { 
+    NodeGraphModel* model = activeGraphModel();
+    if (!model) {
         setPropertiesWidget(nullptr);
         // Clear and disable description edit
         if (descriptionEdit_) {
@@ -444,7 +530,7 @@ void MainWindow::onNodeSelected(QtNodes::NodeId nodeId)
     }
 
     // Fetch our ToolNodeDelegate for this nodeId
-    auto* delegate = _graphModel->delegateModel<ToolNodeDelegate>(nodeId);
+    auto* delegate = model->delegateModel<ToolNodeDelegate>(nodeId);
     if (!delegate) {
         setPropertiesWidget(nullptr);
         // Clear and disable description edit
@@ -499,6 +585,47 @@ void MainWindow::onSelectionChanged()
 
     // For now, take the first selected node
     onNodeSelected(*sel.begin());
+    refreshStageOutput();
+}
+
+void MainWindow::openChildGraph(const QString& bodyId, const QString& title, int graphKind)
+{
+    NodeGraphModel* model = activeGraphModel();
+    if (!model) {
+        return;
+    }
+
+    const auto kind = static_cast<NodeGraphModel::GraphKind>(graphKind);
+    NodeGraphModel* body = model->ensureSubgraph(bodyId, kind);
+    if (!body) {
+        return;
+    }
+
+    connectGraphModelSignals(body);
+    graphStack_.append(qMakePair(model, currentGraphLabel_));
+    currentGraphModel_ = body;
+    currentGraphLabel_ = title.isEmpty() ? tr("Scope Body") : title;
+
+    setPropertiesWidget(nullptr);
+    installGraphScene(body);
+    updateGraphNavigation();
+    if (stageOutputText_) {
+        stageOutputText_->setPlainText(tr("Editing scope body. Outputs are shown on the parent scope after execution."));
+    }
+}
+
+void MainWindow::navigateBackGraph()
+{
+    if (graphStack_.isEmpty()) {
+        return;
+    }
+    const auto entry = graphStack_.takeLast();
+    currentGraphModel_ = entry.first ? entry.first : _graphModel;
+    currentGraphLabel_ = entry.second.isEmpty() ? QStringLiteral("Root") : entry.second;
+
+    setPropertiesWidget(nullptr);
+    installGraphScene(currentGraphModel_);
+    updateGraphNavigation();
     refreshStageOutput();
 }
 
@@ -626,6 +753,12 @@ void MainWindow::onManageProviders()
     dialog.exec();
 }
 
+void MainWindow::onSyntaxHighlightingOptions()
+{
+    SyntaxHighlightingOptionsDialog dialog(this);
+    dialog.exec();
+}
+
 void MainWindow::onOpen()
 {
     QString fileName = QFileDialog::getOpenFileName(this,
@@ -643,23 +776,6 @@ void MainWindow::onOpen()
 
     const QByteArray data = file.readAll();
     file.close();
-
-    // Clear the stage output before loading
-    if (stageOutputText_) {
-        stageOutputText_->clear();
-    }
-
-    // Clear properties panel to avoid dangling widgets from nodes being deleted
-    setPropertiesWidget(nullptr);
-
-    // Clear existing graph before loading
-    if (_graphView && _graphView->scene()) {
-        if (auto* bscene = dynamic_cast<QtNodes::BasicGraphicsScene*>(_graphView->scene())) {
-            bscene->clearScene();
-        } else {
-            _graphView->scene()->clear();
-        }
-    }
 
     QJsonParseError parseErr{};
     const QJsonDocument doc = QJsonDocument::fromJson(data, &parseErr);
@@ -712,15 +828,40 @@ void MainWindow::onOpen()
     }
     migrated.insert(QStringLiteral("nodes"), nodesArray);
 
+    // Clear UI state only after the file has been parsed successfully.
+    if (stageOutputText_) {
+        stageOutputText_->clear();
+    }
+    setPropertiesWidget(nullptr);
+
+    graphStack_.clear();
+    currentGraphModel_ = _graphModel;
+    currentGraphLabel_ = QStringLiteral("Root");
+    connectedGraphModels_.clear();
+    connectedGraphModels_.insert(_graphModel);
+    updateGraphNavigation();
+
+    // Detach the scene before mutating the model. Otherwise loaded delegates can
+    // return embedded widgets that are still owned by proxies in the old scene.
+    if (_graphView && _graphView->scene()) {
+        auto* oldScene = _graphView->scene();
+        static_cast<QGraphicsView*>(_graphView)->setScene(nullptr);
+        delete oldScene;
+    }
+
     try {
         if (_graphModel) {
             _graphModel->load(migrated);
         }
     } catch (const std::exception& e) {
+        installGraphScene(_graphModel);
+        updateGraphNavigation();
         QMessageBox::critical(this, tr("Open Failed"),
                               tr("An error occurred while loading the pipeline:\n%1").arg(QString::fromUtf8(e.what())));
         return;
     } catch (...) {
+        installGraphScene(_graphModel);
+        updateGraphNavigation();
         QMessageBox::critical(this, tr("Open Failed"),
                               tr("An unknown error occurred while loading the pipeline."));
         return;
@@ -728,6 +869,9 @@ void MainWindow::onOpen()
 
     // Clear all TextOutputNode instances after loading
     clearAllTextOutputNodes();
+
+    installGraphScene(_graphModel);
+    updateGraphNavigation();
 
     m_currentFileName = fileName;
     RefreshScenarioList();
@@ -752,8 +896,15 @@ void MainWindow::onOpen()
 void MainWindow::onClearCanvas()
 {
     // Clear all nodes and connections from the graph model
-    if (_graphModel) {
-        _graphModel->clear();
+    if (NodeGraphModel* model = activeGraphModel()) {
+        model->clear();
+    }
+
+    if (currentGraphModel_ == _graphModel) {
+        graphStack_.clear();
+        connectedGraphModels_.clear();
+        connectedGraphModels_.insert(_graphModel);
+        updateGraphNavigation();
     }
 
     // Reset the properties panel so it doesn't hold stale pointers
@@ -764,7 +915,8 @@ void MainWindow::onDeleteSelected()
 {
     // Get the scene
     auto* scene = qobject_cast<QtNodes::DataFlowGraphicsScene*>(_graphView ? _graphView->scene() : nullptr);
-    if (!scene || !_graphModel) {
+    NodeGraphModel* model = activeGraphModel();
+    if (!scene || !model) {
         return;
     }
 
@@ -772,14 +924,14 @@ void MainWindow::onDeleteSelected()
     const auto selectedItems = scene->selectedItems();
     for (auto* item : selectedItems) {
         if (auto* connectionGraphics = dynamic_cast<QtNodes::ConnectionGraphicsObject*>(item)) {
-            _graphModel->deleteConnection(connectionGraphics->connectionId());
+            model->deleteConnection(connectionGraphics->connectionId());
         }
     }
 
     // Get selected nodes and delete them
     const auto selectedNodes = scene->selectedNodes();
     for (const auto& nodeId : selectedNodes) {
-        _graphModel->deleteNode(nodeId);
+        model->deleteNode(nodeId);
     }
 
     // Clear the properties panel if any deleted node was being displayed
@@ -882,13 +1034,14 @@ void MainWindow::onNodeRepaint(const QUuid& nodeUuid)
     // Find the node by deterministic execution UUID and repaint its graphics object
     auto *qscene = _graphView ? _graphView->scene() : nullptr;
     auto *scene = qscene ? dynamic_cast<QtNodes::BasicGraphicsScene*>(qscene) : nullptr;
-    if (!scene || !_graphModel)
+    NodeGraphModel* model = activeGraphModel();
+    if (!scene || !model)
         return;
 
     QtNodes::NodeId foundId = 0;
     bool found = false;
-    for (auto nid : _graphModel->allNodeIds()) {
-        if (ExecIds::nodeUuid(nid) == nodeUuid) {
+    for (auto nid : model->allNodeIds()) {
+        if (ExecIds::nodeUuid(model->executionScopeKey(), nid) == nodeUuid) {
             foundId = nid;
             found = true;
             break;
@@ -933,7 +1086,10 @@ void MainWindow::refreshStageOutput()
 
     // Exactly one node selected
     const QtNodes::NodeId nodeId = *selectedNodes.begin();
-    const DataPacket packet = execEngine_->nodeOutput(nodeId);
+    NodeGraphModel* model = activeGraphModel();
+    const DataPacket packet = (model && model != _graphModel)
+        ? model->nodeOutput(nodeId)
+        : execEngine_->nodeOutput(nodeId);
 
     if (packet.isEmpty()) {
         stageOutputText_->setPlainText(tr("No output data available for this node.\n(Node may not have been executed yet.)"));
@@ -980,14 +1136,18 @@ void MainWindow::refreshStageOutput()
 
 void MainWindow::clearAllTextOutputNodes()
 {
-    if (!_graphModel) {
+    clearTextOutputNodes(_graphModel);
+}
+
+void MainWindow::clearTextOutputNodes(NodeGraphModel* model)
+{
+    if (!model) {
         return;
     }
 
-    // Iterate through all nodes in the graph
-    for (auto nodeId : _graphModel->allNodeIds()) {
+    for (auto nodeId : model->allNodeIds()) {
         // Get the delegate for this node
-        auto* delegate = _graphModel->delegateModel<ToolNodeDelegate>(nodeId);
+        auto* delegate = model->delegateModel<ToolNodeDelegate>(nodeId);
         if (!delegate) {
             continue;
         }
@@ -1002,6 +1162,10 @@ void MainWindow::clearAllTextOutputNodes()
         if (auto* textOutputNode = dynamic_cast<TextOutputNode*>(node.get())) {
             textOutputNode->clearOutput();
         }
+    }
+
+    for (NodeGraphModel* child : model->subgraphModels()) {
+        clearTextOutputNodes(child);
     }
 }
 

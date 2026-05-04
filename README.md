@@ -9,13 +9,13 @@ Cognitive Pipelines is a Qt 6 desktop application for composing and running node
 - Asynchronous graph execution via `ExecutionEngine` and `QtConcurrent`
 - Built-in node categories:
   - `Input / Output`: text, ingest input, image, PDF-to-image, human input, text output, vault output
-  - `Text Utilities`: prompt building
+  - `Text Utilities`: prompt building and text chunking
   - `Visualization`: Mermaid rendering
   - `External Tools`: process execution and Python script execution
-  - `Scripting`: universal scripting via the bundled QuickJS runtime
+  - `Scripting`: universal scripting via the bundled QuickJS runtime and optional CREXX runtime
   - `AI Services`: universal LLM node and image generation
   - `Persistence` / `Retrieval`: database, RAG indexing, and RAG querying
-  - `Control Flow`: conditional router, loop, loop-until, retry loop
+  - `Control Flow`: conditional router, transform scopes, and iterator scopes
 - LLM backends currently registered in code:
   - OpenAI
   - Google
@@ -31,6 +31,7 @@ Cognitive Pipelines is a Qt 6 desktop application for composing and running node
 - The node exposes explicit typed outputs for `markdown`, `text`, `image`, and `pdf`, plus `file_path`, `mime_type`, and `kind` metadata so downstream routing can stay simple.
 - `Vault Output` is a markdown writer for knowledge-vault workflows. It sends the incoming markdown, the current vault folder shape, and a routing prompt to the selected LLM backend, then writes the note as `.md` into the chosen subfolder.
 - A typical capture pipeline is now `Ingest Input -> route by typed pin -> processing -> Vault Output`.
+- Repeating and validation workflows use `Transform Scope` and `Iterator Scope` parent nodes with nested body canvases. See [`docs/ScopeNodes_UserGuide.md`](docs/ScopeNodes_UserGuide.md) for the boundary nodes and worked examples.
 
 ## Dependencies
 
@@ -53,6 +54,8 @@ Definitive dependencies come from [`CMakeLists.txt`](./CMakeLists.txt) and the s
   - `DBus`
 - QtNodes via CMake `FetchContent` (`paceholder/nodeeditor`, tag `3.0.12`)
 - Bundled QuickJS sources under `third_party/quickjs`
+- Optional CREXX scripting support through `crexxsaa.h`, `libcrexxsaa`, `rxc`, `rxas`, and `library.rxbin`. CMake searches `CREXX_ROOT`, `$CREXX_ROOT`, a sibling `../CREXX` checkout, and installed locations. If any runtime artifact is missing, the `crexx` engine is simply not registered.
+- Optional DSLSH syntax highlighting. CMake searches `DSLSH_ROOT`, `$DSLSH_ROOT`, a sibling `../DSL-Syntax-Highlighter` checkout, and installed locations. If unavailable, the Universal Script editor quietly falls back to plain text. External DSLSH parser commands are configured under `Settings -> Syntax Highlighting Options...`; blank entries use the built-in fallback rules, and CREXX `rxc` commands automatically run in `--syntaxhighlight` mode.
 - Boost headers
 - `cpr`
 - OpenSSL
@@ -102,6 +105,22 @@ cmake -S . -B build \
 
 cmake --build build --target CognitivePipelines -j 8
 ```
+
+CREXX is enabled automatically when the runtime artifacts are available. For CI or clean machines, point `CREXX_ROOT` at a prepared CREXX checkout/build:
+
+```bash
+cmake -S . -B build -DCREXX_ROOT=/path/to/CREXX
+```
+
+`-DCP_FETCH_CREXX_FROM_GITHUB=ON` can fetch the CREXX source from GitHub `master`, but headers alone are not enough to enable execution; `libcrexxsaa`, `rxc`, `rxas`, and `library.rxbin` must also be present.
+
+Syntax highlighting can also be built from a sibling or prepared checkout:
+
+```bash
+cmake -S . -B build -DDSLSH_ROOT=/path/to/DSL-Syntax-Highlighter
+```
+
+`-DCP_FETCH_DSLSH_FROM_GITHUB=ON` can fetch DSL-Syntax-Highlighter from GitHub `master`. The build uses only the DSLSH core library; parser adapters, tools, examples, and DSLSH's own tests are left off for this application.
 
 ### Build with vcpkg
 

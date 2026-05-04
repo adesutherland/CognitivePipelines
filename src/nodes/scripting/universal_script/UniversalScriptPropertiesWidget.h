@@ -8,10 +8,13 @@
 
 #include <QWidget>
 #include <QString>
+#include <memory>
 
 class QComboBox;
 class QPlainTextEdit;
 class QCheckBox;
+class QPushButton;
+class ScriptSyntaxHighlighter;
 
 /**
  * @brief Properties widget for the Universal Script Node.
@@ -22,7 +25,7 @@ class UniversalScriptPropertiesWidget : public QWidget {
 
 public:
     explicit UniversalScriptPropertiesWidget(QWidget* parent = nullptr);
-    ~UniversalScriptPropertiesWidget() override = default;
+    ~UniversalScriptPropertiesWidget() override;
 
     /**
      * @brief Sets the script content in the editor.
@@ -38,6 +41,11 @@ public:
      * @brief Sets the fan-out state.
      */
     void setFanOut(bool enabled);
+
+    /**
+     * @brief Sets whether syntax highlighting should be applied to the editor.
+     */
+    void setSyntaxHighlighting(bool enabled);
 
     /**
      * @brief Returns the current script content.
@@ -65,12 +73,26 @@ signals:
      */
     void fanOutChanged(bool enabled);
 
+    /**
+     * @brief Emitted when syntax highlighting is toggled.
+     */
+    void syntaxHighlightingChanged(bool enabled);
+
 private slots:
     void onScriptTextChanged();
     void onEngineIndexChanged(int index);
+    void onSyntaxHighlightingToggled(bool enabled);
+    void onAddExampleClicked();
 
 private:
+    void applySyntaxHighlighter();
+    void maybeInstallTemplateForEngine(const QString& engineId, bool notify);
+    void updateAddExampleVisibility();
+
     QComboBox* m_engineCombo;
     QCheckBox* m_fanOutCheck;
+    QCheckBox* m_syntaxHighlightCheck;
+    QPushButton* m_addExampleButton;
     QPlainTextEdit* m_scriptEditor;
+    std::unique_ptr<ScriptSyntaxHighlighter> m_highlighter;
 };

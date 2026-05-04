@@ -160,7 +160,325 @@ find_package(GTest REQUIRED)
 # Explicitly find transitive dependencies as good practice
 find_package(ZLIB REQUIRED)
 find_package(OpenSSL REQUIRED)
+include(GNUInstallDirs)
 
+# DSLSH syntax highlighting. The editor works without it; when a sibling
+# checkout or installed library is present, we use its emergency parser as the
+# Universal Script editor's syntax backend.
+option(CP_ENABLE_DSLSH "Enable DSLSH-backed script syntax highlighting when available" ON)
+option(CP_FETCH_DSLSH_FROM_GITHUB "Fetch DSL-Syntax-Highlighter from GitHub master when no local checkout is present" OFF)
+set(DSLSH_ROOT "" CACHE PATH "Path to a DSL-Syntax-Highlighter checkout or installation")
+
+set(CP_HAS_DSLSH OFF)
+set(CP_DSLSH_TARGET "")
+
+if(CP_ENABLE_DSLSH)
+    set(_cp_dslsh_roots "")
+    foreach(_cp_dslsh_root IN ITEMS
+            "${DSLSH_ROOT}"
+            "$ENV{DSLSH_ROOT}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../DSL-Syntax-Highlighter"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/DSL-Syntax-Highlighter")
+        if(_cp_dslsh_root)
+            list(APPEND _cp_dslsh_roots "${_cp_dslsh_root}")
+        endif()
+    endforeach()
+
+    if(CP_FETCH_DSLSH_FROM_GITHUB)
+        include(FetchContent)
+        FetchContent_Declare(
+            DSL_Syntax_Highlighter
+            GIT_REPOSITORY https://github.com/adesutherland/DSL-Syntax-Highlighter.git
+            GIT_TAG master
+        )
+        FetchContent_GetProperties(DSL_Syntax_Highlighter)
+        if(NOT dsl_syntax_highlighter_POPULATED)
+            message(STATUS "Fetching DSL-Syntax-Highlighter source from GitHub master")
+            FetchContent_Populate(DSL_Syntax_Highlighter)
+        endif()
+        if(dsl_syntax_highlighter_SOURCE_DIR)
+            list(APPEND _cp_dslsh_roots "${dsl_syntax_highlighter_SOURCE_DIR}")
+        endif()
+    endif()
+
+    set(_cp_dslsh_source_dir "")
+    foreach(_cp_dslsh_root IN LISTS _cp_dslsh_roots)
+        if(EXISTS "${_cp_dslsh_root}/CMakeLists.txt"
+                AND EXISTS "${_cp_dslsh_root}/codebuffer/dslsyntax_editor.h")
+            set(_cp_dslsh_source_dir "${_cp_dslsh_root}")
+            break()
+        endif()
+    endforeach()
+
+    if(_cp_dslsh_source_dir AND CMAKE_VERSION VERSION_GREATER_EQUAL 3.29)
+        set(_cp_saved_build_shared_libs "${BUILD_SHARED_LIBS}")
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
+        set(DSLSH_BUILD_CORE ON CACHE BOOL "Build DSLSH middleware libraries" FORCE)
+        set(DSLSH_BUILD_TOOLS OFF CACHE BOOL "Build DSLSH tools" FORCE)
+        set(DSLSH_BUILD_EXAMPLES OFF CACHE BOOL "Build DSLSH examples" FORCE)
+        set(DSLSH_BUILD_PARSERS OFF CACHE BOOL "Build DSLSH parser adapters" FORCE)
+        set(DSLSH_BUILD_TESTS OFF CACHE BOOL "Build DSLSH tests" FORCE)
+        set(DSLSH_INSTALL OFF CACHE BOOL "Install DSLSH build products" FORCE)
+        add_subdirectory("${_cp_dslsh_source_dir}" "${CMAKE_BINARY_DIR}/_deps/dslsh-build" EXCLUDE_FROM_ALL)
+        set(BUILD_SHARED_LIBS "${_cp_saved_build_shared_libs}" CACHE BOOL "Build shared libraries" FORCE)
+
+        if(TARGET DSLSH::editor)
+            set(CP_HAS_DSLSH ON)
+            set(CP_DSLSH_TARGET DSLSH::editor)
+            message(STATUS "DSLSH syntax highlighting enabled from ${_cp_dslsh_source_dir}")
+        endif()
+    elseif(_cp_dslsh_source_dir)
+        message(STATUS "DSLSH source found but requires CMake 3.29+; syntax highlighting disabled")
+    endif()
+
+    if(NOT CP_HAS_DSLSH)
+        set(_cp_dslsh_include_hints "")
+        set(_cp_dslsh_library_hints "")
+        foreach(_cp_dslsh_root IN LISTS _cp_dslsh_roots)
+            list(APPEND _cp_dslsh_include_hints
+                "${_cp_dslsh_root}/codebuffer"
+                "${_cp_dslsh_root}/include"
+                "${_cp_dslsh_root}/include/dslsyntax")
+            list(APPEND _cp_dslsh_library_hints
+                "${_cp_dslsh_root}/cmake-build-debug/codebuffer"
+                "${_cp_dslsh_root}/cmake-build-debug/lib"
+                "${_cp_dslsh_root}/build/lib"
+                "${_cp_dslsh_root}/lib")
+        endforeach()
+
+        find_path(CP_DSLSH_INCLUDE_DIR
+            NAMES dslsyntax_editor.h
+            HINTS ${_cp_dslsh_include_hints})
+        find_library(CP_DSLSH_EDITOR_LIBRARY
+            NAMES dslsyntax_editor
+            HINTS ${_cp_dslsh_library_hints})
+
+        if(CP_DSLSH_INCLUDE_DIR AND CP_DSLSH_EDITOR_LIBRARY)
+            add_library(dslsyntax_editor_imported UNKNOWN IMPORTED)
+            set_target_properties(dslsyntax_editor_imported PROPERTIES
+                IMPORTED_LOCATION "${CP_DSLSH_EDITOR_LIBRARY}"
+                INTERFACE_INCLUDE_DIRECTORIES "${CP_DSLSH_INCLUDE_DIR}")
+            set(CP_HAS_DSLSH ON)
+            set(CP_DSLSH_TARGET dslsyntax_editor_imported)
+            message(STATUS "DSLSH syntax highlighting enabled from installed library")
+        else()
+            message(STATUS "DSLSH syntax highlighting disabled; no usable DSLSH core found")
+        endif()
+    endif()
+endif()
+
+# CREXX scripting runtime. This is intentionally opportunistic: local developer
+# checkouts and CI images can provide CREXX artifacts, while user builds without
+# CREXX still configure and run with the other scripting engines.
+option(CP_ENABLE_CREXX "Enable CREXX Universal Script support when a usable CREXX runtime is found" ON)
+option(CP_FETCH_CREXX_FROM_GITHUB "Fetch CREXX source from GitHub master when no local checkout is present; runtime artifacts are still required" OFF)
+set(CREXX_ROOT "" CACHE PATH "Path to a CREXX checkout or installation")
+
+set(CP_HAS_CREXX OFF)
+set(CP_CREXX_RUNTIME_SOURCES "")
+
+if(CP_ENABLE_CREXX)
+    set(_cp_crexx_roots "")
+    foreach(_cp_crexx_root IN ITEMS
+            "${CREXX_ROOT}"
+            "$ENV{CREXX_ROOT}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../CREXX"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/CREXX")
+        if(_cp_crexx_root)
+            list(APPEND _cp_crexx_roots "${_cp_crexx_root}")
+        endif()
+    endforeach()
+
+    if(CP_FETCH_CREXX_FROM_GITHUB)
+        include(FetchContent)
+        FetchContent_Declare(
+            CREXX
+            GIT_REPOSITORY https://github.com/adesutherland/CREXX.git
+            GIT_TAG master
+        )
+        FetchContent_GetProperties(CREXX)
+        if(NOT crexx_POPULATED)
+            message(STATUS "Fetching CREXX source from GitHub master")
+            FetchContent_Populate(CREXX)
+        endif()
+        if(crexx_SOURCE_DIR)
+            list(APPEND _cp_crexx_roots "${crexx_SOURCE_DIR}")
+        endif()
+    endif()
+
+    set(_cp_crexx_include_hints "")
+    set(_cp_crexx_runtime_hints "")
+    foreach(_cp_crexx_root IN LISTS _cp_crexx_roots)
+        list(APPEND _cp_crexx_include_hints
+            "${_cp_crexx_root}/interpreter"
+            "${_cp_crexx_root}/include"
+            "${_cp_crexx_root}")
+        list(APPEND _cp_crexx_runtime_hints
+            "${_cp_crexx_root}/cmake-build-debug/bin"
+            "${_cp_crexx_root}/cmake-build-release/bin"
+            "${_cp_crexx_root}/cmake-build-relwithdebinfo/bin"
+            "${_cp_crexx_root}/build/bin"
+            "${_cp_crexx_root}/bin"
+            "${_cp_crexx_root}/lib")
+    endforeach()
+
+    find_path(CP_CREXX_INCLUDE_DIR
+        NAMES crexxsaa.h
+        HINTS ${_cp_crexx_include_hints})
+    find_library(CP_CREXX_LIBRARY_PATH
+        NAMES crexxsaa libcrexxsaa
+        HINTS ${_cp_crexx_runtime_hints})
+
+    if(CP_CREXX_LIBRARY_PATH)
+        get_filename_component(CP_CREXX_LIBRARY_DIR "${CP_CREXX_LIBRARY_PATH}" DIRECTORY)
+        list(APPEND _cp_crexx_runtime_hints "${CP_CREXX_LIBRARY_DIR}")
+    endif()
+
+    find_program(CP_CREXX_RXC_PATH
+        NAMES rxc rxc.exe
+        HINTS ${_cp_crexx_runtime_hints})
+    find_program(CP_CREXX_RXAS_PATH
+        NAMES rxas rxas.exe
+        HINTS ${_cp_crexx_runtime_hints})
+    find_file(CP_CREXX_LIBRARY_RXBIN
+        NAMES library.rxbin
+        HINTS ${_cp_crexx_runtime_hints})
+
+    if(CP_CREXX_INCLUDE_DIR
+            AND CP_CREXX_LIBRARY_PATH
+            AND CP_CREXX_RXC_PATH
+            AND CP_CREXX_RXAS_PATH
+            AND CP_CREXX_LIBRARY_RXBIN)
+        set(CP_HAS_CREXX ON)
+        get_filename_component(CP_CREXX_RUNTIME_DIR "${CP_CREXX_LIBRARY_RXBIN}" DIRECTORY)
+        get_filename_component(CP_CREXX_LIBRARY_NAME "${CP_CREXX_LIBRARY_PATH}" NAME)
+        get_filename_component(CP_CREXX_RXC_NAME "${CP_CREXX_RXC_PATH}" NAME)
+        get_filename_component(CP_CREXX_RXAS_NAME "${CP_CREXX_RXAS_PATH}" NAME)
+        file(GLOB CP_CREXX_RXBIN_FILES CONFIGURE_DEPENDS "${CP_CREXX_RUNTIME_DIR}/*.rxbin")
+
+        add_library(crexxsaa::crexxsaa UNKNOWN IMPORTED)
+        set_target_properties(crexxsaa::crexxsaa PROPERTIES
+            IMPORTED_LOCATION "${CP_CREXX_LIBRARY_PATH}"
+            INTERFACE_INCLUDE_DIRECTORIES "${CP_CREXX_INCLUDE_DIR}")
+
+        set(CP_CREXX_RUNTIME_SOURCES
+            ${SRC_DIR}/scripting/runtimes/CrexxRuntime.cpp
+            ${SRC_DIR}/scripting/runtimes/CrexxRuntime.h)
+
+        message(STATUS "CREXX scripting enabled")
+        message(STATUS "  CREXX include: ${CP_CREXX_INCLUDE_DIR}")
+        message(STATUS "  CREXX library: ${CP_CREXX_LIBRARY_PATH}")
+        message(STATUS "  CREXX runtime: ${CP_CREXX_RUNTIME_DIR}")
+    else()
+        message(STATUS "CREXX scripting disabled; missing one or more runtime artifacts")
+        message(STATUS "  crexxsaa.h: ${CP_CREXX_INCLUDE_DIR}")
+        message(STATUS "  libcrexxsaa: ${CP_CREXX_LIBRARY_PATH}")
+        message(STATUS "  rxc: ${CP_CREXX_RXC_PATH}")
+        message(STATUS "  rxas: ${CP_CREXX_RXAS_PATH}")
+        message(STATUS "  library.rxbin: ${CP_CREXX_LIBRARY_RXBIN}")
+    endif()
+endif()
+
+function(cp_escape_define_value out_var value)
+    set(_escaped "${value}")
+    string(REPLACE "\\" "\\\\" _escaped "${_escaped}")
+    string(REPLACE "\"" "\\\"" _escaped "${_escaped}")
+    set(${out_var} "${_escaped}" PARENT_SCOPE)
+endfunction()
+
+if(CP_HAS_CREXX)
+    cp_escape_define_value(CP_CREXX_RXC_PATH_DEFINE "${CP_CREXX_RXC_PATH}")
+    cp_escape_define_value(CP_CREXX_RXAS_PATH_DEFINE "${CP_CREXX_RXAS_PATH}")
+    cp_escape_define_value(CP_CREXX_LIBRARY_RXBIN_DEFINE "${CP_CREXX_LIBRARY_RXBIN}")
+    cp_escape_define_value(CP_CREXX_RUNTIME_DIR_DEFINE "${CP_CREXX_RUNTIME_DIR}")
+endif()
+
+function(cp_configure_crexx_target target_name)
+    if(NOT CP_HAS_CREXX OR NOT TARGET ${target_name})
+        return()
+    endif()
+
+    target_sources(${target_name} PRIVATE ${CP_CREXX_RUNTIME_SOURCES})
+    target_link_libraries(${target_name} PRIVATE crexxsaa::crexxsaa)
+    target_include_directories(${target_name} PRIVATE ${CP_CREXX_INCLUDE_DIR})
+    target_compile_definitions(${target_name} PRIVATE
+        CP_HAS_CREXX=1
+        CP_CREXX_RXC_PATH="${CP_CREXX_RXC_PATH_DEFINE}"
+        CP_CREXX_RXAS_PATH="${CP_CREXX_RXAS_PATH_DEFINE}"
+        CP_CREXX_LIBRARY_RXBIN="${CP_CREXX_LIBRARY_RXBIN_DEFINE}"
+        CP_CREXX_RUNTIME_DIR="${CP_CREXX_RUNTIME_DIR_DEFINE}")
+
+    set_property(TARGET ${target_name} APPEND PROPERTY BUILD_RPATH "${CP_CREXX_LIBRARY_DIR}")
+    if(APPLE)
+        set_property(TARGET ${target_name} APPEND PROPERTY INSTALL_RPATH "@executable_path/../Frameworks")
+    elseif(UNIX)
+        set_property(TARGET ${target_name} APPEND PROPERTY INSTALL_RPATH "$ORIGIN/../${CMAKE_INSTALL_LIBDIR};$ORIGIN")
+    else()
+        set_property(TARGET ${target_name} APPEND PROPERTY INSTALL_RPATH "${CP_CREXX_LIBRARY_DIR}")
+    endif()
+endfunction()
+
+function(cp_bundle_crexx_runtime target_name)
+    if(NOT CP_HAS_CREXX OR NOT TARGET ${target_name})
+        return()
+    endif()
+
+    if(APPLE)
+        set(_crexx_resource_dir "$<TARGET_BUNDLE_DIR:${target_name}>/Contents/Resources/crexx")
+        set(_crexx_framework_dir "$<TARGET_BUNDLE_DIR:${target_name}>/Contents/Frameworks")
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${_crexx_resource_dir}" "${_crexx_framework_dir}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CP_CREXX_LIBRARY_PATH}" "${_crexx_framework_dir}/${CP_CREXX_LIBRARY_NAME}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CP_CREXX_RXC_PATH}" "${_crexx_resource_dir}/${CP_CREXX_RXC_NAME}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CP_CREXX_RXAS_PATH}" "${_crexx_resource_dir}/${CP_CREXX_RXAS_NAME}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CP_CREXX_RXBIN_FILES} "${_crexx_resource_dir}"
+            COMMAND /bin/chmod +x "${_crexx_resource_dir}/${CP_CREXX_RXC_NAME}" "${_crexx_resource_dir}/${CP_CREXX_RXAS_NAME}"
+            COMMENT "Bundling CREXX runtime for ${target_name}"
+            VERBATIM)
+
+        find_program(CP_CODESIGN_EXECUTABLE codesign)
+        if(CP_CODESIGN_EXECUTABLE)
+            add_custom_command(TARGET ${target_name} POST_BUILD
+                COMMAND "${CP_CODESIGN_EXECUTABLE}" --force --sign "${APPLE_SIGN_IDENTITY}" "${_crexx_framework_dir}/${CP_CREXX_LIBRARY_NAME}"
+                COMMAND "${CP_CODESIGN_EXECUTABLE}" --force --sign "${APPLE_SIGN_IDENTITY}" "${_crexx_resource_dir}/${CP_CREXX_RXC_NAME}"
+                COMMAND "${CP_CODESIGN_EXECUTABLE}" --force --sign "${APPLE_SIGN_IDENTITY}" "${_crexx_resource_dir}/${CP_CREXX_RXAS_NAME}"
+                COMMENT "Codesigning CREXX runtime for ${target_name}"
+                VERBATIM)
+        endif()
+    else()
+        set(_crexx_runtime_dir "$<TARGET_FILE_DIR:${target_name}>/crexx")
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${_crexx_runtime_dir}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CP_CREXX_LIBRARY_PATH}" "$<TARGET_FILE_DIR:${target_name}>/${CP_CREXX_LIBRARY_NAME}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CP_CREXX_RXC_PATH}" "${_crexx_runtime_dir}/${CP_CREXX_RXC_NAME}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CP_CREXX_RXAS_PATH}" "${_crexx_runtime_dir}/${CP_CREXX_RXAS_NAME}"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CP_CREXX_RXBIN_FILES} "${_crexx_runtime_dir}"
+            COMMENT "Bundling CREXX runtime for ${target_name}"
+            VERBATIM)
+    endif()
+endfunction()
+
+set(CP_SCRIPT_EDITOR_SOURCES
+    ${SRC_DIR}/scripting/highlighting/ScriptEditorWidget.cpp
+    ${SRC_DIR}/scripting/highlighting/ScriptEditorWidget.h
+    ${SRC_DIR}/scripting/highlighting/ScriptHighlighterConfig.cpp
+    ${SRC_DIR}/scripting/highlighting/ScriptHighlighterConfig.h
+    ${SRC_DIR}/scripting/highlighting/ScriptSyntaxHighlighter.cpp
+    ${SRC_DIR}/scripting/highlighting/ScriptSyntaxHighlighter.h
+    ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptTemplates.h)
+
+function(cp_configure_script_editor_target target_name)
+    if(NOT TARGET ${target_name})
+        return()
+    endif()
+
+    target_sources(${target_name} PRIVATE ${CP_SCRIPT_EDITOR_SOURCES})
+
+    if(CP_HAS_DSLSH)
+        target_link_libraries(${target_name} PRIVATE ${CP_DSLSH_TARGET})
+        target_compile_definitions(${target_name} PRIVATE CP_HAS_DSLSH=1)
+    endif()
+endfunction()
 
 # Windows resource file for application icon
 if(WIN32)
@@ -231,6 +549,10 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.h
     ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.cpp
     ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.h
+    ${SRC_DIR}/nodes/text/text_chunker/TextChunkerNode.cpp
+    ${SRC_DIR}/nodes/text/text_chunker/TextChunkerNode.h
+    ${SRC_DIR}/nodes/text/text_chunker/TextChunkerPropertiesWidget.cpp
+    ${SRC_DIR}/nodes/text/text_chunker/TextChunkerPropertiesWidget.h
     ${SRC_DIR}/nodes/io/text_input/TextInputNode.cpp
     ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
     ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
@@ -288,18 +610,26 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
     ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
     ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
-    ${SRC_DIR}/nodes/control_flow/loop/LoopNode.cpp
-    ${SRC_DIR}/nodes/control_flow/loop/LoopNode.h
-    ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.cpp
-    ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.h
-    ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.cpp
-    ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.h
-    ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.cpp
-    ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.h
-    ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.cpp
-    ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.h
-    ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.cpp
-    ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.h
+    ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.h
+    ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.h
+    ${SRC_DIR}/nodes/control_flow/scope/TransformScopeNode.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/TransformScopeNode.h
+    ${SRC_DIR}/nodes/control_flow/scope/TransformScopePropertiesWidget.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/TransformScopePropertiesWidget.h
+    ${SRC_DIR}/nodes/control_flow/scope/GetInputNode.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/GetInputNode.h
+    ${SRC_DIR}/nodes/control_flow/scope/SetOutputNode.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/SetOutputNode.h
+    ${SRC_DIR}/nodes/control_flow/scope/IteratorScopeNode.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/IteratorScopeNode.h
+    ${SRC_DIR}/nodes/control_flow/scope/IteratorScopePropertiesWidget.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/IteratorScopePropertiesWidget.h
+    ${SRC_DIR}/nodes/control_flow/scope/GetItemNode.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/GetItemNode.h
+    ${SRC_DIR}/nodes/control_flow/scope/SetItemResultNode.cpp
+    ${SRC_DIR}/nodes/control_flow/scope/SetItemResultNode.h
     ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptNode.cpp
     ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptNode.h
     ${SRC_DIR}/nodes/scripting/universal_script/UniversalScriptPropertiesWidget.cpp
@@ -318,6 +648,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/app/dialogs/CredentialsDialog.h
     ${SRC_DIR}/app/dialogs/ProviderManagementDialog.cpp
     ${SRC_DIR}/app/dialogs/ProviderManagementDialog.h
+    ${SRC_DIR}/app/dialogs/SyntaxHighlightingOptionsDialog.cpp
+    ${SRC_DIR}/app/dialogs/SyntaxHighlightingOptionsDialog.h
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/resources.qrc
     ${CMAKE_CURRENT_SOURCE_DIR}/resources.qrc
     ${qtnodes_SOURCE_DIR}/resources/resources.qrc
@@ -348,6 +680,10 @@ target_link_libraries(CognitivePipelines PRIVATE
     cpr::cpr
     quickjs
 )
+
+cp_configure_crexx_target(CognitivePipelines)
+cp_bundle_crexx_runtime(CognitivePipelines)
+cp_configure_script_editor_target(CognitivePipelines)
 
 # Define build information macros for use in C++
 # Capture short git commit hash (fallback to "unknown" if not available)
@@ -383,11 +719,18 @@ elseif(APPLE)
 endif()
 
 # Install rules
-include(GNUInstallDirs)
 install(TARGETS CognitivePipelines
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     BUNDLE DESTINATION .
 )
+
+if(CP_HAS_CREXX)
+    install(FILES "${CP_CREXX_LIBRARY_PATH}" DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    install(PROGRAMS "${CP_CREXX_RXC_PATH}" "${CP_CREXX_RXAS_PATH}"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}/crexx)
+    install(FILES ${CP_CREXX_RXBIN_FILES}
+        DESTINATION ${CMAKE_INSTALL_BINDIR}/crexx)
+endif()
 
 # CPack setup for simple cross-platform installers
 include(InstallRequiredSystemLibraries)
@@ -448,10 +791,8 @@ if(ENABLE_TESTING)
             tests/test_ziggy_repro.cpp
             tests/test_conditional_router.cpp
             tests/test_router_execution.cpp
-            tests/test_loop_node.cpp
-            tests/test_loop_integration.cpp
+            tests/test_scope_nodes.cpp
             tests/test_execution_control.cpp
-            tests/test_loop_until.cpp
             tests/test_model_caps.cpp
             tests/test_universal_caps.cpp
             tests/test_dynamic_discovery.cpp
@@ -481,6 +822,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.h
             ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.cpp
             ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.h
+            ${SRC_DIR}/nodes/text/text_chunker/TextChunkerNode.cpp
+            ${SRC_DIR}/nodes/text/text_chunker/TextChunkerNode.h
+            ${SRC_DIR}/nodes/text/text_chunker/TextChunkerPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/text/text_chunker/TextChunkerPropertiesWidget.h
             ${SRC_DIR}/nodes/io/text_input/TextInputNode.cpp
             ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
             ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
@@ -529,6 +874,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/app/dialogs/CredentialsDialog.h
             ${SRC_DIR}/app/dialogs/ProviderManagementDialog.cpp
             ${SRC_DIR}/app/dialogs/ProviderManagementDialog.h
+            ${SRC_DIR}/app/dialogs/SyntaxHighlightingOptionsDialog.cpp
+            ${SRC_DIR}/app/dialogs/SyntaxHighlightingOptionsDialog.h
             ${SRC_DIR}/nodes/external_tools/process/ProcessNode.cpp
             ${SRC_DIR}/nodes/external_tools/process/ProcessNode.h
             ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.cpp
@@ -557,19 +904,26 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
-            ${SRC_DIR}/nodes/control_flow/loop/LoopNode.cpp
-            ${SRC_DIR}/nodes/control_flow/loop/LoopNode.h
-            ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.cpp
-            ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.h
-            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.cpp
-            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.h
-            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.cpp
-            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.h
-            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.cpp
-            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.h
-            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.cpp
-            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.h
-            tests/test_retry_loop_node.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.h
+            ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.h
+            ${SRC_DIR}/nodes/control_flow/scope/TransformScopeNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/TransformScopeNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/TransformScopePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/TransformScopePropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/scope/GetInputNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/GetInputNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/SetOutputNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/SetOutputNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/IteratorScopeNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/IteratorScopeNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/IteratorScopePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/IteratorScopePropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/scope/GetItemNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/GetItemNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/SetItemResultNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/SetItemResultNode.h
             ${SRC_DIR}/graph/ExecutionAwarePainters.cpp
             ${SRC_DIR}/execution/ExecutionStateModel.cpp
             ${SRC_DIR}/nodes/ai/universal_llm/UniversalLLMNode.cpp
@@ -630,6 +984,13 @@ if(ENABLE_TESTING)
             Boost::boost
             quickjs
     )
+    cp_configure_crexx_target(unit_tests)
+    cp_bundle_crexx_runtime(unit_tests)
+    cp_configure_script_editor_target(unit_tests)
+    if(CP_HAS_CREXX)
+        target_sources(unit_tests PRIVATE tests/test_crexx_runtime.cpp)
+    endif()
+    target_sources(unit_tests PRIVATE tests/test_universal_script_templates.cpp)
     # Add unit tests to CTest
     include(GoogleTest)
     # Integration tests (Qt Test based, headless) - Definition looks okay
@@ -639,7 +1000,6 @@ if(ENABLE_TESTING)
             ${INCLUDE_DIR}/CommonDataTypes.h
             # Test sources and required implementations
             tests/test_integration.cpp
-            tests/test_retry_loop_integration.cpp
             tests/test_matrix.cpp
             tests/integration/MermaidRenderTest.cpp
             ${SRC_DIR}/logging/Logger.cpp
@@ -697,6 +1057,10 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderNode.h
             ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.cpp
             ${SRC_DIR}/nodes/text/prompt_builder/PromptBuilderPropertiesWidget.h
+            ${SRC_DIR}/nodes/text/text_chunker/TextChunkerNode.cpp
+            ${SRC_DIR}/nodes/text/text_chunker/TextChunkerNode.h
+            ${SRC_DIR}/nodes/text/text_chunker/TextChunkerPropertiesWidget.cpp
+            ${SRC_DIR}/nodes/text/text_chunker/TextChunkerPropertiesWidget.h
             ${SRC_DIR}/nodes/io/text_input/TextInputNode.cpp
             ${SRC_DIR}/nodes/io/text_input/TextInputNode.h
             ${SRC_DIR}/nodes/io/text_input/TextInputPropertiesWidget.cpp
@@ -755,6 +1119,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/app/dialogs/CredentialsDialog.h
             ${SRC_DIR}/app/dialogs/ProviderManagementDialog.cpp
             ${SRC_DIR}/app/dialogs/ProviderManagementDialog.h
+            ${SRC_DIR}/app/dialogs/SyntaxHighlightingOptionsDialog.cpp
+            ${SRC_DIR}/app/dialogs/SyntaxHighlightingOptionsDialog.h
             ${SRC_DIR}/nodes/external_tools/process/ProcessNode.cpp
             ${SRC_DIR}/nodes/external_tools/process/ProcessNode.h
             ${SRC_DIR}/nodes/external_tools/process/ProcessPropertiesWidget.cpp
@@ -775,18 +1141,26 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
-            ${SRC_DIR}/nodes/control_flow/loop/LoopNode.cpp
-            ${SRC_DIR}/nodes/control_flow/loop/LoopNode.h
-            ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.cpp
-            ${SRC_DIR}/nodes/control_flow/loop/LoopPropertiesWidget.h
-            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.cpp
-            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilNode.h
-            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.cpp
-            ${SRC_DIR}/nodes/control_flow/loop_until/LoopUntilPropertiesWidget.h
-            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.cpp
-            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopNode.h
-            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.cpp
-            ${SRC_DIR}/nodes/control_flow/retry_loop/RetryLoopPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.h
+            ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.h
+            ${SRC_DIR}/nodes/control_flow/scope/TransformScopeNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/TransformScopeNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/TransformScopePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/TransformScopePropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/scope/GetInputNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/GetInputNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/SetOutputNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/SetOutputNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/IteratorScopeNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/IteratorScopeNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/IteratorScopePropertiesWidget.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/IteratorScopePropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/scope/GetItemNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/GetItemNode.h
+            ${SRC_DIR}/nodes/control_flow/scope/SetItemResultNode.cpp
+            ${SRC_DIR}/nodes/control_flow/scope/SetItemResultNode.h
             ${SRC_DIR}/graph/ExecutionAwarePainters.cpp
             ${SRC_DIR}/execution/ExecutionStateModel.cpp
             $<$<BOOL:${WIN32}>:${WIN32_RESOURCE_FILE}>
@@ -809,6 +1183,9 @@ if(ENABLE_TESTING)
             cpr::cpr
             quickjs
     )
+    cp_configure_crexx_target(integration_tests)
+    cp_bundle_crexx_runtime(integration_tests)
+    cp_configure_script_editor_target(integration_tests)
 
     # Force integration_tests to be a CONSOLE app on Windows
     # This enables stdout/stderr logging in CI

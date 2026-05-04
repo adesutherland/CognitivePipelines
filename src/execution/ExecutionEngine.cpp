@@ -43,28 +43,20 @@
 #include "NodeGraphModel.h"
 #include "ToolNodeDelegate.h"
 #include "RagIndexerNode.h"
+#include "ExecutionIdUtils.h"
 
 #include <unordered_set>
 
 namespace {
 
-// Stable namespaces used to derive deterministic UUIDs for nodes/connections.
-const QUuid kNodeNamespace("{6ba7b810-9dad-11d1-80b4-00c04fd430c8}");
-const QUuid kConnectionNamespace("{6ba7b811-9dad-11d1-80b4-00c04fd430c8}");
-
-QUuid nodeUuidForId(QtNodes::NodeId nodeId)
+QUuid nodeUuidForId(NodeGraphModel* graphModel, QtNodes::NodeId nodeId)
 {
-    QByteArray key = QByteArray::number(static_cast<qulonglong>(nodeId));
-    return QUuid::createUuidV5(kNodeNamespace, key);
+    return ExecIds::nodeUuid(graphModel ? graphModel->executionScopeKey() : QStringLiteral("root"), nodeId);
 }
 
-QUuid connectionUuidForId(const QtNodes::ConnectionId& c)
+QUuid connectionUuidForId(NodeGraphModel* graphModel, const QtNodes::ConnectionId& c)
 {
-    QByteArray key = QByteArray::number(static_cast<qulonglong>(c.outNodeId)) + '/' +
-                     QByteArray::number(static_cast<qulonglong>(c.outPortIndex)) + '>' +
-                     QByteArray::number(static_cast<qulonglong>(c.inNodeId)) + '/' +
-                     QByteArray::number(static_cast<qulonglong>(c.inPortIndex));
-    return QUuid::createUuidV5(kConnectionNamespace, key);
+    return ExecIds::connectionUuid(graphModel ? graphModel->executionScopeKey() : QStringLiteral("root"), c);
 }
 
 } // namespace
@@ -100,7 +92,7 @@ QtNodes::NodeId ExecutionEngine::nodeIdForUuid(const QUuid& uuid) const
     if (!_graphModel) return std::numeric_limits<unsigned int>::max();
     const auto ids = _graphModel->allNodeIds();
     for (auto id : ids) {
-        if (nodeUuidForId(id) == uuid) {
+        if (nodeUuidForId(_graphModel, id) == uuid) {
             return id;
         }
     }
@@ -157,7 +149,7 @@ ExecutionEngine::~ExecutionEngine()
 void ExecutionEngine::Run(QtNodes::NodeId startNodeId, TaskPriority p)
 {
     if (startNodeId != std::numeric_limits<unsigned int>::max()) {
-        runPipeline({nodeUuidForId(startNodeId)}, p);
+        runPipeline({nodeUuidForId(_graphModel, startNodeId)}, p);
     } else {
         runPipeline({}, p);
     }
@@ -220,7 +212,7 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints, TaskP
     const auto nodeIds = _graphModel->allNodeIds();
     {
         for (auto nodeId : nodeIds) {
-            emit nodeStatusChanged(nodeUuidForId(nodeId), static_cast<int>(ExecutionState::Idle));
+            emit nodeStatusChanged(nodeUuidForId(_graphModel, nodeId), static_cast<int>(ExecutionState::Idle));
         }
         std::unordered_set<QtNodes::ConnectionId> resetConnections;
         for (auto nodeId : nodeIds) {
@@ -228,7 +220,7 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints, TaskP
             resetConnections.insert(conns.begin(), conns.end());
         }
         for (const auto& cid : resetConnections) {
-            emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Idle));
+            emit connectionStatusChanged(connectionUuidForId(_graphModel, cid), static_cast<int>(ExecutionState::Idle));
         }
     }
 
@@ -245,7 +237,7 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints, TaskP
             if (!hasIncoming) {
                 ExecutionTask task;
                 task.nodeId = nodeId;
-                task.nodeUuid = nodeUuidForId(nodeId);
+                task.nodeUuid = nodeUuidForId(_graphModel, nodeId);
                 // Empty inputs are acceptable for source nodes
                 scheduleNode(task, p);
             }
@@ -255,7 +247,7 @@ void ExecutionEngine::runPipeline(const QList<QUuid>& specificEntryPoints, TaskP
         QSet<QUuid> wanted;
         for (const auto& u : specificEntryPoints) wanted.insert(u);
         for (auto nodeId : nodeIds) {
-            const QUuid uuid = nodeUuidForId(nodeId);
+            const QUuid uuid = nodeUuidForId(_graphModel, nodeId);
             if (!wanted.contains(uuid)) continue;
             ExecutionTask task;
             task.nodeId = nodeId;
@@ -417,7 +409,7 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
         const auto attached = graphModel->allConnectionIds(task.nodeId);
         for (const auto& cid : attached) {
             if (cid.inNodeId == task.nodeId) {
-                emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Running));
+                emit connectionStatusChanged(connectionUuidForId(_graphModel, cid), static_cast<int>(ExecutionState::Running));
             }
         }
 
@@ -505,7 +497,7 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
             emit nodeStatusChanged(task.nodeUuid, static_cast<int>(ExecutionState::Error));
             for (const auto& cid : attached) {
                 if (cid.inNodeId == task.nodeId) {
-                    emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Error));
+                    emit connectionStatusChanged(connectionUuidForId(_graphModel, cid), static_cast<int>(ExecutionState::Error));
                 }
             }
             // Clear thread-local context
@@ -530,7 +522,7 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
             emit nodeStatusChanged(task.nodeUuid, static_cast<int>(ExecutionState::Error));
             for (const auto& cid : attached) {
                 if (cid.inNodeId == task.nodeId) {
-                    emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Error));
+                    emit connectionStatusChanged(connectionUuidForId(_graphModel, cid), static_cast<int>(ExecutionState::Error));
                 }
             }
             // Clear thread-local context
@@ -580,7 +572,7 @@ void ExecutionEngine::launchTask(const ExecutionTask& task)
         emit nodeStatusChanged(task.nodeUuid, static_cast<int>(ExecutionState::Finished));
         for (const auto& cid : attached) {
             if (cid.inNodeId == task.nodeId) {
-                emit connectionStatusChanged(connectionUuidForId(cid), static_cast<int>(ExecutionState::Finished));
+                emit connectionStatusChanged(connectionUuidForId(_graphModel, cid), static_cast<int>(ExecutionState::Finished));
             }
         }
 
@@ -652,7 +644,7 @@ void ExecutionEngine::tryFinalize()
         QReadLocker locker(&m_dataLock);
         for (auto nid : allNodes) {
             if (hasOutgoing.contains(nid)) continue;
-            const QUuid uuid = nodeUuidForId(nid);
+            const QUuid uuid = nodeUuidForId(_graphModel, nid);
             const QVariantMap bucket = m_dataLake.value(uuid);
             for (auto it = bucket.cbegin(); it != bucket.cend(); ++it) {
                 finalPacket.insert(it.key(), it.value());
@@ -746,7 +738,7 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
             if (it == tok.data.cend()) continue; // token didn't fire this pin
 
             const QtNodes::NodeId targetNodeId = e.cid.inNodeId;
-            const QUuid targetUuid = nodeUuidForId(targetNodeId);
+            const QUuid targetUuid = nodeUuidForId(_graphModel, targetNodeId);
 
             // Collect all inbound edges for the target to know required pins
             struct InEdge { QUuid sourceNodeUuid; PinId sourcePin; PinId targetPin; };
@@ -760,7 +752,7 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
                 const PinId sPin = srcDel->pinIdForIndex(QtNodes::PortType::Out, cid.outPortIndex);
                 const PinId tPin = dstDel->pinIdForIndex(QtNodes::PortType::In, cid.inPortIndex);
                 if (sPin.isEmpty() || tPin.isEmpty()) continue;
-                inEdges.push_back({ nodeUuidForId(cid.outNodeId), sPin, tPin });
+                inEdges.push_back({ nodeUuidForId(_graphModel, cid.outNodeId), sPin, tPin });
             }
 
             QVariantMap inputPayload;
@@ -808,7 +800,7 @@ void ExecutionEngine::handleTaskCompleted(QtNodes::NodeId nodeId,
             ExecutionToken t;
             t.tokenId = triggerTokenId;  // Preserve triggering token identity
             t.sourceNodeId = nodeUuid;
-            t.connectionId = connectionUuidForId(e.cid);
+            t.connectionId = connectionUuidForId(_graphModel, e.cid);
             t.triggeringPinId = e.targetPinId;  // The pin that received a fresh value
             t.forceExecution = tok.forceExecution; // Propagate forced execution
             t.data = inputPayload;
@@ -863,7 +855,7 @@ void ExecutionEngine::setExecutionDelay(int ms)
 DataPacket ExecutionEngine::nodeOutput(QtNodes::NodeId nodeId) const
 {
     QReadLocker locker(&m_dataLock);
-    const QUuid nodeUuid = nodeUuidForId(nodeId);
+    const QUuid nodeUuid = nodeUuidForId(_graphModel, nodeId);
 
     const QVariantMap map = m_dataLake.value(nodeUuid);
     DataPacket result;

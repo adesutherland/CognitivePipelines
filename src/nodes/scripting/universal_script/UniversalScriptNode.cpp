@@ -30,21 +30,21 @@ NodeDescriptor UniversalScriptNode::getDescriptor() const
 
     PinDefinition in;
     in.direction = PinDirection::Input;
-    in.id = QStringLiteral("in");
+    in.id = QString::fromLatin1(kInputId);
     in.name = QStringLiteral("Input");
     in.type = QStringLiteral("text");
     desc.inputPins.insert(in.id, in);
 
     PinDefinition out;
     out.direction = PinDirection::Output;
-    out.id = QStringLiteral("out");
+    out.id = QString::fromLatin1(kOutputId);
     out.name = QStringLiteral("Output");
     out.type = QStringLiteral("text");
     desc.outputPins.insert(out.id, out);
 
     PinDefinition status;
     status.direction = PinDirection::Output;
-    status.id = QStringLiteral("status");
+    status.id = QString::fromLatin1(kStatusId);
     status.name = QStringLiteral("Status");
     status.type = QStringLiteral("text");
     desc.outputPins.insert(status.id, status);
@@ -58,10 +58,12 @@ QWidget* UniversalScriptNode::createConfigurationWidget(QWidget* parent)
     widget->setScript(m_scriptCode);
     widget->setEngineId(m_engineId);
     widget->setFanOut(m_enableFanOut);
+    widget->setSyntaxHighlighting(m_enableSyntaxHighlighting);
 
     connect(widget, &UniversalScriptPropertiesWidget::scriptChanged, this, &UniversalScriptNode::onScriptChanged);
     connect(widget, &UniversalScriptPropertiesWidget::engineChanged, this, &UniversalScriptNode::onEngineChanged);
     connect(widget, &UniversalScriptPropertiesWidget::fanOutChanged, this, &UniversalScriptNode::onFanOutChanged);
+    connect(widget, &UniversalScriptPropertiesWidget::syntaxHighlightingChanged, this, &UniversalScriptNode::onSyntaxHighlightingChanged);
 
     return widget;
 }
@@ -70,10 +72,19 @@ TokenList UniversalScriptNode::execute(const TokenList& incomingTokens)
 {
     // Step 1: Merge incoming tokens into a single DataPacket
     DataPacket input;
+    QVariantList tokenSnapshots;
     for (const auto& token : incomingTokens) {
+        QVariantMap tokenSnapshot;
         for (auto it = token.data.cbegin(); it != token.data.cend(); ++it) {
             input.insert(it.key(), it.value());
+            tokenSnapshot.insert(it.key(), it.value());
         }
+        if (!tokenSnapshot.isEmpty()) {
+            tokenSnapshots.append(tokenSnapshot);
+        }
+    }
+    if (!tokenSnapshots.isEmpty()) {
+        input.insert(QStringLiteral("_tokens"), tokenSnapshots);
     }
 
     DataPacket output;
@@ -107,8 +118,11 @@ TokenList UniversalScriptNode::execute(const TokenList& incomingTokens)
     }
 
     // Handle Status
-    if (!output.contains(QStringLiteral("status"))) {
-        output.insert(QStringLiteral("status"), success ? QStringLiteral("OK") : QStringLiteral("FAIL"));
+    const QString statusKey = QString::fromLatin1(kStatusId);
+    const QString outputKey = QString::fromLatin1(kOutputId);
+
+    if (!output.contains(statusKey)) {
+        output.insert(statusKey, success ? QStringLiteral("OK") : QStringLiteral("FAIL"));
     }
 
     // Step 5: Inject summary into logs for visibility in the Stage Output panel
@@ -120,13 +134,13 @@ TokenList UniversalScriptNode::execute(const TokenList& incomingTokens)
     };
 
     QString summary;
-    if (m_enableFanOut && output.contains(QStringLiteral("out"))) {
-        QVariant outVal = output.value(QStringLiteral("out"));
+    if (m_enableFanOut && output.contains(outputKey)) {
+        QVariant outVal = output.value(outputKey);
         if (outVal.typeId() == QMetaType::QVariantList || outVal.typeId() == QMetaType::QStringList) {
             QVariantList list = outVal.toList();
             for (int i = 0; i < list.size(); ++i) {
                 if (!summary.isEmpty()) summary += QStringLiteral("\n");
-                summary += QStringLiteral("out[%1]: %2").arg(i + 1).arg(formatVariant(list.at(i), false));
+                summary += QStringLiteral("output[%1]: %2").arg(i + 1).arg(formatVariant(list.at(i), false));
             }
         }
     }
@@ -141,15 +155,15 @@ TokenList UniversalScriptNode::execute(const TokenList& incomingTokens)
     }
 
     // Prepare output tokens
-    if (m_enableFanOut && output.contains(QStringLiteral("out"))) {
-        QVariant outVal = output.value(QStringLiteral("out"));
+    if (m_enableFanOut && output.contains(outputKey)) {
+        QVariant outVal = output.value(outputKey);
         if (outVal.typeId() == QMetaType::QVariantList || outVal.typeId() == QMetaType::QStringList) {
             TokenList result;
             QVariantList list = outVal.toList();
             for (const auto& item : list) {
                 ExecutionToken t;
                 t.data = output;
-                t.data.insert(QStringLiteral("out"), item);
+                t.data.insert(outputKey, item);
                 result.push_back(std::move(t));
             }
             return result;
@@ -170,23 +184,31 @@ QJsonObject UniversalScriptNode::saveState() const
     obj.insert(QStringLiteral("scriptCode"), m_scriptCode);
     obj.insert(QStringLiteral("engineId"), m_engineId);
     obj.insert(QStringLiteral("enableFanOut"), m_enableFanOut);
+    obj.insert(QStringLiteral("enableSyntaxHighlighting"), m_enableSyntaxHighlighting);
     return obj;
 }
 
 void UniversalScriptNode::loadState(const QJsonObject& data)
 {
-    if (data.contains(QStringLiteral("scriptCode"))) {
-        m_scriptCode = data.value(QStringLiteral("scriptCode")).toString();
-    }
     if (data.contains(QStringLiteral("engineId"))) {
         m_engineId = data.value(QStringLiteral("engineId")).toString();
+    }
+    if (data.contains(QStringLiteral("scriptCode"))) {
+        m_scriptCode = data.value(QStringLiteral("scriptCode")).toString();
     }
     if (data.contains(QStringLiteral("enableFanOut"))) {
         m_enableFanOut = data.value(QStringLiteral("enableFanOut")).toBool();
     }
+    if (data.contains(QStringLiteral("enableSyntaxHighlighting"))) {
+        m_enableSyntaxHighlighting = data.value(QStringLiteral("enableSyntaxHighlighting")).toBool(true);
+    }
     
     if (m_engineId.isEmpty()) {
         m_engineId = QStringLiteral("quickjs");
+    }
+
+    if (!m_scriptCode.trimmed().isEmpty() && UniversalScriptTemplates::isManagedTemplate(m_scriptCode)) {
+        m_scriptCode = UniversalScriptTemplates::forEngine(m_engineId);
     }
 }
 
@@ -197,10 +219,18 @@ void UniversalScriptNode::onScriptChanged(const QString& script)
 
 void UniversalScriptNode::onEngineChanged(const QString& engineId)
 {
+    if (!m_scriptCode.trimmed().isEmpty() && UniversalScriptTemplates::isManagedTemplate(m_scriptCode)) {
+        m_scriptCode = UniversalScriptTemplates::forEngine(engineId);
+    }
     m_engineId = engineId;
 }
 
 void UniversalScriptNode::onFanOutChanged(bool enabled)
 {
     m_enableFanOut = enabled;
+}
+
+void UniversalScriptNode::onSyntaxHighlightingChanged(bool enabled)
+{
+    m_enableSyntaxHighlighting = enabled;
 }

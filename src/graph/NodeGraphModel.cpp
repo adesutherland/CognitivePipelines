@@ -25,6 +25,7 @@
 #include <QtNodes/NodeDelegateModelRegistry>
 
 #include "PromptBuilderNode.h"
+#include "TextChunkerNode.h"
 #include "ToolNodeDelegate.h"
 #include "TextInputNode.h"
 #include "IngestInputNode.h"
@@ -42,15 +43,59 @@
 #include "RagIndexerNode.h"
 #include "RagQueryNode.h"
 #include "ConditionalRouterNode.h"
-#include "LoopNode.h"
-#include "LoopUntilNode.h"
-#include "RetryLoopNode.h"
+#include "GetInputNode.h"
+#include "GetItemNode.h"
+#include "IteratorScopeNode.h"
+#include "ScopeSubgraphExecutor.h"
+#include "SetItemResultNode.h"
+#include "SetOutputNode.h"
+#include "TransformScopeNode.h"
 #include "UniversalScriptNode.h"
 #include "QuickJSRuntime.h"
+#if CP_HAS_CREXX
+#include "CrexxRuntime.h"
+#endif
 #include "ExecutionIdUtils.h"
 
-NodeGraphModel::NodeGraphModel(QObject* parent)
+#include <QJsonObject>
+#include <QReadLocker>
+#include <QWriteLocker>
+
+namespace {
+QString graphKindToString(NodeGraphModel::GraphKind kind)
+{
+    switch (kind) {
+    case NodeGraphModel::GraphKind::TransformBody:
+        return QStringLiteral("transform_body");
+    case NodeGraphModel::GraphKind::IteratorBody:
+        return QStringLiteral("iterator_body");
+    case NodeGraphModel::GraphKind::Root:
+    default:
+        return QStringLiteral("root");
+    }
+}
+
+NodeGraphModel::GraphKind graphKindFromString(const QString& value,
+                                              NodeGraphModel::GraphKind fallback = NodeGraphModel::GraphKind::TransformBody)
+{
+    const QString v = value.trimmed().toLower();
+    if (v == QStringLiteral("root")) {
+        return NodeGraphModel::GraphKind::Root;
+    }
+    if (v == QStringLiteral("iterator_body")) {
+        return NodeGraphModel::GraphKind::IteratorBody;
+    }
+    if (v == QStringLiteral("transform_body")) {
+        return NodeGraphModel::GraphKind::TransformBody;
+    }
+    return fallback;
+}
+}
+
+NodeGraphModel::NodeGraphModel(QObject* parent, GraphKind kind, const QString& executionScopeKey)
     : QtNodes::DataFlowGraphModel(std::make_shared<QtNodes::NodeDelegateModelRegistry>())
+    , m_graphKind(kind)
+    , m_executionScopeKey(executionScopeKey.trimmed().isEmpty() ? QStringLiteral("root") : executionScopeKey.trimmed())
 {
     Q_UNUSED(parent);
     
@@ -58,6 +103,11 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     ScriptEngineRegistry::instance().registerEngine(QStringLiteral("quickjs"), []() {
         return std::make_unique<QuickJSRuntime>();
     });
+#if CP_HAS_CREXX
+    ScriptEngineRegistry::instance().registerEngine(QStringLiteral("crexx"), []() {
+        return std::make_unique<CrexxRuntime>();
+    });
+#endif
 
     // IMPORTANT: Disable reactive propagation by default.
     // Our ExecutionEngine is the only mechanism that should trigger execution.
@@ -69,6 +119,11 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
     // Register PromptBuilderNode via the generic ToolNodeDelegate adapter
     registry->registerModel([this]() {
         auto tool = std::make_shared<PromptBuilderNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Text Utilities"));
+
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<TextChunkerNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Text Utilities"));
 
@@ -166,23 +221,56 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Control Flow"));
 
-    // Register LoopNode under the "Control Flow" category via ToolNodeDelegate
+    // Register scope parents in every graph kind so scopes can be nested.
     registry->registerModel([this]() {
-        auto tool = std::make_shared<LoopNode>();
+        auto tool = std::make_shared<TransformScopeNode>();
+        tool->setBodyRunner([this](const QString& bodyId,
+                                   ScopeBodyKind kind,
+                                   const ScopeFrame& frame,
+                                   const DataPacket& parentInputs) {
+            return ScopeSubgraphExecutor::run(ensureSubgraph(bodyId, GraphKind::TransformBody),
+                                              kind,
+                                              frame,
+                                              parentInputs);
+        });
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Control Flow"));
 
-    // Register LoopUntilNode under the "Control Flow" category via ToolNodeDelegate
     registry->registerModel([this]() {
-        auto tool = std::make_shared<LoopUntilNode>();
+        auto tool = std::make_shared<IteratorScopeNode>();
+        tool->setBodyRunner([this](const QString& bodyId,
+                                   ScopeBodyKind kind,
+                                   const ScopeFrame& frame,
+                                   const DataPacket& parentInputs) {
+            return ScopeSubgraphExecutor::run(ensureSubgraph(bodyId, GraphKind::IteratorBody),
+                                              kind,
+                                              frame,
+                                              parentInputs);
+        });
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Control Flow"));
 
-    // Register RetryLoopNode under the "Control Flow" category via ToolNodeDelegate
-    registry->registerModel([this]() {
-        auto tool = std::make_shared<RetryLoopNode>();
-        return std::make_unique<ToolNodeDelegate>(tool);
-    }, QStringLiteral("Control Flow"));
+    if (m_graphKind == GraphKind::TransformBody) {
+        registry->registerModel([this]() {
+            auto tool = std::make_shared<GetInputNode>();
+            return std::make_unique<ToolNodeDelegate>(tool);
+        }, QStringLiteral("Control Flow"));
+
+        registry->registerModel([this]() {
+            auto tool = std::make_shared<SetOutputNode>();
+            return std::make_unique<ToolNodeDelegate>(tool);
+        }, QStringLiteral("Control Flow"));
+    } else if (m_graphKind == GraphKind::IteratorBody) {
+        registry->registerModel([this]() {
+            auto tool = std::make_shared<GetItemNode>();
+            return std::make_unique<ToolNodeDelegate>(tool);
+        }, QStringLiteral("Control Flow"));
+
+        registry->registerModel([this]() {
+            auto tool = std::make_shared<SetItemResultNode>();
+            return std::make_unique<ToolNodeDelegate>(tool);
+        }, QStringLiteral("Control Flow"));
+    }
 
     // Register UniversalScriptNode under the "Scripting" category via ToolNodeDelegate
     registry->registerModel([this]() {
@@ -193,6 +281,8 @@ NodeGraphModel::NodeGraphModel(QObject* parent)
 
 void NodeGraphModel::clear()
 {
+    clearNodeExecutionOutputs();
+
     // Collect node IDs first to avoid iterator invalidation
     const auto idsSet = allNodeIds();
     QList<QtNodes::NodeId> ids;
@@ -201,6 +291,77 @@ void NodeGraphModel::clear()
     for (auto id : ids) {
         deleteNode(id);
     }
+    m_subgraphs.clear();
+}
+
+QJsonObject NodeGraphModel::save() const
+{
+    QJsonObject root = DataFlowGraphModel::save();
+    root.insert(QStringLiteral("_graph_kind"), graphKindToString(m_graphKind));
+    QJsonObject subgraphs;
+    for (auto it = m_subgraphs.cbegin(); it != m_subgraphs.cend(); ++it) {
+        if (it->second) {
+            subgraphs.insert(it->first, it->second->save());
+        }
+    }
+    if (!subgraphs.isEmpty()) {
+        root.insert(QStringLiteral("subgraphs"), subgraphs);
+    }
+    return root;
+}
+
+void NodeGraphModel::load(const QJsonObject& json)
+{
+    clear();
+    DataFlowGraphModel::load(json);
+
+    const QJsonObject subgraphs = json.value(QStringLiteral("subgraphs")).toObject();
+    for (auto it = subgraphs.constBegin(); it != subgraphs.constEnd(); ++it) {
+        const QJsonObject childJson = it.value().toObject();
+        const GraphKind kind = graphKindFromString(childJson.value(QStringLiteral("_graph_kind")).toString());
+        auto child = std::make_unique<NodeGraphModel>(nullptr, kind, it.key());
+        child->load(childJson);
+        m_subgraphs.emplace(it.key(), std::move(child));
+    }
+}
+
+NodeGraphModel* NodeGraphModel::ensureSubgraph(const QString& subgraphId, GraphKind kind)
+{
+    const QString id = subgraphId.trimmed();
+    if (id.isEmpty()) {
+        return nullptr;
+    }
+    auto it = m_subgraphs.find(id);
+    if (it != m_subgraphs.end()) {
+        return it->second.get();
+    }
+
+    auto child = std::make_unique<NodeGraphModel>(nullptr, kind, id);
+    NodeGraphModel* ptr = child.get();
+    m_subgraphs.emplace(id, std::move(child));
+    return ptr;
+}
+
+NodeGraphModel* NodeGraphModel::ensureSubgraph(const QString& subgraphId)
+{
+    return ensureSubgraph(subgraphId, GraphKind::TransformBody);
+}
+
+NodeGraphModel* NodeGraphModel::subgraph(const QString& subgraphId) const
+{
+    auto it = m_subgraphs.find(subgraphId);
+    return it == m_subgraphs.cend() ? nullptr : it->second.get();
+}
+
+QList<NodeGraphModel*> NodeGraphModel::subgraphModels() const
+{
+    QList<NodeGraphModel*> models;
+    for (auto it = m_subgraphs.cbegin(); it != m_subgraphs.cend(); ++it) {
+        if (it->second) {
+            models.append(it->second.get());
+        }
+    }
+    return models;
 }
 
 QList<QPair<QUuid, QString>> NodeGraphModel::getEntryPoints() const
@@ -232,9 +393,50 @@ QList<QPair<QUuid, QString>> NodeGraphModel::getEntryPoints() const
             label = QStringLiteral("Node %1").arg(QString::number(nodeId));
         }
 
-        result.append(qMakePair(ExecIds::nodeUuid(nodeId), label));
+        result.append(qMakePair(ExecIds::nodeUuid(m_executionScopeKey, nodeId), label));
     }
     return result;
+}
+
+DataPacket NodeGraphModel::nodeOutput(QtNodes::NodeId nodeId) const
+{
+    QReadLocker locker(&m_nodeOutputsLock);
+    return m_nodeOutputs.value(nodeId);
+}
+
+void NodeGraphModel::clearNodeExecutionOutputs()
+{
+    {
+        QWriteLocker locker(&m_nodeOutputsLock);
+        m_nodeOutputs.clear();
+    }
+
+    for (NodeGraphModel* child : subgraphModels()) {
+        child->clearNodeExecutionOutputs();
+    }
+}
+
+void NodeGraphModel::reportNodeExecutionStatus(QtNodes::NodeId nodeId, int state)
+{
+    emit executionNodeStatusChanged(ExecIds::nodeUuid(m_executionScopeKey, nodeId), state);
+}
+
+void NodeGraphModel::reportConnectionExecutionStatus(const QtNodes::ConnectionId& connectionId, int state)
+{
+    emit executionConnectionStatusChanged(ExecIds::connectionUuid(m_executionScopeKey, connectionId), state);
+}
+
+void NodeGraphModel::reportNodeOutput(QtNodes::NodeId nodeId, const DataPacket& packet)
+{
+    {
+        QWriteLocker locker(&m_nodeOutputsLock);
+        if (packet.isEmpty()) {
+            m_nodeOutputs.remove(nodeId);
+        } else {
+            m_nodeOutputs.insert(nodeId, packet);
+        }
+    }
+    emit executionNodeOutputChanged(nodeId);
 }
 
 QtNodes::NodeId NodeGraphModel::addNode(QString const nodeType)
@@ -247,6 +449,24 @@ QtNodes::NodeId NodeGraphModel::addNode(QString const nodeType)
     }
     
     return nodeId;
+}
+
+bool NodeGraphModel::deleteNode(QtNodes::NodeId const nodeId)
+{
+    QString childBodyId;
+    if (auto* delegate = delegateModel<ToolNodeDelegate>(nodeId)) {
+        if (auto scope = std::dynamic_pointer_cast<TransformScopeNode>(delegate->node())) {
+            childBodyId = scope->bodyId();
+        } else if (auto iterator = std::dynamic_pointer_cast<IteratorScopeNode>(delegate->node())) {
+            childBodyId = iterator->bodyId();
+        }
+    }
+
+    const bool deleted = DataFlowGraphModel::deleteNode(nodeId);
+    if (deleted && !childBodyId.isEmpty()) {
+        m_subgraphs.erase(childBodyId);
+    }
+    return deleted;
 }
 
 void NodeGraphModel::loadNode(QJsonObject const &nodeJson)
@@ -298,7 +518,31 @@ void NodeGraphModel::connectNodeSignals(QtNodes::NodeId nodeId)
         // This is needed for embedded widgets like NodeInfoWidget to resize the node
         connect(model, &QtNodes::NodeDelegateModel::embeddedWidgetSizeUpdated,
                 this, &NodeGraphModel::onNodePortsInserted);
+
+        if (auto* toolDelegate = qobject_cast<ToolNodeDelegate*>(model)) {
+            if (auto scope = std::dynamic_pointer_cast<TransformScopeNode>(toolDelegate->node())) {
+                connect(scope.get(), &TransformScopeNode::openBodyRequested,
+                        this, &NodeGraphModel::requestTransformBodyOpen,
+                        Qt::UniqueConnection);
+            } else if (auto iterator = std::dynamic_pointer_cast<IteratorScopeNode>(toolDelegate->node())) {
+                connect(iterator.get(), &IteratorScopeNode::openBodyRequested,
+                        this, &NodeGraphModel::requestIteratorBodyOpen,
+                        Qt::UniqueConnection);
+            }
+        }
     }
+}
+
+void NodeGraphModel::requestTransformBodyOpen(const QString& bodyId, const QString& title)
+{
+    ensureSubgraph(bodyId, GraphKind::TransformBody);
+    emit childGraphOpenRequested(bodyId, title, static_cast<int>(GraphKind::TransformBody));
+}
+
+void NodeGraphModel::requestIteratorBodyOpen(const QString& bodyId, const QString& title)
+{
+    ensureSubgraph(bodyId, GraphKind::IteratorBody);
+    emit childGraphOpenRequested(bodyId, title, static_cast<int>(GraphKind::IteratorBody));
 }
 
 void NodeGraphModel::onNodePortsInserted()

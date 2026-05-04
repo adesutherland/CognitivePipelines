@@ -47,8 +47,9 @@ private:
 class ExecutionAwareConnectionPainter : public QtNodes::AbstractConnectionPainter
 {
 public:
-    explicit ExecutionAwareConnectionPainter(std::shared_ptr<ExecutionStateModel> model)
-        : model_(std::move(model)) {}
+    explicit ExecutionAwareConnectionPainter(std::shared_ptr<ExecutionStateModel> model,
+                                             NodeGraphModel* graphModel)
+        : model_(std::move(model)), graphModel_(graphModel) {}
 
     void paint(QPainter *painter, QtNodes::ConnectionGraphicsObject const &cgo) const override;
     QPainterPath getPainterStroke(QtNodes::ConnectionGraphicsObject const &cgo) const override;
@@ -58,4 +59,5 @@ private:
 
 private:
     std::shared_ptr<ExecutionStateModel> model_;
+    NodeGraphModel* graphModel_ {nullptr};
 };
