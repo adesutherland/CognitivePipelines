@@ -41,6 +41,21 @@ static bool runEngineAndWait(ExecutionEngine& engine, DataPacket& finalOut, int 
     return finished;
 }
 
+static PortIndex inputPortForPin(NodeGraphModel& model, NodeId nodeId, const QString& pinId)
+{
+    auto* del = model.delegateModel<ToolNodeDelegate>(nodeId);
+    if (!del) return InvalidPortIndex;
+
+    const auto count = del->nPorts(PortType::In);
+    for (PortIndex i = 0; i < count; ++i) {
+        if (del->pinIdForIndex(PortType::In, i) == pinId) {
+            return i;
+        }
+    }
+
+    return InvalidPortIndex;
+}
+
 TEST(UniversalLLMInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
 {
     ensureApp();
@@ -62,7 +77,9 @@ TEST(UniversalLLMInvalidModelTest, ProducesErrorAndPreventsStaleOutput)
     ASSERT_NE(textNodeId, InvalidNodeId);
     ASSERT_NE(llmNodeId, InvalidNodeId);
 
-    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, 1u }); // TextInput output -> LLM prompt input (index 1 -> "prompt", pins sorted alphabetically: image=0, prompt=1, system=2)
+    const PortIndex promptPort = inputPortForPin(model, llmNodeId, QString::fromLatin1(UniversalLLMNode::kInputPromptId));
+    ASSERT_NE(promptPort, InvalidPortIndex);
+    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, promptPort });
 
     // Configure TextInput
     {
@@ -148,7 +165,9 @@ TEST(UniversalLLMInvalidModelTest, StopsPipelineOnError)
     ASSERT_NE(llmNodeId, InvalidNodeId);
     ASSERT_NE(promptNodeId, InvalidNodeId);
 
-    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, 1u });      // text -> llm (prompt, index 1 after alphabetical sorting)
+    const PortIndex promptPort = inputPortForPin(model, llmNodeId, QString::fromLatin1(UniversalLLMNode::kInputPromptId));
+    ASSERT_NE(promptPort, InvalidPortIndex);
+    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, promptPort });
     model.addConnection(ConnectionId{ llmNodeId, 0u, promptNodeId, 0u });    // llm.response -> prompt.input
 
     // Configure nodes

@@ -67,6 +67,11 @@ UniversalLLMNode::UniversalLLMNode(QObject* parent)
     attachmentPin.name = QStringLiteral("Attachment (Path)");
     attachmentPin.type = QStringLiteral("text");
     m_descriptor.inputPins.insert(attachmentPin.id, attachmentPin);
+    m_descriptor.inputPinOrder = {
+        QString::fromLatin1(kInputPromptId),
+        QString::fromLatin1(kInputSystemId),
+        QString::fromLatin1(kInputAttachmentId)
+    };
 
     PinDefinition responsePin;
     responsePin.direction = PinDirection::Output;
@@ -74,6 +79,7 @@ UniversalLLMNode::UniversalLLMNode(QObject* parent)
     responsePin.name = QStringLiteral("Response");
     responsePin.type = QStringLiteral("text");
     m_descriptor.outputPins.insert(responsePin.id, responsePin);
+    m_descriptor.outputPinOrder = { QString::fromLatin1(kOutputResponseId) };
 
     // Initialize with the first usable catalog provider, preferring configured cloud accounts.
     m_providerId = ModelCatalogService::instance().defaultProvider(ModelCatalogKind::Chat);

@@ -144,6 +144,21 @@ private:
         return 0;
     }
 
+    static int inputPortForPin(NodeGraphModel* model, NodeId nodeId, const QString& pinId) {
+        if (!model) return -1;
+        auto* del = model->delegateModel<ToolNodeDelegate>(nodeId);
+        if (!del) return -1;
+
+        const auto count = del->nPorts(PortType::In);
+        for (PortIndex i = 0; i < count; ++i) {
+            if (del->pinIdForIndex(PortType::In, i) == pinId) {
+                return static_cast<int>(i);
+            }
+        }
+
+        return -1;
+    }
+
     static bool isRestrictedAccessModel(const QString& provider, const QString& modelId) {
         if (provider == QStringLiteral("openai")) {
             // Heuristic: o-series often gated (o1, o3, o4)
@@ -180,10 +195,15 @@ private:
         }
 
         model_->addConnection(ConnectionId{ textNodeId, 0u, promptNodeId, 0u });
-        // Connect PromptBuilder "prompt" output to UniversalLLM "prompt" input (port index 1)
-        model_->addConnection(ConnectionId{ promptNodeId, 0u, llmNodeId, 1u });
+        const int promptPort = inputPortForPin(model_, llmNodeId, QString::fromLatin1(UniversalLLMNode::kInputPromptId));
+        if (promptPort < 0) {
+            out.status = LiveResult::Status::HttpError;
+            out.error = QStringLiteral("UniversalLLM prompt input port not available");
+            return out;
+        }
+        model_->addConnection(ConnectionId{ promptNodeId, 0u, llmNodeId, static_cast<PortIndex>(promptPort) });
 
-        // Vision audit: if model supports Vision, attach an ImageNode to the UniversalLLM image input (index 0)
+        // Vision audit: if model supports Vision, attach an ImageNode to the UniversalLLM attachment input.
         const auto caps = ModelCapsRegistry::instance().resolve(modelId, provider);
         QScopedPointer<QTemporaryFile> tmpImage;
         if (caps.has_value() && caps->hasCapability(Capability::Vision)) {
@@ -206,8 +226,10 @@ private:
                     auto* img = c ? dynamic_cast<ImageNode*>(c.get()) : nullptr;
                     if (img) {
                         img->setImagePath(tmpImage->fileName());
-                        // Connect ImageNode out(0) ("image") to UniversalLLM image input (index 0)
-                        model_->addConnection(ConnectionId{ imageNodeId, 0u, llmNodeId, 0u });
+                        const int attachmentPort = inputPortForPin(model_, llmNodeId, QString::fromLatin1(UniversalLLMNode::kInputAttachmentId));
+                        if (attachmentPort >= 0) {
+                            model_->addConnection(ConnectionId{ imageNodeId, 0u, llmNodeId, static_cast<PortIndex>(attachmentPort) });
+                        }
                     }
                 }
             }

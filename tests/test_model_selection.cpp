@@ -15,12 +15,20 @@
 #include <QtConcurrent>
 #include <QByteArray>
 #include <QDir>
+#include <QEventLoop>
+#include <QTimer>
 
 #include "UniversalLLMNode.h"
+#include "NodeGraphModel.h"
+#include "ExecutionEngine.h"
+#include "ToolNodeDelegate.h"
+#include "TextInputNode.h"
 #include "ai/registry/LLMProviderRegistry.h"
 #include "ai/backends/ILLMBackend.h"
 #include "ModelCapsRegistry.h"
 #include "ModelCaps.h"
+
+using namespace QtNodes;
 
 // Ensure a minimal QApplication exists (mirrors tests/test_universal_llm.cpp style)
 static QApplication* ensureApp()
@@ -67,6 +75,9 @@ public:
         const LLMMessage& message = {}
     ) override {
         captured_model = modelName;
+        captured_system_prompt = systemPrompt;
+        captured_user_prompt = userPrompt;
+        captured_attachment_count = message.attachments.size();
 
         // Build an OpenAI-like payload and capture it, mirroring capability-aware filtering
         const auto capsOpt = ModelCapsRegistry::instance().resolve(modelName, QStringLiteral("openai"));
@@ -132,6 +143,9 @@ public:
     }
 
     QString captured_model;
+    QString captured_system_prompt;
+    QString captured_user_prompt;
+    qsizetype captured_attachment_count = 0;
     QJsonObject captured_payload;
     QString captured_url;
 };
@@ -148,6 +162,77 @@ static std::shared_ptr<CapturingBackend> installCapturingOpenAI()
 static void ensureDummyOpenAIKey()
 {
     qputenv("OPENAI_API_KEY", QByteArray("DUMMY_KEY_FOR_TESTS"));
+}
+
+static bool runPipelineAndWait(ExecutionEngine& engine, DataPacket& finalOut, int timeoutMs = 5000)
+{
+    bool finished = false;
+    QObject::connect(&engine, &ExecutionEngine::pipelineFinished, &engine, [&](const DataPacket& out) {
+        finished = true;
+        finalOut = out;
+    });
+
+    engine.Run();
+
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(&engine, &ExecutionEngine::pipelineFinished, &loop, &QEventLoop::quit);
+    timeout.start(timeoutMs);
+    loop.exec();
+
+    return finished;
+}
+
+TEST(UniversalLLMPipelineWiringTest, TextInputFirstPortArrivesAsUserPrompt)
+{
+    ensureApp();
+    ensureDummyOpenAIKey();
+
+    auto capturing = installCapturingOpenAI();
+
+    NodeGraphModel model;
+    const NodeId textNodeId = model.addNode(QStringLiteral("text-input"));
+    const NodeId llmNodeId = model.addNode(QStringLiteral("universal-llm"));
+    ASSERT_NE(textNodeId, InvalidNodeId);
+    ASSERT_NE(llmNodeId, InvalidNodeId);
+
+    auto* llmDel = model.delegateModel<ToolNodeDelegate>(llmNodeId);
+    ASSERT_NE(llmDel, nullptr);
+    ASSERT_EQ(llmDel->pinIdForIndex(PortType::In, 0u),
+              QString::fromLatin1(UniversalLLMNode::kInputPromptId));
+
+    model.addConnection(ConnectionId{ textNodeId, 0u, llmNodeId, 0u });
+
+    const QString prompt = QStringLiteral("Text input should become the LLM prompt");
+    {
+        auto* textDel = model.delegateModel<ToolNodeDelegate>(textNodeId);
+        ASSERT_NE(textDel, nullptr);
+        auto textNode = textDel->node();
+        ASSERT_TRUE(textNode);
+        auto* textInput = dynamic_cast<TextInputNode*>(textNode.get());
+        ASSERT_NE(textInput, nullptr);
+        textInput->setText(prompt);
+    }
+    {
+        auto llmNode = llmDel->node();
+        ASSERT_TRUE(llmNode);
+        auto* llm = dynamic_cast<UniversalLLMNode*>(llmNode.get());
+        ASSERT_NE(llm, nullptr);
+        llm->onProviderChanged(QStringLiteral("openai"));
+        llm->onModelChanged(QStringLiteral("gpt-4o-mini"));
+    }
+
+    ExecutionEngine engine(&model);
+    DataPacket out;
+    ASSERT_TRUE(runPipelineAndWait(engine, out));
+
+    EXPECT_EQ(capturing->captured_user_prompt, prompt);
+    EXPECT_TRUE(capturing->captured_system_prompt.trimmed().isEmpty());
+    EXPECT_EQ(capturing->captured_attachment_count, 0);
+    EXPECT_EQ(out.value(QString::fromLatin1(UniversalLLMNode::kOutputResponseId)).toString(),
+              QStringLiteral("ok"));
 }
 
 // --- Test Case 1: Integrity of Selection ---

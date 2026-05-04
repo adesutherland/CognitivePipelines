@@ -24,6 +24,7 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <QMap>
 #include <QVariant>
 
@@ -42,6 +43,8 @@ struct NodeDescriptor {
     QString category;
     QMap<QString, PinDefinition> inputPins;
     QMap<QString, PinDefinition> outputPins;
+    QStringList inputPinOrder;
+    QStringList outputPinOrder;
 };
 
 using DataPacket = QMap<QString, QVariant>;

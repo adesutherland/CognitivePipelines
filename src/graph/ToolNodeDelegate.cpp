@@ -30,6 +30,8 @@
 #include <QSet>
 #include <QMetaObject>
 
+#include <algorithm>
+
 #include "PromptBuilderNode.h"
 #include "NodeInfoWidget.h"
 
@@ -218,8 +220,21 @@ void ToolNodeDelegate::onInputPinsChanged()
     const NodeDescriptor newDescriptor = _node->getDescriptor();
     const auto buildOrder = [](const NodeDescriptor& desc) {
         std::vector<QString> order;
+        const auto appendIfPresent = [&order, &desc](const QString& pinId) {
+            if (!desc.inputPins.contains(pinId)) {
+                return;
+            }
+            if (std::find(order.begin(), order.end(), pinId) != order.end()) {
+                return;
+            }
+            order.push_back(pinId);
+        };
+
+        for (const QString& pinId : desc.inputPinOrder) {
+            appendIfPresent(pinId);
+        }
         for (auto it = desc.inputPins.constBegin(); it != desc.inputPins.constEnd(); ++it) {
-            order.push_back(it.key());
+            appendIfPresent(it.key());
         }
         return order;
     };
@@ -231,33 +246,40 @@ void ToolNodeDelegate::onInputPinsChanged()
         return std::find(order.begin(), order.end(), id) != order.end();
     };
 
-    const bool hadImage = hasId(oldOrder, QStringLiteral("image"));
-    const bool hasImageNow = hasId(newOrder, QStringLiteral("image"));
-
-    if (hadImage != hasImageNow) {
-        if (hadImage) {
-            auto itOld = std::find(oldOrder.begin(), oldOrder.end(), QStringLiteral("image"));
-            const PortIndex idx = static_cast<PortIndex>(std::distance(oldOrder.begin(), itOld));
-            emit portsAboutToBeDeleted(PortType::In, idx, idx);
-        } else {
-            auto itNew = std::find(newOrder.begin(), newOrder.end(), QStringLiteral("image"));
-            const PortIndex idx = static_cast<PortIndex>(std::distance(newOrder.begin(), itNew));
-            emit portsAboutToBeInserted(PortType::In, idx, idx);
+    QVector<PortIndex> deletedIndices;
+    for (size_t i = 0; i < oldOrder.size(); ++i) {
+        if (!hasId(newOrder, oldOrder[i])) {
+            deletedIndices.push_back(static_cast<PortIndex>(i));
         }
+    }
+
+    QVector<PortIndex> insertedIndices;
+    for (size_t i = 0; i < newOrder.size(); ++i) {
+        if (!hasId(oldOrder, newOrder[i])) {
+            insertedIndices.push_back(static_cast<PortIndex>(i));
+        }
+    }
+
+    for (auto it = deletedIndices.crbegin(); it != deletedIndices.crend(); ++it) {
+        emit portsAboutToBeDeleted(PortType::In, *it, *it);
+    }
+    for (const PortIndex idx : insertedIndices) {
+        emit portsAboutToBeInserted(PortType::In, idx, idx);
     }
 
     rebuildCachedDescriptor(newDescriptor);
 
-    if (hadImage && !hasImageNow) {
-        _inputs.remove(QStringLiteral("image"));
+    for (const auto& pinId : oldOrder) {
+        if (!hasId(newOrder, pinId)) {
+            _inputs.remove(pinId);
+        }
     }
 
-    if (hadImage != hasImageNow) {
-        if (hadImage) {
-            emit portsDeleted();
-        } else {
-            emit portsInserted();
-        }
+    if (!deletedIndices.isEmpty()) {
+        emit portsDeleted();
+    }
+    if (!insertedIndices.isEmpty()) {
+        emit portsInserted();
     }
 
     emit embeddedWidgetSizeUpdated();
@@ -310,13 +332,29 @@ void ToolNodeDelegate::rebuildCachedDescriptor(const NodeDescriptor& descriptor)
     _inputOrder.clear();
     _outputOrder.clear();
 
-    for (auto it = _descriptor.inputPins.constBegin(); it != _descriptor.inputPins.constEnd(); ++it) {
-        _inputOrder.push_back(it.key());
-    }
+    const auto appendOrderedPins = [](std::vector<QString>& order,
+                                      const QMap<QString, PinDefinition>& pins,
+                                      const QStringList& preferredOrder) {
+        const auto appendIfPresent = [&order, &pins](const QString& pinId) {
+            if (!pins.contains(pinId)) {
+                return;
+            }
+            if (std::find(order.begin(), order.end(), pinId) != order.end()) {
+                return;
+            }
+            order.push_back(pinId);
+        };
 
-    for (auto it = _descriptor.outputPins.constBegin(); it != _descriptor.outputPins.constEnd(); ++it) {
-        _outputOrder.push_back(it.key());
-    }
+        for (const QString& pinId : preferredOrder) {
+            appendIfPresent(pinId);
+        }
+        for (auto it = pins.constBegin(); it != pins.constEnd(); ++it) {
+            appendIfPresent(it.key());
+        }
+    };
+
+    appendOrderedPins(_inputOrder, _descriptor.inputPins, _descriptor.inputPinOrder);
+    appendOrderedPins(_outputOrder, _descriptor.outputPins, _descriptor.outputPinOrder);
 
     _descriptorCached = true;
 }
