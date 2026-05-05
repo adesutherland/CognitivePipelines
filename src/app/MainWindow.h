@@ -84,6 +84,7 @@ public slots:
 private slots:
     void onAbout();
     void onOpen();
+    void onSave();
     void onSaveAs();
     void onEditCredentials();
     void onManageProviders();
@@ -119,9 +120,11 @@ private:
     void installGraphScene(NodeGraphModel* model);
     void updateGraphNavigation();
     NodeGraphModel* activeGraphModel() const;
+    bool savePipelineToFile(const QString& fileName);
 
     QAction* exitAction {nullptr};
     QAction* openAction_ {nullptr};
+    QAction* saveAction_ {nullptr};
     QAction* saveAsAction_ {nullptr};
     QAction* aboutAction {nullptr};
 

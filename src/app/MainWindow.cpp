@@ -215,6 +215,11 @@ void MainWindow::createActions() {
     openAction_->setStatusTip(tr("Open a pipeline from a file"));
     connect(openAction_, &QAction::triggered, this, &MainWindow::onOpen);
 
+    saveAction_ = new QAction(tr("&Save"), this);
+    saveAction_->setShortcuts(QKeySequence::Save);
+    saveAction_->setStatusTip(tr("Save the current pipeline"));
+    connect(saveAction_, &QAction::triggered, this, &MainWindow::onSave);
+
     saveAsAction_ = new QAction(tr("Save &As..."), this);
     saveAsAction_->setShortcuts(QKeySequence::SaveAs);
     saveAsAction_->setStatusTip(tr("Save the current pipeline to a file"));
@@ -297,6 +302,7 @@ void MainWindow::createMenus() {
     // File menu
     QMenu* fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(openAction_);
+    fileMenu->addAction(saveAction_);
     fileMenu->addAction(saveAsAction_);
     fileMenu->addSeparator();
     fileMenu->addAction(exitAction);
@@ -650,6 +656,54 @@ void MainWindow::RefreshScenarioList() {
     }
 }
 
+bool MainWindow::savePipelineToFile(const QString& fileName)
+{
+    if (!_graphModel) return false;
+
+    QSaveFile file(fileName);
+    if (!file.open(QIODevice::WriteOnly)) {
+        QMessageBox::warning(this, tr("Save Failed"),
+                             tr("Could not open file for writing:\n%1").arg(file.errorString()));
+        return false;
+    }
+
+    const QByteArray data = QJsonDocument(_graphModel->save()).toJson();
+    const qint64 bytesWritten = file.write(data);
+    if (bytesWritten != data.size()) {
+        QMessageBox::warning(this, tr("Save Failed"),
+                             tr("Could not write file:\n%1").arg(file.errorString()));
+        return false;
+    }
+
+    if (!file.commit()) {
+        QMessageBox::warning(this, tr("Save Failed"),
+                             tr("Could not finish writing file:\n%1").arg(file.errorString()));
+        return false;
+    }
+
+    // Clear the stage output after saving (UI only, not part of saved state)
+    if (stageOutputText_) {
+        stageOutputText_->clear();
+    }
+
+    // Clear all TextOutputNode displays after UI cleanup
+    clearAllTextOutputNodes();
+
+    return true;
+}
+
+void MainWindow::onSave()
+{
+    if (m_currentFileName.isEmpty()) {
+        onSaveAs();
+        return;
+    }
+
+    if (savePipelineToFile(m_currentFileName)) {
+        statusBar()->showMessage(tr("Saved to %1").arg(QFileInfo(m_currentFileName).fileName()), 3000);
+    }
+}
+
 void MainWindow::onSaveAs()
 {
     QString fileName = QFileDialog::getSaveFileName(this,
@@ -663,30 +717,10 @@ void MainWindow::onSaveAs()
         fileName += ".flow";
     }
 
-    if (!_graphModel) return;
-
-    QFile file(fileName);
-    if (!file.open(QIODevice::WriteOnly)) {
-        QMessageBox::warning(this, tr("Save Failed"),
-                             tr("Could not open file for writing:\n%1").arg(file.errorString()));
-        return;
+    if (savePipelineToFile(fileName)) {
+        m_currentFileName = fileName;
+        statusBar()->showMessage(tr("Saved to %1").arg(QFileInfo(fileName).fileName()), 3000);
     }
-
-    const QJsonObject json = _graphModel->save();
-    file.write(QJsonDocument(json).toJson());
-    file.close();
-
-    // Clear the stage output after saving (UI only, not part of saved state)
-    if (stageOutputText_) {
-        stageOutputText_->clear();
-    }
-
-    // Clear all TextOutputNode displays after UI cleanup
-    clearAllTextOutputNodes();
-
-    m_currentFileName = fileName;
-
-    statusBar()->showMessage(tr("Saved to %1").arg(QFileInfo(fileName).fileName()), 3000);
 }
 
 void MainWindow::onRunPipeline()
