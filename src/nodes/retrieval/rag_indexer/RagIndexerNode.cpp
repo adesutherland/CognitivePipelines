@@ -192,17 +192,8 @@ NodeDescriptor RagIndexerNode::getDescriptor() const
     desc.inputPins.insert(QString::fromLatin1(kInputDirectoryPath), 
         PinDefinition{PinDirection::Input, QString::fromLatin1(kInputDirectoryPath), 
                      QStringLiteral("Directory"), QStringLiteral("text")});
-    desc.inputPins.insert(QString::fromLatin1(kInputDatabasePath), 
-        PinDefinition{PinDirection::Input, QString::fromLatin1(kInputDatabasePath), 
-                     QStringLiteral("Database"), QStringLiteral("text")});
-    desc.inputPins.insert(QString::fromLatin1(kInputMetadata), 
-        PinDefinition{PinDirection::Input, QString::fromLatin1(kInputMetadata), 
-                     QStringLiteral("Metadata"), QStringLiteral("text")});
 
-    // Output pins - Database output first (top position)
-    desc.outputPins.insert(QString::fromLatin1(kOutputDatabasePath), 
-        PinDefinition{PinDirection::Output, QString::fromLatin1(kOutputDatabasePath), 
-                     QStringLiteral("Database"), QStringLiteral("text")});
+    // Output pins
     desc.outputPins.insert(QString::fromLatin1(kOutputCount), 
         PinDefinition{PinDirection::Output, QString::fromLatin1(kOutputCount), 
                      QStringLiteral("Count"), QStringLiteral("text")});

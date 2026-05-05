@@ -28,6 +28,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFileDialog>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QSignalBlocker>
 
@@ -37,18 +38,27 @@ RagQueryPropertiesWidget::RagQueryPropertiesWidget(QWidget* parent)
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout();
 
+    auto* helpLayout = new QHBoxLayout();
+    helpLayout->addStretch();
+    m_helpButton = new QPushButton(QStringLiteral("Help"), this);
+    helpLayout->addWidget(m_helpButton);
+    mainLayout->addLayout(helpLayout);
+
     // Database path with browse button
     m_databaseEdit = new QLineEdit(this);
-    m_browseDatabaseBtn = new QPushButton(QStringLiteral("Browse..."), this);
+    m_databaseEdit->setPlaceholderText(QStringLiteral("/path/to/rag-index.sqlite"));
+    m_databaseEdit->setToolTip(QStringLiteral("Existing SQLite RAG index to search. Build one with the RAG Indexer first."));
+    m_browseDatabaseBtn = new QPushButton(QStringLiteral("Open..."), this);
     auto* dbLayout = new QHBoxLayout();
     dbLayout->addWidget(m_databaseEdit);
     dbLayout->addWidget(m_browseDatabaseBtn);
-    formLayout->addRow(tr("Database File:"), dbLayout);
+    formLayout->addRow(tr("RAG Database:"), dbLayout);
 
     // Default query (multi-line)
     m_queryEdit = new QPlainTextEdit(this);
-    m_queryEdit->setPlaceholderText(tr("Enter default query text (optional)"));
-    formLayout->addRow(tr("Default Query:"), m_queryEdit);
+    m_queryEdit->setPlaceholderText(tr("Enter default query text"));
+    m_queryEdit->setToolTip(tr("Used when no query text is connected to the Query input pin."));
+    formLayout->addRow(tr("Query:"), m_queryEdit);
 
     m_maxResultsSpinBox = new QSpinBox(this);
     m_maxResultsSpinBox->setRange(1, 50);
@@ -76,6 +86,8 @@ RagQueryPropertiesWidget::RagQueryPropertiesWidget(QWidget* parent)
             this, &RagQueryPropertiesWidget::databasePathChanged);
     connect(m_browseDatabaseBtn, &QPushButton::clicked,
             this, &RagQueryPropertiesWidget::onBrowseDatabase);
+    connect(m_helpButton, &QPushButton::clicked,
+            this, &RagQueryPropertiesWidget::onHelpClicked);
 
     connect(m_queryEdit, &QPlainTextEdit::textChanged, this, [this]() {
         emit queryTextChanged(m_queryEdit->toPlainText());
@@ -151,4 +163,18 @@ void RagQueryPropertiesWidget::onBrowseDatabase()
     if (!fileName.isEmpty() && m_databaseEdit) {
         m_databaseEdit->setText(fileName);
     }
+}
+
+void RagQueryPropertiesWidget::onHelpClicked()
+{
+    QMessageBox::information(
+        this,
+        tr("RAG Accessor Help"),
+        tr("Use this node to search an existing RAG database.\n\n"
+           "1. Open a database created by the RAG Indexer.\n"
+           "2. Enter a default query here or connect text to the Query input pin.\n"
+           "3. Max Results limits the number of returned matches.\n"
+           "4. Min Relevance filters low-scoring matches.\n\n"
+           "The Context output includes each match as a reference with source file and line range. "
+           "The Results JSON also includes source, reference, start_line, and end_line fields."));
 }

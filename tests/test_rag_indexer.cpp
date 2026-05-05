@@ -17,6 +17,9 @@
 #include <QDebug>
 
 #include "RagIndexerNode.h"
+#include "ModelCapsRegistry.h"
+#include "ai/backends/GoogleBackend.h"
+#include "ai/catalog/ModelCatalogService.h"
 #include "retrieval/documents/DocumentLoader.h"
 #include "retrieval/chunking/TextChunker.h"
 #include "retrieval/storage/RagUtils.h"
@@ -45,6 +48,55 @@ protected:
 
     QCoreApplication* app {nullptr};
 };
+
+TEST_F(RagIndexerNodeTest, DescriptorUsesPropertyDatabasePath)
+{
+    RagIndexerNode indexer;
+    const NodeDescriptor desc = indexer.getDescriptor();
+
+    EXPECT_TRUE(desc.inputPins.contains(QString::fromLatin1(RagIndexerNode::kInputDirectoryPath)));
+    EXPECT_FALSE(desc.inputPins.contains(QString::fromLatin1(RagIndexerNode::kInputMetadata)));
+    EXPECT_FALSE(desc.inputPins.contains(QString::fromLatin1(RagIndexerNode::kInputDatabasePath)));
+    EXPECT_FALSE(desc.outputPins.contains(QString::fromLatin1(RagIndexerNode::kOutputDatabasePath)));
+    EXPECT_TRUE(desc.outputPins.contains(QString::fromLatin1(RagIndexerNode::kOutputCount)));
+}
+
+TEST_F(RagIndexerNodeTest, GoogleEmbeddingCatalogIncludesCurrentGeminiModels)
+{
+    ASSERT_TRUE(ModelCapsRegistry::instance().loadFromFile(QStringLiteral(":/resources/model_caps.json")));
+
+    const GoogleBackend backend;
+    const QStringList backendModels = backend.availableEmbeddingModels();
+    EXPECT_TRUE(backendModels.contains(QStringLiteral("gemini-embedding-2")));
+    EXPECT_TRUE(backendModels.contains(QStringLiteral("gemini-embedding-001")));
+    EXPECT_TRUE(backendModels.contains(QStringLiteral("text-embedding-004")));
+
+    const auto entries = ModelCatalogService::instance().fallbackModels(QStringLiteral("google"),
+                                                                        ModelCatalogKind::Embedding);
+    auto findEntry = [&entries](const QString& id) -> const ModelCatalogEntry* {
+        for (const auto& entry : entries) {
+            if (entry.id == id) {
+                return &entry;
+            }
+        }
+        return nullptr;
+    };
+
+    const ModelCatalogEntry* latest = findEntry(QStringLiteral("gemini-embedding-2"));
+    ASSERT_NE(latest, nullptr);
+    EXPECT_NE(latest->visibility, ModelCatalogVisibility::Hidden);
+    EXPECT_EQ(latest->driverProfileId, QStringLiteral("google-embeddings"));
+
+    const ModelCatalogEntry* textOnly = findEntry(QStringLiteral("gemini-embedding-001"));
+    ASSERT_NE(textOnly, nullptr);
+    EXPECT_NE(textOnly->visibility, ModelCatalogVisibility::Hidden);
+    EXPECT_EQ(textOnly->driverProfileId, QStringLiteral("google-embeddings"));
+
+    const ModelCatalogEntry* legacy = findEntry(QStringLiteral("text-embedding-004"));
+    ASSERT_NE(legacy, nullptr);
+    EXPECT_NE(legacy->visibility, ModelCatalogVisibility::Hidden);
+    EXPECT_EQ(legacy->driverProfileId, QStringLiteral("google-embeddings"));
+}
 
 /**
  * @brief Test basic indexing flow with a small text file

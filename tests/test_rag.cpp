@@ -74,6 +74,18 @@ TEST(RagQueryNodeTest, SavesAndLoadsState)
     EXPECT_EQ(node2.queryText(), QStringLiteral("stored query"));
 }
 
+TEST(RagQueryNodeTest, DescriptorUsesPropertyDatabasePath)
+{
+    RagQueryNode node;
+    const NodeDescriptor desc = node.getDescriptor();
+
+    EXPECT_EQ(desc.name, QStringLiteral("RAG Accessor"));
+    EXPECT_TRUE(desc.inputPins.contains(QString::fromLatin1(RagQueryNode::kInputQuery)));
+    EXPECT_FALSE(desc.inputPins.contains(QString::fromLatin1(RagQueryNode::kInputDbPath)));
+    EXPECT_TRUE(desc.outputPins.contains(QString::fromLatin1(RagQueryNode::kOutputContext)));
+    EXPECT_TRUE(desc.outputPins.contains(QString::fromLatin1(RagQueryNode::kOutputResults)));
+}
+
 TEST(RagQueryNodeTest, PinOverridesProperty)
 {
     ensureCoreApp();

@@ -30,6 +30,7 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QFileDialog>
+#include <QMessageBox>
 #include <QSignalBlocker>
 #include <QComboBox>
 #include <QStandardItemModel>
@@ -112,26 +113,33 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     auto* mainLayout = new QVBoxLayout(this);
     auto* formLayout = new QFormLayout();
 
+    auto* helpLayout = new QHBoxLayout();
+    helpLayout->addStretch();
+    m_helpButton = new QPushButton(QStringLiteral("Help"), this);
+    helpLayout->addWidget(m_helpButton);
+    mainLayout->addLayout(helpLayout);
+
     // Directory path with browse button
     m_directoryEdit = new QLineEdit(this);
+    m_directoryEdit->setPlaceholderText(QStringLiteral("/path/to/source/files"));
+    m_directoryEdit->setToolTip(QStringLiteral("Folder to scan recursively for text, markdown, code, and supported document files."));
     m_browseDirectoryBtn = new QPushButton(QStringLiteral("Browse..."), this);
     auto* dirLayout = new QHBoxLayout();
     dirLayout->addWidget(m_directoryEdit);
     dirLayout->addWidget(m_browseDirectoryBtn);
     formLayout->addRow(QStringLiteral("Input Directory:"), dirLayout);
 
-    // Database path with browse button
+    // Database path with explicit create/open actions
     m_databaseEdit = new QLineEdit(this);
-    m_browseDatabaseBtn = new QPushButton(QStringLiteral("Browse..."), this);
+    m_databaseEdit->setPlaceholderText(QStringLiteral("/path/to/rag-index.sqlite"));
+    m_databaseEdit->setToolTip(QStringLiteral("SQLite RAG index path. Use Create for a new index file or Open to add to an existing one."));
+    m_createDatabaseBtn = new QPushButton(QStringLiteral("Create..."), this);
+    m_openDatabaseBtn = new QPushButton(QStringLiteral("Open..."), this);
     auto* dbLayout = new QHBoxLayout();
     dbLayout->addWidget(m_databaseEdit);
-    dbLayout->addWidget(m_browseDatabaseBtn);
-    formLayout->addRow(QStringLiteral("Database File:"), dbLayout);
-
-    // Index metadata
-    m_metadataEdit = new QLineEdit(this);
-    m_metadataEdit->setPlaceholderText(QStringLiteral("{\"source\": \"user\"}"));
-    formLayout->addRow(QStringLiteral("Metadata (JSON):"), m_metadataEdit);
+    dbLayout->addWidget(m_createDatabaseBtn);
+    dbLayout->addWidget(m_openDatabaseBtn);
+    formLayout->addRow(QStringLiteral("RAG Database:"), dbLayout);
 
     // Provider combo box
     m_providerCombo = new QComboBox(this);
@@ -194,7 +202,7 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
     formLayout->addRow(QStringLiteral("Chunking Strategy:"), m_chunkingStrategyCombo);
 
     // Clear database checkbox
-    m_clearDatabaseCheckBox = new QCheckBox(QStringLiteral("Clear Database before Indexing"), this);
+    m_clearDatabaseCheckBox = new QCheckBox(QStringLiteral("Clear existing index before indexing"), this);
     m_clearDatabaseCheckBox->setChecked(false);  // Default to false
     formLayout->addRow(QStringLiteral(""), m_clearDatabaseCheckBox);
 
@@ -203,12 +211,13 @@ RagIndexerPropertiesWidget::RagIndexerPropertiesWidget(QWidget* parent)
 
     // Connect browse buttons
     connect(m_browseDirectoryBtn, &QPushButton::clicked, this, &RagIndexerPropertiesWidget::onBrowseDirectory);
-    connect(m_browseDatabaseBtn, &QPushButton::clicked, this, &RagIndexerPropertiesWidget::onBrowseDatabase);
+    connect(m_createDatabaseBtn, &QPushButton::clicked, this, &RagIndexerPropertiesWidget::onCreateDatabase);
+    connect(m_openDatabaseBtn, &QPushButton::clicked, this, &RagIndexerPropertiesWidget::onOpenDatabase);
+    connect(m_helpButton, &QPushButton::clicked, this, &RagIndexerPropertiesWidget::onHelpClicked);
 
     // Connect line edits to emit signals on change
     connect(m_directoryEdit, &QLineEdit::textChanged, this, &RagIndexerPropertiesWidget::directoryPathChanged);
     connect(m_databaseEdit, &QLineEdit::textChanged, this, &RagIndexerPropertiesWidget::databasePathChanged);
-    connect(m_metadataEdit, &QLineEdit::textChanged, this, &RagIndexerPropertiesWidget::indexMetadataChanged);
 
     // Connect provider combo box
     connect(m_providerCombo, qOverload<int>(&QComboBox::currentIndexChanged),
@@ -264,7 +273,7 @@ QString RagIndexerPropertiesWidget::databasePath() const
 
 QString RagIndexerPropertiesWidget::indexMetadata() const
 {
-    return m_metadataEdit->text();
+    return m_indexMetadata;
 }
 
 QString RagIndexerPropertiesWidget::providerId() const
@@ -329,11 +338,7 @@ void RagIndexerPropertiesWidget::setDatabasePath(const QString& path)
 
 void RagIndexerPropertiesWidget::setIndexMetadata(const QString& metadata)
 {
-    if (m_metadataEdit->text() != metadata) {
-        m_metadataEdit->blockSignals(true);
-        m_metadataEdit->setText(metadata);
-        m_metadataEdit->blockSignals(false);
-    }
+    m_indexMetadata = metadata;
 }
 
 void RagIndexerPropertiesWidget::setProviderId(const QString& id)
@@ -441,11 +446,29 @@ void RagIndexerPropertiesWidget::onBrowseDirectory()
     }
 }
 
-void RagIndexerPropertiesWidget::onBrowseDatabase()
+void RagIndexerPropertiesWidget::onCreateDatabase()
 {
     QString file = QFileDialog::getSaveFileName(
         this,
-        QStringLiteral("Select Database File"),
+        QStringLiteral("Create RAG Database"),
+        m_databaseEdit->text(),
+        QStringLiteral("SQLite Database (*.db *.sqlite);;All Files (*)")
+    );
+
+    if (!file.isEmpty()) {
+        if (!file.endsWith(QStringLiteral(".db"), Qt::CaseInsensitive)
+            && !file.endsWith(QStringLiteral(".sqlite"), Qt::CaseInsensitive)) {
+            file += QStringLiteral(".sqlite");
+        }
+        m_databaseEdit->setText(file);
+    }
+}
+
+void RagIndexerPropertiesWidget::onOpenDatabase()
+{
+    QString file = QFileDialog::getOpenFileName(
+        this,
+        QStringLiteral("Open RAG Database"),
         m_databaseEdit->text(),
         QStringLiteral("SQLite Database (*.db *.sqlite);;All Files (*)")
     );
@@ -453,6 +476,20 @@ void RagIndexerPropertiesWidget::onBrowseDatabase()
     if (!file.isEmpty()) {
         m_databaseEdit->setText(file);
     }
+}
+
+void RagIndexerPropertiesWidget::onHelpClicked()
+{
+    QMessageBox::information(
+        this,
+        QStringLiteral("RAG Indexer Help"),
+        QStringLiteral(
+            "Use this node to build or update a local SQLite RAG index.\n\n"
+            "1. Choose the input directory to scan.\n"
+            "2. Use Create to choose a new database file, or Open to add to an existing RAG database.\n"
+            "3. Pick an embedding provider/model and run the node.\n"
+            "4. Each stored fragment keeps its source file and line range; the RAG Accessor returns those references with matches.\n\n"
+            "Enable \"Clear existing index\" only when you want to rebuild the database from scratch."));
 }
 
 void RagIndexerPropertiesWidget::populateModelCombo(const QList<ModelCatalogEntry>& models)

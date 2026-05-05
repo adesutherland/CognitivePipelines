@@ -51,16 +51,13 @@ NodeDescriptor RagQueryNode::getDescriptor() const
 {
     NodeDescriptor desc;
     desc.id = QStringLiteral("rag-query");
-    desc.name = QStringLiteral("RAG Query");
+    desc.name = QStringLiteral("RAG Accessor");
     desc.category = QStringLiteral("Retrieval");
 
     // Inputs
     desc.inputPins.insert(QString::fromLatin1(kInputQuery),
         PinDefinition{PinDirection::Input, QString::fromLatin1(kInputQuery),
                       QStringLiteral("Query"), QStringLiteral("text")});
-    desc.inputPins.insert(QString::fromLatin1(kInputDbPath),
-        PinDefinition{PinDirection::Input, QString::fromLatin1(kInputDbPath),
-                      QStringLiteral("Database"), QStringLiteral("text")});
 
     // Outputs
     desc.outputPins.insert(QString::fromLatin1(kOutputContext),
@@ -263,12 +260,12 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
             }
 
             const QString lineSuffix = (r.startLine > 0 && r.endLine > 0)
-                ? QStringLiteral(", Lines: %1-%2").arg(r.startLine).arg(r.endLine)
+                ? QStringLiteral(":%1-%2").arg(r.startLine).arg(r.endLine)
                 : QString();
-            contextText += QStringLiteral("[Source: %1 (Score: %2%3)]\n")
-                               .arg(sourceLabel)
-                               .arg(r.score, 0, 'f', 4)
-                               .arg(lineSuffix);
+            const QString reference = QStringLiteral("%1%2").arg(sourceLabel, lineSuffix);
+            contextText += QStringLiteral("[Reference: %1 | Score: %2]\n")
+                               .arg(reference)
+                               .arg(r.score, 0, 'f', 4);
             contextText += r.content;
             contextText += QStringLiteral("\n\n");
         }
@@ -282,8 +279,14 @@ QFuture<DataPacket> RagQueryNode::Execute(const DataPacket& inputs)
                 sourceLabel = QStringLiteral("file_id=%1").arg(r.fileId);
             }
 
+            const QString lineSuffix = (r.startLine > 0 && r.endLine > 0)
+                ? QStringLiteral(":%1-%2").arg(r.startLine).arg(r.endLine)
+                : QString();
+            const QString reference = QStringLiteral("%1%2").arg(sourceLabel, lineSuffix);
+
             QVariantMap item;
             item.insert(QStringLiteral("source"), sourceLabel);
+            item.insert(QStringLiteral("reference"), reference);
             item.insert(QStringLiteral("score"), r.score);
             item.insert(QStringLiteral("text"), r.content);
             item.insert(QStringLiteral("fragment_id"), r.fragmentId);

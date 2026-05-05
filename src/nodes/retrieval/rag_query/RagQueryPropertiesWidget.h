@@ -68,8 +68,10 @@ private:
     QDoubleSpinBox* m_minRelevanceSpinBox {nullptr};
     QLineEdit* m_databaseEdit {nullptr};
     QPushButton* m_browseDatabaseBtn {nullptr};
+    QPushButton* m_helpButton {nullptr};
     QPlainTextEdit* m_queryEdit {nullptr};
 
 private slots:
     void onBrowseDatabase();
+    void onHelpClicked();
 };

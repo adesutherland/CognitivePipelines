@@ -40,6 +40,59 @@
 #include <QUuid>
 #include <QByteArray>
 
+namespace {
+
+QString textFromMessageContent(const QJsonValue& contentValue)
+{
+    if (contentValue.isString()) {
+        return contentValue.toString();
+    }
+
+    if (!contentValue.isArray()) {
+        return {};
+    }
+
+    QStringList parts;
+    const QJsonArray contentArray = contentValue.toArray();
+    for (const QJsonValue& partValue : contentArray) {
+        if (partValue.isString()) {
+            parts.append(partValue.toString());
+            continue;
+        }
+
+        if (!partValue.isObject()) {
+            continue;
+        }
+
+        const QJsonObject part = partValue.toObject();
+        const QJsonValue textValue = part.value(QStringLiteral("text"));
+        if (textValue.isString()) {
+            parts.append(textValue.toString());
+        } else if (textValue.isObject()) {
+            const QString nestedText = textValue.toObject().value(QStringLiteral("value")).toString();
+            if (!nestedText.isEmpty()) {
+                parts.append(nestedText);
+            }
+        }
+    }
+
+    return parts.join(QString());
+}
+
+int nestedIntValue(const QJsonObject& object,
+                   const QString& objectKey,
+                   const QString& valueKey,
+                   int fallback = 0)
+{
+    const QJsonValue nested = object.value(objectKey);
+    if (!nested.isObject()) {
+        return fallback;
+    }
+    return nested.toObject().value(valueKey).toInt(fallback);
+}
+
+} // namespace
+
 OpenAIBackend::OpenAIBackend() {
     m_cachedModels = {
         QStringLiteral("gpt-5.1"),
@@ -363,6 +416,17 @@ LLMResult OpenAIBackend::sendPrompt(
         CP_CLOG(cp_params).noquote() << "[ParamBehavior] NOT inserting temperature field";
     }
 
+    if (endpointMode == ModelCapsTypes::EndpointMode::Chat
+        && capsOpt.has_value()
+        && capsOpt->constraints.reasoningEffort.has_value()
+        && capsOpt->constraints.reasoningEffort->defaultValue.has_value()) {
+        const QString effort = capsOpt->constraints.reasoningEffort->defaultValue->trimmed();
+        if (!effort.isEmpty()) {
+            root.insert(QStringLiteral("reasoning_effort"), effort);
+            CP_CLOG(cp_params).noquote() << "[ParamBehavior] Inserting reasoning_effort=" << effort;
+        }
+    }
+
     // Token field name selection via caps; default to current behavior for compatibility
     const QString capsTokenField = (capsOpt.has_value() && capsOpt->constraints.tokenFieldName.has_value())
                                    ? *capsOpt->constraints.tokenFieldName
@@ -569,14 +633,21 @@ LLMResult OpenAIBackend::sendPrompt(
         return result;
     }
     
+    QString finishReason;
+    bool sawChoice = false;
+
     // Extract content from choices[0].message.content
     if (rootObj.contains(QStringLiteral("choices")) && rootObj[QStringLiteral("choices")].isArray()) {
         QJsonArray choices = rootObj[QStringLiteral("choices")].toArray();
         if (!choices.isEmpty() && choices[0].isObject()) {
+            sawChoice = true;
             QJsonObject choice = choices[0].toObject();
+            finishReason = choice.value(QStringLiteral("finish_reason")).toString();
             if (choice.contains(QStringLiteral("message")) && choice[QStringLiteral("message")].isObject()) {
                 QJsonObject message = choice[QStringLiteral("message")].toObject();
-                result.content = message[QStringLiteral("content")].toString();
+                result.content = textFromMessageContent(message.value(QStringLiteral("content")));
+            } else if (choice.value(QStringLiteral("text")).isString()) {
+                result.content = choice.value(QStringLiteral("text")).toString();
             }
         }
     }
@@ -587,6 +658,42 @@ LLMResult OpenAIBackend::sendPrompt(
         result.usage.inputTokens = usage[QStringLiteral("prompt_tokens")].toInt(0);
         result.usage.outputTokens = usage[QStringLiteral("completion_tokens")].toInt(0);
         result.usage.totalTokens = usage[QStringLiteral("total_tokens")].toInt(0);
+    }
+
+    const int reasoningTokens = rootObj.value(QStringLiteral("usage")).isObject()
+                                    ? nestedIntValue(rootObj.value(QStringLiteral("usage")).toObject(),
+                                                     QStringLiteral("completion_tokens_details"),
+                                                     QStringLiteral("reasoning_tokens"))
+                                    : 0;
+
+    if (sawChoice && result.content.trimmed().isEmpty()) {
+        result.hasError = true;
+        const bool hitLimit = finishReason == QStringLiteral("length")
+                              || (maxTokens > 0 && result.usage.outputTokens >= maxTokens);
+        if (hitLimit) {
+            result.errorMsg = QStringLiteral(
+                "OpenAI returned no visible text before reaching max_completion_tokens (%1). "
+                "Increase Max Tokens on this Universal AI node or reduce the prompt/RAG context.")
+                                  .arg(maxTokens);
+            if (reasoningTokens > 0) {
+                result.errorMsg += QStringLiteral(" Reasoning tokens used: %1.").arg(reasoningTokens);
+            }
+        } else if (finishReason == QStringLiteral("content_filter")) {
+            result.errorMsg = QStringLiteral("OpenAI returned no visible text because the response was filtered.");
+        } else if (finishReason == QStringLiteral("tool_calls") || finishReason == QStringLiteral("function_call")) {
+            result.errorMsg = QStringLiteral("OpenAI returned tool calls but this node only supports text responses.");
+        } else {
+            result.errorMsg = QStringLiteral("OpenAI returned an empty text response (finish_reason='%1').")
+                                  .arg(finishReason.isEmpty() ? QStringLiteral("unknown") : finishReason);
+        }
+        result.content = result.errorMsg;
+        CP_WARN.noquote() << QStringLiteral("OpenAIBackend::sendPrompt empty response provider=openai model=%1 finish_reason=%2 completion_tokens=%3 max_tokens=%4 reasoning_tokens=%5 message=%6")
+                                      .arg(resolvedModel,
+                                           finishReason.isEmpty() ? QStringLiteral("unknown") : finishReason)
+                                      .arg(result.usage.outputTokens)
+                                      .arg(maxTokens)
+                                      .arg(reasoningTokens)
+                                      .arg(result.errorMsg);
     }
     
     return result;

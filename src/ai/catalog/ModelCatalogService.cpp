@@ -176,7 +176,9 @@ QString defaultEmbeddingDriver(const QString& providerId)
 
 bool providerHasImplementedEmbeddings(const QString& providerId)
 {
-    return providerId == QStringLiteral("openai") || providerId == QStringLiteral("ollama");
+    return providerId == QStringLiteral("openai")
+           || providerId == QStringLiteral("google")
+           || providerId == QStringLiteral("ollama");
 }
 
 bool providerHasImplementedImageGeneration(const QString& providerId)
@@ -295,9 +297,6 @@ QList<ModelCatalogEntry> buildEmbeddingEntries(const QString& providerId, const 
 
     QStringList sortedModels = modelIds;
     sortedModels.removeDuplicates();
-    std::sort(sortedModels.begin(), sortedModels.end(), [](const QString& lhs, const QString& rhs) {
-        return lhs.localeAwareCompare(rhs) < 0;
-    });
 
     for (int i = 0; i < sortedModels.size(); ++i) {
         const QString& modelId = sortedModels.at(i);

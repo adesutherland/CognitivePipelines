@@ -35,9 +35,9 @@
 /**
  * @brief Node that performs semantic retrieval from a RAG index.
  *
- * This node accepts a natural-language query and a database path, discovers
- * the embedding model used for the index, generates a query embedding via the
- * appropriate backend, and returns the most relevant chunks.
+ * This node accepts a natural-language query, opens the configured database
+ * path, discovers the embedding model used for the index, generates a query
+ * embedding via the appropriate backend, and returns the most relevant chunks.
  */
 class RagQueryNode : public QObject, public IToolNode {
     Q_OBJECT
@@ -56,6 +56,8 @@ public:
 
     // Port IDs
     static constexpr const char* kInputQuery = "query";
+    // Legacy packet key: retained so older flows/tests can still override the
+    // property path, but no visible database input pin is exposed.
     static constexpr const char* kInputDbPath = "database";
     static constexpr const char* kOutputContext = "context";
     static constexpr const char* kOutputResults = "results";

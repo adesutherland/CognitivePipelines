@@ -41,7 +41,6 @@ class QLabel;
  * Provides UI controls for:
  * - Input directory selection (with browse button)
  * - Database file path (with browse button)
- * - Index metadata (JSON string)
  * - Provider selection (via model catalog)
  * - Embedding model selection (catalog populated)
  * - Chunk size and overlap parameters
@@ -93,7 +92,9 @@ signals:
 
 private slots:
     void onBrowseDirectory();
-    void onBrowseDatabase();
+    void onCreateDatabase();
+    void onOpenDatabase();
+    void onHelpClicked();
     void onProviderChanged(int index);
     void onModelsFetched();
     void onStrategyChanged(int index);
@@ -106,13 +107,15 @@ private:
 
     QLineEdit* m_directoryEdit {nullptr};
     QLineEdit* m_databaseEdit {nullptr};
-    QLineEdit* m_metadataEdit {nullptr};
+    QString m_indexMetadata;
     QComboBox* m_providerCombo {nullptr};
     QComboBox* m_modelCombo {nullptr};
     QSpinBox* m_chunkSizeSpinBox {nullptr};
     QSpinBox* m_chunkOverlapSpinBox {nullptr};
     QPushButton* m_browseDirectoryBtn {nullptr};
-    QPushButton* m_browseDatabaseBtn {nullptr};
+    QPushButton* m_createDatabaseBtn {nullptr};
+    QPushButton* m_openDatabaseBtn {nullptr};
+    QPushButton* m_helpButton {nullptr};
     QLineEdit* m_fileFilterEdit {nullptr};
     QComboBox* m_chunkingStrategyCombo {nullptr};
     QCheckBox* m_clearDatabaseCheckBox {nullptr};

@@ -74,6 +74,13 @@
       "endpoint": ":generateContent"
     },
     {
+      "id": "google-embeddings",
+      "name": "Google Gemini Embeddings",
+      "provider": "google",
+      "protocol": "embedding",
+      "endpoint": ":embedContent"
+    },
+    {
       "id": "anthropic-messages",
       "name": "Anthropic Messages",
       "provider": "anthropic",
@@ -212,6 +219,7 @@
       "parameter_constraints": {
         "temperature": { "default": 0.7 },
         "omitTemperature": true,
+        "reasoning_effort": { "default": "minimal", "allowed": ["minimal", "low", "medium", "high"] },
         "tokenFieldName": "max_completion_tokens"
       }
     },
@@ -283,6 +291,15 @@
       "parameter_constraints": {
         "temperature": { "default": 0.7, "max": 2.0 }
       }
+    },
+    {
+      "id": "google-embedding-models",
+      "priority": 120,
+      "pattern": "^(?:models/)?(?:gemini-embedding-(?:2|001)|text-embedding-004)$",
+      "backend": "google",
+      "driver": "google-embeddings",
+      "role_mode": "system",
+      "capabilities": ["embedding"]
     },
     {
       "id": "anthropic-claude-3-to-5",

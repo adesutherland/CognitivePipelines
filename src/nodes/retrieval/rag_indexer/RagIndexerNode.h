@@ -61,8 +61,12 @@ public:
 
     // Port IDs
     static constexpr const char* kInputDirectoryPath = "directory_path";
+    // Legacy packet key: retained so older flows/tests can still override the
+    // property path, but no visible database input pin is exposed.
     static constexpr const char* kInputDatabasePath = "database_path";
+    // Legacy packet/state key: metadata is no longer exposed as a visible pin.
     static constexpr const char* kInputMetadata = "index_metadata";
+    // Output packet key retained for status/tests; no visible database output pin.
     static constexpr const char* kOutputDatabasePath = "database_path";
     static constexpr const char* kOutputCount = "count";
 

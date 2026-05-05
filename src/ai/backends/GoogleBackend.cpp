@@ -34,6 +34,66 @@
 #include "LoggingCategories.h"
 #include <QtConcurrent>
 
+namespace {
+
+QString normalizedGoogleEmbeddingModel(QString modelName)
+{
+    QString selectedModel = ModelCapsRegistry::instance()
+                               .resolveAlias(modelName.trimmed(), QStringLiteral("google"))
+                               .trimmed();
+    if (selectedModel.startsWith(QStringLiteral("models/"))) {
+        selectedModel = selectedModel.mid(QStringLiteral("models/").size());
+    }
+
+    const bool looksLikeEmbedding = selectedModel.contains(QStringLiteral("embedding"), Qt::CaseInsensitive);
+    if (selectedModel.isEmpty()
+        || selectedModel.compare(QStringLiteral("auto"), Qt::CaseInsensitive) == 0
+        || (!looksLikeEmbedding
+            && ModelCapsRegistry::instance().resolve(selectedModel, QStringLiteral("google")).has_value())) {
+        selectedModel = QStringLiteral("gemini-embedding-2");
+    }
+
+    return selectedModel;
+}
+
+QString googleErrorMessage(const cpr::Response& response)
+{
+    if (!response.error.message.empty()) {
+        return QString::fromStdString(response.error.message);
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(response.text), &parseError);
+    if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+        const QJsonObject obj = doc.object();
+        if (obj.value(QStringLiteral("error")).isObject()) {
+            const QString message = obj.value(QStringLiteral("error"))
+                                        .toObject()
+                                        .value(QStringLiteral("message"))
+                                        .toString();
+            if (!message.isEmpty()) {
+                return message;
+            }
+        }
+    }
+
+    return QStringLiteral("HTTP %1").arg(response.status_code);
+}
+
+std::vector<float> vectorFromJsonArray(const QJsonArray& values)
+{
+    std::vector<float> vector;
+    vector.reserve(static_cast<size_t>(values.size()));
+    for (const QJsonValue& value : values) {
+        if (value.isDouble()) {
+            vector.push_back(static_cast<float>(value.toDouble()));
+        }
+    }
+    return vector;
+}
+
+} // namespace
+
 
 GoogleBackend::GoogleBackend() {
     m_cachedModels = {
@@ -61,6 +121,8 @@ QStringList GoogleBackend::availableModels() const {
 
 QStringList GoogleBackend::availableEmbeddingModels() const {
     return {
+        QStringLiteral("gemini-embedding-2"),
+        QStringLiteral("gemini-embedding-001"),
         QStringLiteral("text-embedding-004")
     };
 }
@@ -536,14 +598,111 @@ EmbeddingResult GoogleBackend::getEmbedding(
     const QString& modelName,
     const QString& text
 ) {
-    // Suppress unused parameter warnings
-    (void)apiKey;
-    (void)modelName;
-    (void)text;
-    
     EmbeddingResult result;
-    result.hasError = true;
-    result.errorMsg = QStringLiteral("Google embeddings not yet implemented");
+
+    if (apiKey.trimmed().isEmpty()) {
+        result.hasError = true;
+        result.errorMsg = QStringLiteral("Missing Google API key");
+        return result;
+    }
+
+    const QString selectedModel = normalizedGoogleEmbeddingModel(modelName);
+    const QString modelResource = QStringLiteral("models/%1").arg(selectedModel);
+    CP_CLOG(cp_params).noquote() << "[RAG] Google getEmbedding selecting model=" << selectedModel
+                                 << " (requested=" << modelName << ")";
+
+    QJsonObject textPart;
+    textPart.insert(QStringLiteral("text"), text);
+
+    QJsonObject content;
+    content.insert(QStringLiteral("parts"), QJsonArray{textPart});
+
+    QJsonObject root;
+    root.insert(QStringLiteral("model"), modelResource);
+    root.insert(QStringLiteral("content"), content);
+
+    const QByteArray jsonBytes = QJsonDocument(root).toJson(QJsonDocument::Compact);
+    const std::string url = std::string("https://generativelanguage.googleapis.com/v1beta/models/")
+                            + selectedModel.toStdString()
+                            + ":embedContent";
+
+    const auto response = cpr::Post(
+        cpr::Url{url},
+        cpr::Header{
+            {"Accept", "application/json"},
+            {"Content-Type", "application/json"},
+            {"x-goog-api-key", apiKey.toStdString()}
+        },
+        cpr::Body{jsonBytes.constData()},
+        cpr::ConnectTimeout{10000},
+        cpr::Timeout{120000}
+    );
+
+    if (response.error) {
+        result.hasError = true;
+        if (response.error.code == cpr::ErrorCode::OPERATION_TIMEDOUT) {
+            result.errorMsg = QStringLiteral("Google Gemini embedding API timeout");
+            CP_WARN.noquote() << QStringLiteral("GoogleBackend::getEmbedding failure provider=google model=%1 transport=timeout message=%2")
+                                          .arg(selectedModel, QString::fromStdString(response.error.message));
+        } else {
+            result.errorMsg = QStringLiteral("Google Gemini embedding network error: %1")
+                                  .arg(QString::fromStdString(response.error.message));
+            CP_WARN.noquote() << QStringLiteral("GoogleBackend::getEmbedding failure provider=google model=%1 transport=network message=%2")
+                                          .arg(selectedModel, result.errorMsg);
+        }
+        return result;
+    }
+
+    if (response.status_code != 200) {
+        result.hasError = true;
+        result.errorMsg = googleErrorMessage(response);
+        CP_WARN.noquote() << QStringLiteral("GoogleBackend::getEmbedding failure provider=google model=%1 status=%2 message=%3")
+                                      .arg(selectedModel)
+                                      .arg(response.status_code)
+                                      .arg(result.errorMsg);
+        return result;
+    }
+
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(response.text), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        result.hasError = true;
+        result.errorMsg = QStringLiteral("Google embedding JSON parse error: %1").arg(parseError.errorString());
+        return result;
+    }
+
+    const QJsonObject obj = doc.object();
+    if (obj.value(QStringLiteral("error")).isObject()) {
+        result.hasError = true;
+        result.errorMsg = obj.value(QStringLiteral("error"))
+                              .toObject()
+                              .value(QStringLiteral("message"))
+                              .toString(QStringLiteral("Unknown Google embedding error"));
+        return result;
+    }
+
+    if (obj.value(QStringLiteral("embedding")).isObject()) {
+        const QJsonObject embedding = obj.value(QStringLiteral("embedding")).toObject();
+        if (embedding.value(QStringLiteral("values")).isArray()) {
+            result.vector = vectorFromJsonArray(embedding.value(QStringLiteral("values")).toArray());
+        }
+    }
+
+    if (result.vector.empty()) {
+        result.hasError = true;
+        result.errorMsg = QStringLiteral("Google embedding response returned no vector");
+        return result;
+    }
+
+    if (obj.value(QStringLiteral("usageMetadata")).isObject()) {
+        const QJsonObject usage = obj.value(QStringLiteral("usageMetadata")).toObject();
+        const int inputTokens = usage.value(QStringLiteral("promptTokenCount"))
+                                    .toInt(usage.value(QStringLiteral("inputTokenCount")).toInt(0));
+        result.usage.inputTokens = inputTokens;
+        result.usage.outputTokens = 0;
+        result.usage.totalTokens = usage.value(QStringLiteral("totalTokenCount")).toInt(inputTokens);
+    }
+
     return result;
 }
 
