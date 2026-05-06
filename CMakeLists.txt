@@ -610,6 +610,8 @@ add_executable(CognitivePipelines
     ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
     ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
     ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
+    ${SRC_DIR}/nodes/control_flow/crexx_controller/CrexxControllerNode.cpp
+    ${SRC_DIR}/nodes/control_flow/crexx_controller/CrexxControllerNode.h
     ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.cpp
     ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.h
     ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.cpp
@@ -904,6 +906,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/crexx_controller/CrexxControllerNode.cpp
+            ${SRC_DIR}/nodes/control_flow/crexx_controller/CrexxControllerNode.h
             ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.cpp
             ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.h
             ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.cpp
@@ -989,6 +993,7 @@ if(ENABLE_TESTING)
     cp_configure_script_editor_target(unit_tests)
     if(CP_HAS_CREXX)
         target_sources(unit_tests PRIVATE tests/test_crexx_runtime.cpp)
+        target_sources(unit_tests PRIVATE tests/test_crexx_controller_node.cpp)
     endif()
     target_sources(unit_tests PRIVATE tests/test_universal_script_templates.cpp)
     # Add unit tests to CTest
@@ -1141,6 +1146,8 @@ if(ENABLE_TESTING)
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterNode.h
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.cpp
             ${SRC_DIR}/nodes/control_flow/conditional_router/ConditionalRouterPropertiesWidget.h
+            ${SRC_DIR}/nodes/control_flow/crexx_controller/CrexxControllerNode.cpp
+            ${SRC_DIR}/nodes/control_flow/crexx_controller/CrexxControllerNode.h
             ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.cpp
             ${SRC_DIR}/nodes/control_flow/scope/ScopeRuntime.h
             ${SRC_DIR}/nodes/control_flow/scope/ScopeSubgraphExecutor.cpp

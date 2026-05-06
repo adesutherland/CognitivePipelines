@@ -4,11 +4,11 @@ The Universal Script node runs small scripts inside the pipeline. QuickJS is alw
 
 ## General Model
 
-The node has one primary input pin named `input` and one primary output pin named `output`. It also publishes `status`, `logs`, and `__error` for operational feedback.
+The node starts with one input pin named `input` and output pins named `output` and `status`. You can edit the input and output pin lists in the node properties; scripts read and write those names directly.
 
 Incoming tokens are merged into a single input packet before the script runs. Later tokens with the same key overwrite earlier values for ordinary key lookups. The node also keeps the original incoming token list under the internal `_tokens` key so runtimes can support fan-in without relying on overwrite order.
 
-Internal host fields start with `_`. They are for the runtime and should not appear as normal user inputs. CREXX filters system-only tokens out of `input[]`; JavaScript can still inspect internal fields explicitly if needed.
+Internal host fields start with `_`. They are for the runtime and should not appear as normal user inputs.
 
 New script nodes start with an engine-specific template. If the script is still empty or still one of the managed templates, changing the engine swaps in the matching template. Once you edit the script, engine changes preserve your code.
 
@@ -35,112 +35,74 @@ Inside the pipeline, prefer native arrays and objects where the runtime supports
 
 ## CREXX
 
-Select engine `crexx`. Blank scripts show an `Add Example` button; it inserts a complete `options levelb` starter with a `produce:` procedure. The node fills `input[]`, runs `produce`, then reads `output[]`, `log[]`, and `errors[]`.
+Select engine `crexx`. Blank scripts show an `Add Example` button. CREXX scripts use the `PIPELINE` ADDRESS environment to read and write named pins.
 
 ```rexx
-options levelb
-import rxfnsb
+value = ""
+address pipeline "GET input INTO :value"
 
-produce: procedure = .int
-  arg input = .string[], expose output = .string[], expose log = .string[], expose errors = .string[]
-
-  do i = 1 to input.0
-    output[i] = upper(input[i])
-  end
-
-  log[1] = "processed " || input.0 || " item(s)"
-  return 0
-```
-
-For quick experiments, the runtime still accepts a plain `produce` body and wraps it with the same signature.
-
-`input[]` contains primary user input values. If the node receives multiple incoming tokens, each token's `input` value becomes one array entry. If a single token already contains an array, that array is passed through as the input items. Tokens containing only internal fields such as `_sys_node_output_dir` are ignored.
-
-Set `output[]` to return values. With fan-out enabled, each `output[]` entry becomes a downstream token. Set `log[]` for node logs. Set `errors[]` or return a non-zero value to fail the node.
-
-```rexx
-if input.0 = 0 then do
-  errors[1] = "No input received"
+if value = "" then do
+  address pipeline "ERROR No input received"
   return 1
 end
 
-do i = 1 to input.0
-  output[i] = upper(input[i])
-end
-
-log[1] = "done"
+result = upper(value)
+address pipeline "SET output :result"
+address pipeline "LOG Processed input pin"
 return 0
 ```
 
-Advanced scripts may provide their own `produce:` procedure. A script that provides `main:` is treated as a full CREXX module and can use the `PIPELINE` ADDRESS environment directly:
+For quick experiments, the runtime accepts a plain script body and wraps it in a small `produce:` procedure. Advanced scripts may provide their own `produce:` procedure or a full `main:` module. The pin contract remains the same.
+
+Compose normal Rexx strings before writing them to pins:
 
 ```rexx
-address pipeline "INPUT" expose cp_input[]
-address pipeline "LOG :message" expose message
-address pipeline "RETURN" expose cp_output[] cp_log[] cp_errors[]
+question = ""
+draft = ""
+address pipeline "GET question INTO :question"
+address pipeline "GET draft INTO :draft"
+prompt = "Question is " || question || "0a0a"x || "Answer was " || draft
+address pipeline "SET prompt :prompt"
 ```
-
-Full modules use the `cp_` bridge stems because `input` and `output` are ADDRESS clause words in CREXX. The generated `produce` wrapper still presents the friendly `input[]`, `output[]`, `log[]`, and `errors[]` names to normal scripts.
 
 ### CREXX ADDRESS PIPELINE
 
-The CREXX runtime currently exposes one ADDRESS environment named `PIPELINE`. The generated wrapper uses it for normal scripts, and full modules can use it directly. This is the complete command list today:
+The CREXX runtime exposes one ADDRESS environment named `PIPELINE`. The command shape follows the SQLite ADDRESS demo style: command words are literal, and `:name` is a host-variable anchor.
 
-| Command | Exposed Variables | Purpose |
-| --- | --- | --- |
-| `INPUT` | `cp_input[]` | Fills `cp_input[]` with primary user input values. System-only tokens are ignored. |
-| `RETURN` | `cp_output[] cp_log[] cp_errors[]` | Reads output values, log lines, and error lines back into the node. |
-| `LOG text` | none | Appends `text` to the node logs. |
-| `LOG :name` or `LOG ${name}` | `name` | Resolves an exposed CREXX variable and appends its value to the node logs. |
-| `ERROR text` | none | Appends `text` to the error list. |
-| `ERROR :name` or `ERROR ${name}` | `name` | Resolves an exposed CREXX variable and appends its value to the error list. |
-
-`INPUT` and `RETURN` set the CREXX `rc` variable from the host callback. Unknown commands return `rc=99`. A non-empty error list, a non-zero `produce` return, or a failed ADDRESS command fails the node.
-
-Example full module:
+| Command | Purpose |
+| --- | --- |
+| `GET pin INTO :target` | Reads a named input pin into the Rexx variable `target`. |
+| `SET pin text` | Writes literal `text` to a named output pin. |
+| `SET pin :value` | Writes the Rexx variable `value` to a named output pin. |
+| `LOG text` / `LOG :value` | Appends a log line. |
+| `ERROR text` / `ERROR :value` | Fails the node with an error message. |
 
 ```rexx
-options levelb
-import rxfnsb
-
-main: procedure = .int
-  cp_input = .string[]
-  cp_output = .string[]
-  cp_log = .string[]
-  cp_errors = .string[]
-
-  address pipeline "INPUT" expose cp_input[]
-  if rc <> 0 then return rc
-
-  do i = 1 to cp_input.0
-    cp_output[i] = upper(cp_input[i])
-  end
-
-  message = "Processed " || cp_input.0 || " item(s)"
-  address pipeline "LOG :message" expose message
-
-  address pipeline "RETURN" expose cp_output[] cp_log[] cp_errors[]
-  if rc <> 0 then return rc
+produce: procedure = .int
+  topic = ""
+  address pipeline "GET topic INTO :topic"
+  answer = "topic: " || topic
+  address pipeline "SET summary :answer"
   return 0
 ```
 
-`ADDRESSCALL` functions are not exposed yet. Use `INPUT`, `RETURN`, `LOG`, and `ERROR` for the current protocol.
+Unknown commands return `rc=99`. A non-zero script return, an `ERROR` command, or a failed ADDRESS command fails the node.
 
 ## JavaScript
 
 Select engine `quickjs`. JavaScript uses the `pipeline` host object.
 
-Read inputs with `pipeline.getInput(name)`:
+Read inputs with `pipeline.input(name)`:
 
 ```javascript
-const text = pipeline.getInput("input");
+const text = pipeline.input("input");
 ```
 
-Write outputs with `pipeline.setOutput(name, value)`:
+Write outputs with `pipeline.output(name, value)`:
 
 ```javascript
-pipeline.setOutput("output", text.toUpperCase());
-pipeline.setOutput("status", "OK");
+pipeline.output("output", text.toUpperCase());
+pipeline.output("status", "OK");
 ```
 
 JavaScript strings, numbers, booleans, arrays, and plain objects are converted into Qt variants. Arrays become `QVariantList`; plain objects become `QVariantMap`.
@@ -152,31 +114,31 @@ console.log("Starting transform");
 console.error("Recoverable warning");
 ```
 
-`console.error` writes a log line prefixed with `ERROR:`. It does not fail the node by itself. Use `pipeline.setError(message)` for operational failure:
+`console.error` writes a log line prefixed with `ERROR:`. It does not fail the node by itself. Use `pipeline.error(message)` for operational failure:
 
 ```javascript
-const value = pipeline.getInput("required");
+const value = pipeline.input("required");
 if (!value) {
-  pipeline.setError("Missing required input: required");
+  pipeline.error("Missing required input: required");
   return;
 }
 ```
 
 Throwing an exception also fails the node and includes the QuickJS error and stack trace in `__error`.
 
-Use `pipeline.getTempDir()` for scratch files:
+Use `pipeline.tempDir()` for scratch files:
 
 ```javascript
-const path = pipeline.getTempDir() + "/script-output.txt";
-pipeline.setOutput("path", path);
+const path = pipeline.tempDir() + "/script-output.txt";
+pipeline.output("path", path);
 ```
 
 The QuickJS runtime exposes a small SQLite bridge:
 
 ```javascript
-const dbPath = pipeline.getTempDir() + "/example.db";
+const dbPath = pipeline.tempDir() + "/example.db";
 if (!sqlite.connect(dbPath)) {
-  pipeline.setError("Could not open database");
+  pipeline.error("Could not open database");
   return;
 }
 
@@ -184,7 +146,7 @@ sqlite.exec("CREATE TABLE IF NOT EXISTS items (name TEXT, score INTEGER)");
 sqlite.exec("INSERT INTO items (name, score) VALUES (?, ?)", ["alpha", 42]);
 
 const rows = sqlite.exec("SELECT name, score FROM items WHERE score > ?", [10]);
-pipeline.setOutput("rows", rows);
+pipeline.output("rows", rows);
 ```
 
 `sqlite.exec` returns an array of objects for result sets. Use parameter arrays for values rather than building SQL strings.

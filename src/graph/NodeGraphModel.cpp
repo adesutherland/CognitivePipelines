@@ -43,6 +43,7 @@
 #include "RagIndexerNode.h"
 #include "RagQueryNode.h"
 #include "ConditionalRouterNode.h"
+#include "CrexxControllerNode.h"
 #include "GetInputNode.h"
 #include "GetItemNode.h"
 #include "IteratorScopeNode.h"
@@ -220,6 +221,14 @@ NodeGraphModel::NodeGraphModel(QObject* parent, GraphKind kind, const QString& e
         auto tool = std::make_shared<ConditionalRouterNode>();
         return std::make_unique<ToolNodeDelegate>(tool);
     }, QStringLiteral("Control Flow"));
+
+#if CP_HAS_CREXX
+    // Register cREXX Controller under the "Control Flow" category via ToolNodeDelegate
+    registry->registerModel([this]() {
+        auto tool = std::make_shared<CrexxControllerNode>();
+        return std::make_unique<ToolNodeDelegate>(tool);
+    }, QStringLiteral("Control Flow"));
+#endif
 
     // Register scope parents in every graph kind so scopes can be nested.
     registry->registerModel([this]() {

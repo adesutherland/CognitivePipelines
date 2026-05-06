@@ -48,29 +48,25 @@ TEST(CrexxRuntimeTest, Identity)
     EXPECT_EQ(runtime.getEngineId(), QStringLiteral("crexx"));
 }
 
-TEST(CrexxRuntimeTest, ProduceBodyWritesOutputAndLog)
+TEST(CrexxRuntimeTest, BodyReadsAndWritesNamedPins)
 {
     CrexxRuntime runtime;
     CrexxMockScriptHost host;
     host.inputs[QStringLiteral("input")] = QStringLiteral("alpha");
 
     const QString script =
-        QStringLiteral("output[1] = input[1]\n"
-                       "output[2] = \"beta\"\n"
-                       "log[1] = \"ran\"\n");
+        QStringLiteral("value = \"\"\n"
+                       "address pipeline \"GET input INTO :value\"\n"
+                       "result = value || \" beta\"\n"
+                       "address pipeline \"SET output :result\"\n"
+                       "address pipeline \"LOG ran\"\n");
 
     const bool success = runtime.execute(script, &host);
 
     ASSERT_TRUE(success) << (host.errors.empty() ? "" : host.errors.front().toStdString());
     ASSERT_FALSE(host.logs.empty());
     EXPECT_EQ(host.logs.front(), QStringLiteral("ran"));
-
-    const QVariant output = host.outputs[QStringLiteral("output")];
-    ASSERT_EQ(output.typeId(), QMetaType::QVariantList);
-    const QVariantList values = output.toList();
-    ASSERT_EQ(values.size(), 2);
-    EXPECT_EQ(values.at(0).toString(), QStringLiteral("alpha"));
-    EXPECT_EQ(values.at(1).toString(), QStringLiteral("beta"));
+    EXPECT_EQ(host.outputs[QStringLiteral("output")].toString(), QStringLiteral("alpha beta"));
 }
 
 TEST(CrexxRuntimeTest, StarterProcedureTemplateRuns)
@@ -87,60 +83,91 @@ TEST(CrexxRuntimeTest, StarterProcedureTemplateRuns)
     EXPECT_TRUE(host.logs.front().contains(QStringLiteral("Processed")));
 }
 
-TEST(CrexxRuntimeTest, MultipleTokenInputsBecomeInputArray)
+TEST(CrexxRuntimeTest, ProduceProcedureUsesNamedPins)
 {
     CrexxRuntime runtime;
     CrexxMockScriptHost host;
-
-    QVariantList tokens;
-    tokens << QVariantMap{{QStringLiteral("input"), QStringLiteral("one")}};
-    tokens << QVariantMap{{QStringLiteral("input"), QStringLiteral("two")}};
-    host.inputs[QStringLiteral("_tokens")] = tokens;
+    host.inputs[QStringLiteral("topic")] = QStringLiteral("corn laws");
 
     const QString script =
-        QStringLiteral("output[1] = input[1]\n"
-                       "output[2] = input[2]\n");
+        QStringLiteral("produce: procedure = .int\n"
+                       "  topic = \"\"\n"
+                       "  address pipeline \"GET topic INTO :topic\"\n"
+                       "  answer = \"topic: \" || topic\n"
+                       "  address pipeline \"SET summary :answer\"\n"
+                       "  return 0\n");
 
     const bool success = runtime.execute(script, &host);
 
     ASSERT_TRUE(success) << (host.errors.empty() ? "" : host.errors.front().toStdString());
-    const QVariantList values = host.outputs[QStringLiteral("output")].toList();
-    ASSERT_EQ(values.size(), 2);
-    EXPECT_EQ(values.at(0).toString(), QStringLiteral("one"));
-    EXPECT_EQ(values.at(1).toString(), QStringLiteral("two"));
+    EXPECT_EQ(host.outputs[QStringLiteral("summary")].toString(), QStringLiteral("topic: corn laws"));
 }
 
-TEST(CrexxRuntimeTest, SystemOnlyTokensAreNotInputItems)
+TEST(CrexxRuntimeTest, NamedPinGetSerializesStructuredValues)
 {
     CrexxRuntime runtime;
     CrexxMockScriptHost host;
-
-    QVariantList tokens;
-    tokens << QVariantMap{{QStringLiteral("input"), QStringLiteral("visible")}};
-    tokens << QVariantMap{{QStringLiteral("_sys_node_output_dir"), QStringLiteral("/tmp/internal")}};
-    host.inputs[QStringLiteral("_tokens")] = tokens;
+    host.inputs[QStringLiteral("items")] = QVariantList{QStringLiteral("one"), QStringLiteral("two")};
 
     const QString script =
-        QStringLiteral("output[1] = input.0\n"
-                       "output[2] = input[1]\n");
+        QStringLiteral("json = \"\"\n"
+                       "address pipeline \"GET items INTO :json\"\n"
+                       "address pipeline \"SET json :json\"\n");
 
     const bool success = runtime.execute(script, &host);
 
     ASSERT_TRUE(success) << (host.errors.empty() ? "" : host.errors.front().toStdString());
-    const QVariantList values = host.outputs[QStringLiteral("output")].toList();
-    ASSERT_EQ(values.size(), 2);
-    EXPECT_EQ(values.at(0).toString(), QStringLiteral("1"));
-    EXPECT_EQ(values.at(1).toString(), QStringLiteral("visible"));
+    EXPECT_EQ(host.outputs[QStringLiteral("json")].toString(), QStringLiteral("[\"one\",\"two\"]"));
 }
 
-TEST(CrexxRuntimeTest, ErrorsArrayFailsExecution)
+TEST(CrexxRuntimeTest, AddressErrorFailsExecution)
 {
     CrexxRuntime runtime;
     CrexxMockScriptHost host;
 
-    const bool success = runtime.execute(QStringLiteral("errors[1] = \"nope\"\n"), &host);
+    const bool success = runtime.execute(QStringLiteral("address pipeline \"ERROR nope\"\n"), &host);
 
     EXPECT_FALSE(success);
     ASSERT_FALSE(host.errors.empty());
     EXPECT_EQ(host.errors.front(), QStringLiteral("nope"));
+}
+
+TEST(CrexxRuntimeTest, AddressEnvironmentCanGetAndSetNamedPins)
+{
+    CrexxRuntime runtime;
+    CrexxMockScriptHost host;
+    host.inputs[QStringLiteral("prompt")] = QStringLiteral("corn laws");
+
+    const QString script =
+        QStringLiteral("prompt = \"\"\n"
+                       "address pipeline \"GET prompt INTO :prompt\"\n"
+                       "answer = \"topic: \" || prompt\n"
+                       "address pipeline \"SET result :answer\"\n");
+
+    const bool success = runtime.execute(script, &host);
+
+    ASSERT_TRUE(success) << (host.errors.empty() ? "" : host.errors.front().toStdString());
+    EXPECT_EQ(host.outputs[QStringLiteral("result")].toString(), QStringLiteral("topic: corn laws"));
+}
+
+TEST(CrexxRuntimeTest, AddressPayloadUsesComposedHostVariable)
+{
+    CrexxRuntime runtime;
+    CrexxMockScriptHost host;
+    host.inputs[QStringLiteral("question")] = QStringLiteral("Explain TLS");
+    host.inputs[QStringLiteral("answer")] = QStringLiteral("TLS protects traffic");
+
+    const QString script =
+        QStringLiteral("brief = \"\"\n"
+                       "draft = \"\"\n"
+                       "address pipeline \"GET question INTO :brief\"\n"
+                       "address pipeline \"GET answer INTO :draft\"\n"
+                       "prompt = \"Question is \" || brief || \". Answer was \" || draft\n"
+                       "address pipeline \"SET prompt :prompt\"\n");
+
+    const bool success = runtime.execute(script, &host);
+
+    ASSERT_TRUE(success) << (host.errors.empty() ? "" : host.errors.front().toStdString());
+    EXPECT_EQ(host.outputs[QStringLiteral("prompt")].toString(),
+              QStringLiteral("Question is Explain TLS. Answer was TLS protects traffic"));
 }

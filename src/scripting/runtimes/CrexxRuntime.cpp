@@ -28,8 +28,6 @@ namespace {
 
 struct PipelineInvocation {
     IScriptHost* host = nullptr;
-    QStringList inputItems;
-    QStringList outputs;
     QStringList logs;
     QStringList errors;
 };
@@ -162,74 +160,6 @@ QString variantToProtocolString(const QVariant& value)
     return value.toString();
 }
 
-QStringList appendVariantItems(const QVariant& value, QStringList items)
-{
-    const int type = value.typeId();
-    if (type == QMetaType::QStringList) {
-        items.append(value.toStringList());
-        return items;
-    }
-
-    if (type == QMetaType::QVariantList) {
-        const QVariantList list = value.toList();
-        for (const QVariant& item : list) {
-            items << variantToProtocolString(item);
-        }
-        return items;
-    }
-
-    if (value.isValid() && !value.isNull()) {
-        items << variantToProtocolString(value);
-    }
-    return items;
-}
-
-bool isSystemKey(const QString& key)
-{
-    return key.startsWith(QLatin1Char('_'));
-}
-
-QVariantMap userFieldsOnly(const QVariantMap& token)
-{
-    QVariantMap visible;
-    for (auto it = token.cbegin(); it != token.cend(); ++it) {
-        if (!isSystemKey(it.key())) {
-            visible.insert(it.key(), it.value());
-        }
-    }
-    return visible;
-}
-
-QStringList inputItemsFromHost(IScriptHost* host)
-{
-    QStringList items;
-    if (!host) {
-        return items;
-    }
-
-    const QVariant tokens = host->getInput(QStringLiteral("_tokens"));
-    if (tokens.typeId() == QMetaType::QVariantList) {
-        const QVariantList tokenList = tokens.toList();
-        for (const QVariant& tokenValue : tokenList) {
-            const QVariantMap token = tokenValue.toMap();
-            if (token.contains(QStringLiteral("input"))) {
-                items = appendVariantItems(token.value(QStringLiteral("input")), items);
-            } else {
-                const QVariantMap visible = userFieldsOnly(token);
-                if (!visible.isEmpty()) {
-                    items << variantToProtocolString(visible);
-                }
-            }
-        }
-    }
-
-    if (!items.isEmpty()) {
-        return items;
-    }
-
-    return appendVariantItems(host->getInput(QStringLiteral("input")), items);
-}
-
 bool setAddressVariable(crexxsaa_context* context, const QString& name, const QString& value, QString* error)
 {
     const QByteArray nameBytes = toUtf8Bytes(name);
@@ -293,33 +223,6 @@ bool getAddressVariable(crexxsaa_context* context, const QString& name, QString*
     return true;
 }
 
-QStringList getStem(crexxsaa_context* context, const QString& stemName, QString* error)
-{
-    QString countText;
-    if (!getAddressVariable(context, stemName + QStringLiteral(".0"), &countText, error)) {
-        return {};
-    }
-
-    bool ok = false;
-    const int count = countText.toInt(&ok);
-    if (!ok || count < 1) {
-        return {};
-    }
-
-    QStringList values;
-    for (int i = 1; i <= count; ++i) {
-        QString item;
-        if (getAddressVariable(context, QStringLiteral("%1.%2").arg(stemName).arg(i), &item, error)) {
-            values << item;
-        } else if (error && !error->isEmpty()) {
-            return {};
-        } else {
-            values << QString();
-        }
-    }
-    return values;
-}
-
 QString resolveCommandPayload(const crexxsaa_address_request* request, const QString& command)
 {
     const int firstSpace = command.indexOf(QLatin1Char(' '));
@@ -341,6 +244,47 @@ QString resolveCommandPayload(const crexxsaa_address_request* request, const QSt
     return QString();
 }
 
+bool validAnchorName(const QString& name)
+{
+    static const QRegularExpression pattern(QStringLiteral("^[A-Za-z_][A-Za-z0-9_]*$"));
+    return pattern.match(name).hasMatch();
+}
+
+QString anchorName(const QString& token)
+{
+    const QString trimmed = token.trimmed();
+    QString name;
+    if (trimmed.startsWith(QStringLiteral("${")) && trimmed.endsWith(QLatin1Char('}'))) {
+        name = trimmed.mid(2, trimmed.size() - 3).trimmed();
+    } else if (trimmed.startsWith(QLatin1Char(':'))) {
+        name = trimmed.mid(1).trimmed();
+    }
+    return validAnchorName(name) ? name : QString();
+}
+
+QString commandRest(const QString& command)
+{
+    const int firstSpace = command.indexOf(QLatin1Char(' '));
+    return firstSpace < 0 ? QString() : command.mid(firstSpace + 1).trimmed();
+}
+
+QString commandWord(QString* rest)
+{
+    if (!rest) {
+        return QString();
+    }
+
+    const QString trimmed = rest->trimmed();
+    const int firstSpace = trimmed.indexOf(QLatin1Char(' '));
+    if (firstSpace < 0) {
+        *rest = QString();
+        return trimmed;
+    }
+
+    *rest = trimmed.mid(firstSpace + 1).trimmed();
+    return trimmed.left(firstSpace);
+}
+
 int pipelineAddressCallback(const crexxsaa_address_request* request,
                             crexxsaa_address_response* response,
                             void* userdata)
@@ -357,40 +301,59 @@ int pipelineAddressCallback(const crexxsaa_address_request* request,
     const QString command = fromUtf8(request->command).trimmed();
     const QString op = command.section(QLatin1Char(' '), 0, 0).toUpper();
 
-    QString error;
-    if (op == QStringLiteral("INPUT")) {
-        if (!setStem(request->context, QStringLiteral("cp_input"), state->invocation->inputItems, &error)) {
-            state->lastError = error;
-            response->rc = 20;
-        }
-        return 0;
-    }
-
-    if (op == QStringLiteral("RETURN")) {
-        state->invocation->outputs = getStem(request->context, QStringLiteral("cp_output"), &error);
-        if (!error.isEmpty()) {
-            state->lastError = error;
-            response->rc = 30;
-            return 0;
-        }
-
-        state->invocation->logs = getStem(request->context, QStringLiteral("cp_log"), &error);
-        if (!error.isEmpty()) {
-            state->lastError = error;
-            response->rc = 31;
-            return 0;
-        }
-
-        state->invocation->errors = getStem(request->context, QStringLiteral("cp_errors"), &error);
-        if (!error.isEmpty()) {
-            state->lastError = error;
-            response->rc = 32;
-        }
-        return 0;
-    }
-
     if (op == QStringLiteral("LOG")) {
         state->invocation->logs << resolveCommandPayload(request, command);
+        return 0;
+    }
+
+    if (op == QStringLiteral("GET")) {
+        QString error;
+        QString rest = commandRest(command);
+        const QString pinName = commandWord(&rest);
+        if (pinName.trimmed().isEmpty()) {
+            state->lastError = QStringLiteral("PIPELINE GET requires a pin name");
+            response->rc = 40;
+            return 0;
+        }
+
+        const QString intoWord = commandWord(&rest).toUpper();
+        if (intoWord != QStringLiteral("INTO")) {
+            state->lastError = QStringLiteral("PIPELINE GET requires INTO :target");
+            response->rc = 42;
+            return 0;
+        }
+
+        const QString targetName = anchorName(rest);
+        if (targetName.isEmpty()) {
+            state->lastError = QStringLiteral("PIPELINE GET INTO requires a host variable target");
+            response->rc = 43;
+            return 0;
+        }
+
+        const QVariant value = state->invocation->host
+            ? state->invocation->host->getInput(pinName)
+            : QVariant();
+        const QString protocolValue = variantToProtocolString(value);
+        if (!setAddressVariable(request->context, targetName, protocolValue, &error)) {
+            state->lastError = error;
+            response->rc = 44;
+        }
+        return 0;
+    }
+
+    if (op == QStringLiteral("SET")) {
+        QString rest = commandRest(command);
+        const QString pinName = commandWord(&rest);
+        if (pinName.trimmed().isEmpty()) {
+            state->lastError = QStringLiteral("PIPELINE SET requires a pin name");
+            response->rc = 50;
+            return 0;
+        }
+
+        const QString value = resolveCommandPayload(request, QStringLiteral("SET ") + rest);
+        if (state->invocation->host) {
+            state->invocation->host->setOutput(pinName, value);
+        }
         return 0;
     }
 
@@ -495,19 +458,9 @@ QString generatedMain()
 {
     return QStringLiteral(
         "main: procedure = .int\n"
-        "  cp_input = .string[]\n"
-        "  cp_output = .string[]\n"
-        "  cp_log = .string[]\n"
-        "  cp_errors = .string[]\n"
-        "  rc = 0\n"
         "  produce_rc = 0\n"
-        "  address pipeline \"INPUT\" expose cp_input[]\n"
-        "  if rc <> 0 then return rc\n"
-        "  produce_rc = produce(cp_input, cp_output, cp_log, cp_errors)\n"
-        "  address pipeline \"RETURN\" expose cp_output[] cp_log[] cp_errors[]\n"
-        "  if rc <> 0 then return rc\n"
+        "  produce_rc = produce()\n"
         "  if produce_rc <> 0 then return produce_rc\n"
-        "  if cp_errors.0 > 0 then return 1\n"
         "  return 0\n");
 }
 
@@ -562,7 +515,6 @@ QString wrapScript(const QString& script)
         + generatedMain()
         + QStringLiteral("\n")
         + QStringLiteral("produce: procedure = .int\n")
-        + QStringLiteral("  arg input = .string[], expose output = .string[], expose log = .string[], expose errors = .string[]\n")
         + indentedBody(script)
         + QStringLiteral("\n")
         + QStringLiteral("  return 0\n");
@@ -594,19 +546,6 @@ bool writeScriptSource(const QString& wrappedScript, IScriptHost* host, QString*
         *sourcePath = path;
     }
     return true;
-}
-
-QVariant outputValueFromList(const QStringList& outputs)
-{
-    if (outputs.size() == 1) {
-        return outputs.first();
-    }
-
-    QVariantList list;
-    for (const QString& output : outputs) {
-        list << output;
-    }
-    return list;
 }
 
 } // namespace
@@ -643,7 +582,6 @@ bool CrexxRuntime::execute(const QString& script, IScriptHost* host)
 
     PipelineInvocation invocation;
     invocation.host = host;
-    invocation.inputItems = inputItemsFromHost(host);
 
     state->invocation = &invocation;
 
@@ -664,10 +602,6 @@ bool CrexxRuntime::execute(const QString& script, IScriptHost* host)
         if (!log.isEmpty()) {
             host->log(log);
         }
-    }
-
-    if (!invocation.outputs.isEmpty()) {
-        host->setOutput(QStringLiteral("output"), outputValueFromList(invocation.outputs));
     }
 
     if (!invocation.errors.isEmpty()) {

@@ -11,18 +11,20 @@
 /**
  * @brief CREXX implementation of the Universal Script runtime.
  *
- * Scripts can be authored as a produce() body:
+ * Scripts can read and write named pins through the PIPELINE ADDRESS
+ * environment:
  *
- *   output[1] = input[1]
- *   log[1] = "done"
+ *   value = ""
+ *   address pipeline "GET input INTO :value"
+ *   result = upper(value)
+ *   address pipeline "SET output :result"
  *
- * The runtime wraps that body in a small CREXX module, fills input[] through the
- * PIPELINE ADDRESS environment, and reads output[]/log[]/errors[] when the
- * script returns.
+ * The runtime wraps the script body in a small CREXX module. Scripts may also
+ * provide their own produce: procedure, but the pin contract remains the
+ * PIPELINE ADDRESS environment.
  */
 class CrexxRuntime : public IScriptEngine {
 public:
     bool execute(const QString& script, IScriptHost* host) override;
     QString getEngineId() const override;
 };
-

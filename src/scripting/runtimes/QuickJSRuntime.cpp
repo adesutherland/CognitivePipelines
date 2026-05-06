@@ -126,10 +126,10 @@ void QuickJSRuntime::setupGlobalEnv(IScriptHost* host) {
 
     // pipeline object
     JSValue pipeline = JS_NewObject(m_ctx);
-    JS_SetPropertyStr(m_ctx, pipeline, "getInput", JS_NewCFunction(m_ctx, js_pipeline_get_input, "getInput", 1));
-    JS_SetPropertyStr(m_ctx, pipeline, "setOutput", JS_NewCFunction(m_ctx, js_pipeline_set_output, "setOutput", 2));
-    JS_SetPropertyStr(m_ctx, pipeline, "setError", JS_NewCFunction(m_ctx, js_pipeline_set_error, "setError", 1));
-    JS_SetPropertyStr(m_ctx, pipeline, "getTempDir", JS_NewCFunction(m_ctx, js_pipeline_get_temp_dir, "getTempDir", 0));
+    JS_SetPropertyStr(m_ctx, pipeline, "input", JS_NewCFunction(m_ctx, js_pipeline_get_input, "input", 1));
+    JS_SetPropertyStr(m_ctx, pipeline, "output", JS_NewCFunction(m_ctx, js_pipeline_set_output, "output", 2));
+    JS_SetPropertyStr(m_ctx, pipeline, "error", JS_NewCFunction(m_ctx, js_pipeline_set_error, "error", 1));
+    JS_SetPropertyStr(m_ctx, pipeline, "tempDir", JS_NewCFunction(m_ctx, js_pipeline_get_temp_dir, "tempDir", 0));
     JS_SetPropertyStr(m_ctx, global_obj, "pipeline", pipeline);
 
     // sqlite object
@@ -317,12 +317,27 @@ QVariant QuickJSRuntime::jsToVariant(JSContext* ctx, JSValueConst val) {
 }
 
 JSValue QuickJSRuntime::variantToJs(JSContext* ctx, const QVariant& var) {
+    if (!var.isValid() || var.isNull()) {
+        return JS_UNDEFINED;
+    }
+
     if (var.typeId() == QMetaType::QString) {
         return JS_NewString(ctx, var.toString().toUtf8().constData());
-    } else if (var.typeId() == QMetaType::Double || var.typeId() == QMetaType::Int) {
+    } else if (var.typeId() == QMetaType::Double ||
+               var.typeId() == QMetaType::Float ||
+               var.typeId() == QMetaType::Int ||
+               var.typeId() == QMetaType::UInt ||
+               var.typeId() == QMetaType::LongLong ||
+               var.typeId() == QMetaType::ULongLong) {
         return JS_NewFloat64(ctx, var.toDouble());
     } else if (var.typeId() == QMetaType::Bool) {
         return JS_NewBool(ctx, var.toBool());
+    } else if (var.typeId() == QMetaType::QVariantMap ||
+               var.typeId() == QMetaType::QVariantList ||
+               var.typeId() == QMetaType::QStringList ||
+               var.canConvert<QVariantList>() ||
+               var.canConvert<QVariantMap>()) {
+        return qJsonToJSValue(ctx, QJsonValue::fromVariant(var));
     }
     return JS_UNDEFINED;
 }

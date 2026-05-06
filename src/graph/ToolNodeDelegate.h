@@ -102,6 +102,7 @@ public:
 private Q_SLOTS:
     void onNodeInputPinsUpdateRequested(const QStringList& newVariables);
     void onInputPinsChanged();
+    void onOutputPinsChanged();
 
 private:
     std::shared_ptr<IToolNode> _node;
@@ -113,6 +114,7 @@ private:
     mutable std::vector<QString> _outputOrder;
     QMetaObject::Connection _dynamicPinsConnection;
     QMetaObject::Connection _capsConnection;
+    QMetaObject::Connection _outputPinsConnection;
 
     // Runtime IO values
     QMap<QString, QVariant> _inputs;   // keyed by pin id

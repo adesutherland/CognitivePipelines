@@ -83,7 +83,7 @@ TEST_F(ScriptNodeIntegrationTest, SqliteIntegration)
 TEST_F(ScriptNodeIntegrationTest, ArrayPassThrough)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
+    QString script = "pipeline.output(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -105,7 +105,7 @@ TEST_F(ScriptNodeIntegrationTest, ArrayPassThrough)
 TEST_F(ScriptNodeIntegrationTest, ArrayFanOut)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
+    QString script = "pipeline.output(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -125,7 +125,7 @@ TEST_F(ScriptNodeIntegrationTest, ArrayFanOut)
 TEST_F(ScriptNodeIntegrationTest, MixedTypes)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"output\", \"SingleString\");";
+    QString script = "pipeline.output(\"output\", \"SingleString\");";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -152,7 +152,7 @@ TEST_F(ScriptNodeIntegrationTest, UnifiedLoggingAndStatus)
     QString script = 
         "print('Hello Print');\n"
         "console.error('Hello Error');\n"
-        "pipeline.setOutput('status', 'CustomStatus');";
+        "pipeline.output('status', 'CustomStatus');";
     
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -183,7 +183,7 @@ TEST_F(ScriptNodeIntegrationTest, UnifiedLoggingAndStatus)
     EXPECT_EQ(outTokens.front().data.value(QStringLiteral("status")).toString(), QStringLiteral("FAIL"));
 
     // Test explicit script failure
-    state.insert(QStringLiteral("scriptCode"), QStringLiteral("pipeline.setError('manual failure');"));
+    state.insert(QStringLiteral("scriptCode"), QStringLiteral("pipeline.error('manual failure');"));
     node.loadState(state);
     outTokens = node.execute({});
     ASSERT_EQ(outTokens.size(), 1);
@@ -195,7 +195,7 @@ TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)
 {
     UniversalScriptNode node;
     QString script = "console.log(\"Log 1\");\n"
-                     "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
+                     "pipeline.output(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -215,7 +215,7 @@ TEST_F(ScriptNodeIntegrationTest, FanOutPreservesLogs)
 TEST_F(ScriptNodeIntegrationTest, InjectsFanOutSummaryIntoLogs)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
+    QString script = "pipeline.output(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -237,7 +237,7 @@ TEST_F(ScriptNodeIntegrationTest, InjectsFanOutSummaryIntoLogs)
 TEST_F(ScriptNodeIntegrationTest, NoSummaryInSingleMode)
 {
     UniversalScriptNode node;
-    QString script = "pipeline.setOutput(\"output\", [\"A\", \"B\"]);";
+    QString script = "pipeline.output(\"output\", [\"A\", \"B\"]);";
 
     QJsonObject state;
     state.insert(QStringLiteral("scriptCode"), script);
@@ -251,4 +251,46 @@ TEST_F(ScriptNodeIntegrationTest, NoSummaryInSingleMode)
     QString logs = outTokens.front().data.value(QStringLiteral("logs")).toString();
     EXPECT_FALSE(logs.contains(QStringLiteral("--- Output Data ---")));
     EXPECT_FALSE(logs.contains(QStringLiteral("output:")));
+}
+
+TEST_F(ScriptNodeIntegrationTest, JavascriptCanReadAndWriteNamedPins)
+{
+    UniversalScriptNode node;
+    QString script = "const topic = pipeline.input(\"topic\");\n"
+                     "pipeline.output(\"summary\", `About ${topic}`);";
+
+    QJsonObject state;
+    state.insert(QStringLiteral("scriptCode"), script);
+    state.insert(QStringLiteral("engineId"), QStringLiteral("quickjs"));
+    state.insert(QStringLiteral("inputPins"), QJsonArray{QStringLiteral("topic")});
+    state.insert(QStringLiteral("outputPins"), QJsonArray{QStringLiteral("summary")});
+    node.loadState(state);
+
+    ExecutionToken in;
+    in.triggeringPinId = QStringLiteral("topic");
+    in.data.insert(QStringLiteral("topic"), QStringLiteral("corn laws"));
+
+    TokenList outTokens = node.execute(TokenList{in});
+
+    ASSERT_EQ(outTokens.size(), 1);
+    EXPECT_EQ(outTokens.front().data.value(QStringLiteral("summary")).toString(),
+              QStringLiteral("About corn laws"));
+}
+
+TEST_F(ScriptNodeIntegrationTest, DescriptorReflectsConfiguredNamedPins)
+{
+    UniversalScriptNode node;
+
+    QJsonObject state;
+    state.insert(QStringLiteral("inputPins"), QJsonArray{QStringLiteral("topic"), QStringLiteral("context")});
+    state.insert(QStringLiteral("outputPins"), QJsonArray{QStringLiteral("summary"), QStringLiteral("status")});
+    node.loadState(state);
+
+    const NodeDescriptor desc = node.getDescriptor();
+    ASSERT_TRUE(desc.inputPins.contains(QStringLiteral("topic")));
+    ASSERT_TRUE(desc.inputPins.contains(QStringLiteral("context")));
+    ASSERT_TRUE(desc.outputPins.contains(QStringLiteral("summary")));
+    ASSERT_TRUE(desc.outputPins.contains(QStringLiteral("status")));
+    EXPECT_EQ(desc.inputPinOrder, QStringList({QStringLiteral("topic"), QStringLiteral("context")}));
+    EXPECT_EQ(desc.outputPinOrder, QStringList({QStringLiteral("summary"), QStringLiteral("status")}));
 }

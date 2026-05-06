@@ -35,19 +35,17 @@ TEST(UniversalScriptTemplatesTest, ProvidesQuickJsTemplate)
 {
     const QString script = UniversalScriptTemplates::forEngine(QStringLiteral("quickjs"));
     EXPECT_TRUE(script.contains(QStringLiteral("QuickJS runtime, not Node.js")));
-    EXPECT_TRUE(script.contains(QStringLiteral("pipeline.getInput")));
-    EXPECT_TRUE(script.contains(QStringLiteral("pipeline.setOutput")));
+    EXPECT_TRUE(script.contains(QStringLiteral("pipeline.input")));
+    EXPECT_TRUE(script.contains(QStringLiteral("pipeline.output")));
 }
 
 TEST(UniversalScriptTemplatesTest, ProvidesCrexxTemplate)
 {
     const QString script = UniversalScriptTemplates::forEngine(QStringLiteral("crexx"));
-    EXPECT_TRUE(script.contains(QStringLiteral("options levelb")));
-    EXPECT_TRUE(script.contains(QStringLiteral("produce: procedure = .int")));
-    EXPECT_TRUE(script.contains(QStringLiteral("arg input = .string[]")));
-    EXPECT_TRUE(script.contains(QStringLiteral("input[]")));
-    EXPECT_TRUE(script.contains(QStringLiteral("output[i]")));
-    EXPECT_TRUE(script.contains(QStringLiteral("errors[1]")));
+    EXPECT_TRUE(script.contains(QStringLiteral("address pipeline \"GET input INTO :value\"")));
+    EXPECT_TRUE(script.contains(QStringLiteral("address pipeline \"SET output :result\"")));
+    EXPECT_TRUE(script.contains(QStringLiteral("address pipeline \"ERROR")));
+    EXPECT_FALSE(script.contains(QStringLiteral("arg input = .string[]")));
 }
 
 TEST(UniversalScriptTemplatesTest, DetectsManagedTemplates)
@@ -55,7 +53,7 @@ TEST(UniversalScriptTemplatesTest, DetectsManagedTemplates)
     EXPECT_TRUE(UniversalScriptTemplates::isManagedTemplate(QString()));
     EXPECT_TRUE(UniversalScriptTemplates::isManagedTemplate(UniversalScriptTemplates::quickJs()));
     EXPECT_TRUE(UniversalScriptTemplates::isManagedTemplate(UniversalScriptTemplates::crexx()));
-    EXPECT_FALSE(UniversalScriptTemplates::isManagedTemplate(QStringLiteral("pipeline.setOutput('output', 'custom');")));
+    EXPECT_FALSE(UniversalScriptTemplates::isManagedTemplate(QStringLiteral("pipeline.output('output', 'custom');")));
 }
 
 TEST(UniversalScriptTemplatesTest, MapsEnginesToHighlighterFileTypes)

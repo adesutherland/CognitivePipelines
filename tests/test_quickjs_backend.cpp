@@ -63,8 +63,8 @@ TEST(QuickJSBackendTest, DataExchange) {
     host.inputs["in_key"] = "Hello";
     
     QString script = 
-        "var val = pipeline.getInput(\"in_key\");\n"
-        "pipeline.setOutput(\"out_key\", val + \" world\");";
+        "var val = pipeline.input(\"in_key\");\n"
+        "pipeline.output(\"out_key\", val + \" world\");";
     
     bool success = runtime.execute(script, &host);
     
@@ -76,7 +76,7 @@ TEST(QuickJSBackendTest, ArrayOutput) {
     QuickJSRuntime runtime;
     MockScriptHost host;
     
-    QString script = "pipeline.setOutput(\"out_key\", [\"a\", \"b\"]);";
+    QString script = "pipeline.output(\"out_key\", [\"a\", \"b\"]);";
     
     bool success = runtime.execute(script, &host);
     
@@ -93,7 +93,7 @@ TEST(QuickJSBackendTest, ObjectOutput) {
     QuickJSRuntime runtime;
     MockScriptHost host;
     
-    QString script = "pipeline.setOutput(\"out_key\", { \"x\": 1, \"y\": \"two\" });";
+    QString script = "pipeline.output(\"out_key\", { \"x\": 1, \"y\": \"two\" });";
     
     bool success = runtime.execute(script, &host);
     
@@ -105,11 +105,11 @@ TEST(QuickJSBackendTest, ObjectOutput) {
     EXPECT_EQ(map["y"].toString(), "two");
 }
 
-TEST(QuickJSBackendTest, PipelineSetError) {
+TEST(QuickJSBackendTest, PipelineError) {
     QuickJSRuntime runtime;
     MockScriptHost host;
 
-    QString script = "pipeline.setError(\"manual failure\");";
+    QString script = "pipeline.error(\"manual failure\");";
 
     bool success = runtime.execute(script, &host);
 
@@ -153,13 +153,13 @@ TEST(QuickJSBackendTest, SqliteIntegration) {
     
     // Test basic SELECT without table
     QString script = 
-        "var dbPath = pipeline.getTempDir() + '/test_integration.db';\n"
+        "var dbPath = pipeline.tempDir() + '/test_integration.db';\n"
         "sqlite.connect(dbPath);\n"
         "var res = sqlite.exec(\"SELECT 'test' as col\");\n"
         "if (Array.isArray(res) && res.length > 0 && res[0].col === 'test') {\n"
-        "  pipeline.setOutput(\"result\", \"success\");\n"
+        "  pipeline.output(\"result\", \"success\");\n"
         "} else {\n"
-        "  pipeline.setOutput(\"result\", \"failure\");\n"
+        "  pipeline.output(\"result\", \"failure\");\n"
         "  console.log(\"Actual result: \" + JSON.stringify(res));\n"
         "}";
     
@@ -177,13 +177,13 @@ TEST(QuickJSBackendTest, SqliteFullWorkflow) {
     QString tableName = "js_test_" + QString::number(QDateTime::currentMSecsSinceEpoch());
 
     QString script = 
-        "var dbPath = pipeline.getTempDir() + '/test_workflow.db';\n"
+        "var dbPath = pipeline.tempDir() + '/test_workflow.db';\n"
         "sqlite.connect(dbPath);\n"
         "sqlite.exec(\"CREATE TABLE " + tableName + " (val TEXT, num INTEGER)\");\n"
         "sqlite.exec(\"INSERT INTO " + tableName + " (val, num) VALUES (?, ?)\", ['hello', 42]);\n"
         "var res = sqlite.exec(\"SELECT val, num FROM " + tableName + " WHERE num = ?\", [42]);\n"
-        "pipeline.setOutput(\"val\", res[0].val);\n"
-        "pipeline.setOutput(\"num\", res[0].num);";
+        "pipeline.output(\"val\", res[0].val);\n"
+        "pipeline.output(\"num\", res[0].num);";
     
     bool success = runtime.execute(script, &host);
     

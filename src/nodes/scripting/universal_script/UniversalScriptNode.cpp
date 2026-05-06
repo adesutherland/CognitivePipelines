@@ -16,6 +16,34 @@
 #include "Logger.h"
 #include <memory>
 
+namespace {
+QStringList pinsFromJsonValue(const QJsonValue& value)
+{
+    QStringList pins;
+    if (value.isArray()) {
+        const QJsonArray arr = value.toArray();
+        for (const QJsonValue& item : arr) {
+            pins << item.toString();
+        }
+    } else if (value.isString()) {
+        QString text = value.toString();
+        text.replace(QLatin1Char('\n'), QLatin1Char(','));
+        text.replace(QLatin1Char(';'), QLatin1Char(','));
+        pins = text.split(QLatin1Char(','), Qt::SkipEmptyParts);
+    }
+    return pins;
+}
+
+QJsonArray pinsToJsonArray(const QStringList& pins)
+{
+    QJsonArray arr;
+    for (const QString& pin : pins) {
+        arr.append(pin);
+    }
+    return arr;
+}
+} // namespace
+
 UniversalScriptNode::UniversalScriptNode(QObject* parent)
     : QObject(parent)
 {
@@ -28,26 +56,12 @@ NodeDescriptor UniversalScriptNode::getDescriptor() const
     desc.name = QStringLiteral("Universal Script");
     desc.category = QStringLiteral("Scripting");
 
-    PinDefinition in;
-    in.direction = PinDirection::Input;
-    in.id = QString::fromLatin1(kInputId);
-    in.name = QStringLiteral("Input");
-    in.type = QStringLiteral("text");
-    desc.inputPins.insert(in.id, in);
-
-    PinDefinition out;
-    out.direction = PinDirection::Output;
-    out.id = QString::fromLatin1(kOutputId);
-    out.name = QStringLiteral("Output");
-    out.type = QStringLiteral("text");
-    desc.outputPins.insert(out.id, out);
-
-    PinDefinition status;
-    status.direction = PinDirection::Output;
-    status.id = QString::fromLatin1(kStatusId);
-    status.name = QStringLiteral("Status");
-    status.type = QStringLiteral("text");
-    desc.outputPins.insert(status.id, status);
+    for (const QString& pinId : m_inputPins) {
+        addPin(desc.inputPins, desc.inputPinOrder, PinDirection::Input, pinId);
+    }
+    for (const QString& pinId : m_outputPins) {
+        addPin(desc.outputPins, desc.outputPinOrder, PinDirection::Output, pinId);
+    }
 
     return desc;
 }
@@ -59,11 +73,15 @@ QWidget* UniversalScriptNode::createConfigurationWidget(QWidget* parent)
     widget->setEngineId(m_engineId);
     widget->setFanOut(m_enableFanOut);
     widget->setSyntaxHighlighting(m_enableSyntaxHighlighting);
+    widget->setInputPins(m_inputPins);
+    widget->setOutputPins(m_outputPins);
 
     connect(widget, &UniversalScriptPropertiesWidget::scriptChanged, this, &UniversalScriptNode::onScriptChanged);
     connect(widget, &UniversalScriptPropertiesWidget::engineChanged, this, &UniversalScriptNode::onEngineChanged);
     connect(widget, &UniversalScriptPropertiesWidget::fanOutChanged, this, &UniversalScriptNode::onFanOutChanged);
     connect(widget, &UniversalScriptPropertiesWidget::syntaxHighlightingChanged, this, &UniversalScriptNode::onSyntaxHighlightingChanged);
+    connect(widget, &UniversalScriptPropertiesWidget::inputPinsChanged, this, &UniversalScriptNode::onInputPinsChanged);
+    connect(widget, &UniversalScriptPropertiesWidget::outputPinsChanged, this, &UniversalScriptNode::onOutputPinsChanged);
 
     return widget;
 }
@@ -123,6 +141,17 @@ TokenList UniversalScriptNode::execute(const TokenList& incomingTokens)
 
     if (!output.contains(statusKey)) {
         output.insert(statusKey, success ? QStringLiteral("OK") : QStringLiteral("FAIL"));
+    }
+    if (!output.contains(QStringLiteral("text"))) {
+        for (const QString& pinId : m_outputPins) {
+            if (pinId.startsWith(QLatin1Char('_')) || pinId == statusKey) {
+                continue;
+            }
+            if (output.contains(pinId)) {
+                output.insert(QStringLiteral("text"), output.value(pinId));
+                break;
+            }
+        }
     }
 
     // Step 5: Inject summary into logs for visibility in the Stage Output panel
@@ -185,6 +214,8 @@ QJsonObject UniversalScriptNode::saveState() const
     obj.insert(QStringLiteral("engineId"), m_engineId);
     obj.insert(QStringLiteral("enableFanOut"), m_enableFanOut);
     obj.insert(QStringLiteral("enableSyntaxHighlighting"), m_enableSyntaxHighlighting);
+    obj.insert(QStringLiteral("inputPins"), pinsToJsonArray(m_inputPins));
+    obj.insert(QStringLiteral("outputPins"), pinsToJsonArray(m_outputPins));
     return obj;
 }
 
@@ -202,6 +233,16 @@ void UniversalScriptNode::loadState(const QJsonObject& data)
     if (data.contains(QStringLiteral("enableSyntaxHighlighting"))) {
         m_enableSyntaxHighlighting = data.value(QStringLiteral("enableSyntaxHighlighting")).toBool(true);
     }
+    if (data.contains(QStringLiteral("inputPins"))) {
+        m_inputPins = sanitizePinList(pinsFromJsonValue(data.value(QStringLiteral("inputPins"))),
+                                      QStringList{QString::fromLatin1(kInputId)});
+        emit inputPinsChanged();
+    }
+    if (data.contains(QStringLiteral("outputPins"))) {
+        m_outputPins = sanitizePinList(pinsFromJsonValue(data.value(QStringLiteral("outputPins"))),
+                                       QStringList{QString::fromLatin1(kOutputId), QString::fromLatin1(kStatusId)});
+        emit outputPinsChanged();
+    }
     
     if (m_engineId.isEmpty()) {
         m_engineId = QStringLiteral("quickjs");
@@ -210,6 +251,14 @@ void UniversalScriptNode::loadState(const QJsonObject& data)
     if (!m_scriptCode.trimmed().isEmpty() && UniversalScriptTemplates::isManagedTemplate(m_scriptCode)) {
         m_scriptCode = UniversalScriptTemplates::forEngine(m_engineId);
     }
+}
+
+bool UniversalScriptNode::isReady(const QVariantMap& inputs, int incomingConnectionsCount) const
+{
+    if (incomingConnectionsCount == 0) {
+        return true;
+    }
+    return inputs.size() >= incomingConnectionsCount;
 }
 
 void UniversalScriptNode::onScriptChanged(const QString& script)
@@ -233,4 +282,57 @@ void UniversalScriptNode::onFanOutChanged(bool enabled)
 void UniversalScriptNode::onSyntaxHighlightingChanged(bool enabled)
 {
     m_enableSyntaxHighlighting = enabled;
+}
+
+void UniversalScriptNode::onInputPinsChanged(const QStringList& pins)
+{
+    const QStringList next = sanitizePinList(pins, QStringList{QString::fromLatin1(kInputId)});
+    if (m_inputPins == next) {
+        return;
+    }
+    m_inputPins = next;
+    emit inputPinsChanged();
+}
+
+void UniversalScriptNode::onOutputPinsChanged(const QStringList& pins)
+{
+    const QStringList next = sanitizePinList(pins, QStringList{QString::fromLatin1(kOutputId), QString::fromLatin1(kStatusId)});
+    if (m_outputPins == next) {
+        return;
+    }
+    m_outputPins = next;
+    emit outputPinsChanged();
+}
+
+QStringList UniversalScriptNode::sanitizePinList(QStringList pins, const QStringList& fallback)
+{
+    QStringList cleaned;
+    for (QString pin : pins) {
+        pin = pin.trimmed();
+        if (pin.isEmpty()) {
+            continue;
+        }
+        pin.replace(QLatin1Char(' '), QLatin1Char('_'));
+        if (!cleaned.contains(pin)) {
+            cleaned << pin;
+        }
+    }
+    return cleaned.isEmpty() ? fallback : cleaned;
+}
+
+void UniversalScriptNode::addPin(QMap<QString, PinDefinition>& pins,
+                                 QStringList& order,
+                                 PinDirection direction,
+                                 const QString& id)
+{
+    PinDefinition pin;
+    pin.direction = direction;
+    pin.id = id;
+    pin.name = id == QString::fromLatin1(kInputId) ? QStringLiteral("Input")
+             : id == QString::fromLatin1(kOutputId) ? QStringLiteral("Output")
+             : id == QString::fromLatin1(kStatusId) ? QStringLiteral("Status")
+             : id;
+    pin.type = QStringLiteral("text");
+    pins.insert(pin.id, pin);
+    order << pin.id;
 }

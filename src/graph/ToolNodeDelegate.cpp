@@ -62,6 +62,9 @@ void ToolNodeDelegate::setToolNode(std::shared_ptr<IToolNode> node)
     if (_capsConnection) {
         QObject::disconnect(_capsConnection);
     }
+    if (_outputPinsConnection) {
+        QObject::disconnect(_outputPinsConnection);
+    }
 
     _node = std::move(node);
     _descriptorCached = false;
@@ -88,6 +91,10 @@ void ToolNodeDelegate::setToolNode(std::shared_ptr<IToolNode> node)
         const int sigIndex = obj->metaObject()->indexOfSignal(QMetaObject::normalizedSignature("inputPinsChanged()"));
         if (sigIndex != -1) {
             _capsConnection = QObject::connect(obj, SIGNAL(inputPinsChanged()), this, SLOT(onInputPinsChanged()));
+        }
+        const int outSigIndex = obj->metaObject()->indexOfSignal(QMetaObject::normalizedSignature("outputPinsChanged()"));
+        if (outSigIndex != -1) {
+            _outputPinsConnection = QObject::connect(obj, SIGNAL(outputPinsChanged()), this, SLOT(onOutputPinsChanged()));
         }
     }
 
@@ -272,6 +279,82 @@ void ToolNodeDelegate::onInputPinsChanged()
     for (const auto& pinId : oldOrder) {
         if (!hasId(newOrder, pinId)) {
             _inputs.remove(pinId);
+        }
+    }
+
+    if (!deletedIndices.isEmpty()) {
+        emit portsDeleted();
+    }
+    if (!insertedIndices.isEmpty()) {
+        emit portsInserted();
+    }
+
+    emit embeddedWidgetSizeUpdated();
+}
+
+void ToolNodeDelegate::onOutputPinsChanged()
+{
+    ensureDescriptorCached();
+
+    if (!_node) {
+        return;
+    }
+
+    const NodeDescriptor newDescriptor = _node->getDescriptor();
+    const auto buildOrder = [](const NodeDescriptor& desc) {
+        std::vector<QString> order;
+        const auto appendIfPresent = [&order, &desc](const QString& pinId) {
+            if (!desc.outputPins.contains(pinId)) {
+                return;
+            }
+            if (std::find(order.begin(), order.end(), pinId) != order.end()) {
+                return;
+            }
+            order.push_back(pinId);
+        };
+
+        for (const QString& pinId : desc.outputPinOrder) {
+            appendIfPresent(pinId);
+        }
+        for (auto it = desc.outputPins.constBegin(); it != desc.outputPins.constEnd(); ++it) {
+            appendIfPresent(it.key());
+        }
+        return order;
+    };
+
+    const auto oldOrder = _outputOrder;
+    const auto newOrder = buildOrder(newDescriptor);
+
+    const auto hasId = [](const std::vector<QString>& order, const QString& id) {
+        return std::find(order.begin(), order.end(), id) != order.end();
+    };
+
+    QVector<PortIndex> deletedIndices;
+    for (size_t i = 0; i < oldOrder.size(); ++i) {
+        if (!hasId(newOrder, oldOrder[i])) {
+            deletedIndices.push_back(static_cast<PortIndex>(i));
+        }
+    }
+
+    QVector<PortIndex> insertedIndices;
+    for (size_t i = 0; i < newOrder.size(); ++i) {
+        if (!hasId(oldOrder, newOrder[i])) {
+            insertedIndices.push_back(static_cast<PortIndex>(i));
+        }
+    }
+
+    for (auto it = deletedIndices.crbegin(); it != deletedIndices.crend(); ++it) {
+        emit portsAboutToBeDeleted(PortType::Out, *it, *it);
+    }
+    for (const PortIndex idx : insertedIndices) {
+        emit portsAboutToBeInserted(PortType::Out, idx, idx);
+    }
+
+    rebuildCachedDescriptor(newDescriptor);
+
+    for (const auto& pinId : oldOrder) {
+        if (!hasId(newOrder, pinId)) {
+            _outputs.remove(pinId);
         }
     }
 
