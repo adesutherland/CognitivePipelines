@@ -144,7 +144,7 @@
     },
     {
       "id": "gemini-cost-optimised",
-      "target": "gemini-3-flash-preview",
+      "target": "gemini-3.5-flash",
       "backend": "google",
       "name": "Gemini Flash (Cost Optimised)"
     },
@@ -281,8 +281,8 @@
       }
     },
     {
-      "id": "google-gemini-2-to-3",
-      "pattern": "^gemini-(2(?:\\.0)?|2\\.5|3)-(pro|pro-image|flash|flash-lite)(?:$|[-.].*)",
+      "id": "google-gemini-current-chat",
+      "pattern": "^gemini-(2\\.5|3(?:\\.5)?)-(pro|pro-image|flash|flash-lite)(?:$|[-.].*)",
       "backend": "google",
       "driver": "google-generate-content",
       "role_mode": "system_instruction",

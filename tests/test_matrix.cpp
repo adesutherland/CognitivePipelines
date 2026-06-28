@@ -46,8 +46,8 @@ static const QVector<ProbeRow> kHighValueProbes = {
     { QStringLiteral("openai"), QStringLiteral("gpt-5.2-pro"), 200 },       // Completion/Base probe
     { QStringLiteral("openai"), QStringLiteral("o1-mini"), 200 },           // Reasoning
     // Google
-    { QStringLiteral("google"), QStringLiteral("gemini-2.0-flash"), 200 },  // New
-    { QStringLiteral("google"), QStringLiteral("gemini-3-flash-preview"), 200 }, // Next-Gen probe
+    { QStringLiteral("google"), QStringLiteral("gemini-3.5-flash"), 200 },  // Current Flash
+    { QStringLiteral("google"), QStringLiteral("gemini-3-flash-preview"), 200 }, // Preview probe
     // Anthropic
     { QStringLiteral("anthropic"), QStringLiteral("claude-haiku-4-5-20251001"), 200 },
     { QStringLiteral("anthropic"), QStringLiteral("claude-sonnet-4-5-20250929"), 200 },

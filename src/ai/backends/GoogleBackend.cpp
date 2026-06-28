@@ -97,6 +97,7 @@ std::vector<float> vectorFromJsonArray(const QJsonArray& values)
 
 GoogleBackend::GoogleBackend() {
     m_cachedModels = {
+        QStringLiteral("gemini-3.5-flash"),
         QStringLiteral("gemini-3-pro-preview"),
         QStringLiteral("gemini-3-pro-image-preview"),
         QStringLiteral("gemini-2.5-pro"),

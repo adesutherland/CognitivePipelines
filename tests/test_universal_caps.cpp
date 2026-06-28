@@ -37,6 +37,7 @@ private slots:
     void testVisionPinToggle();
     void testReasoningConstraint();
     void testExcludeNonChatVariant();
+    void testCurrentGoogleFlashModel();
 };
 
 void TestUniversalCaps::initTestCase()
@@ -91,6 +92,20 @@ void TestUniversalCaps::testExcludeNonChatVariant()
 
     const auto capsRealtime = ModelCapsRegistry::instance().resolve(QStringLiteral("gpt-4o-realtime-preview-2025-06-03"));
     QVERIFY2(!capsRealtime.has_value(), "gpt-4o-realtime-* should be excluded from chat UI by rules");
+}
+
+void TestUniversalCaps::testCurrentGoogleFlashModel()
+{
+    const auto caps = ModelCapsRegistry::instance().resolve(QStringLiteral("gemini-3.5-flash"),
+                                                            QStringLiteral("google"));
+    QVERIFY2(caps.has_value(), "gemini-3.5-flash should resolve for Google");
+    QCOMPARE(caps->roleMode, ModelCapsTypes::RoleMode::SystemInstruction);
+    QVERIFY2(caps->hasCapability(ModelCapsTypes::Capability::Chat), "Gemini 3.5 Flash should be a chat model");
+    QVERIFY2(caps->hasCapability(ModelCapsTypes::Capability::Vision), "Gemini 3.5 Flash should be vision-capable");
+
+    QCOMPARE(ModelCapsRegistry::instance().resolveAlias(QStringLiteral("gemini-cost-optimised"),
+                                                        QStringLiteral("google")),
+             QStringLiteral("gemini-3.5-flash"));
 }
 
 TEST(UniversalCapsTests, QtHarness)
