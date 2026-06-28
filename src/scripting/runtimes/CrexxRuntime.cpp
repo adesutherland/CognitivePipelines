@@ -12,6 +12,16 @@ extern "C" {
 #include <crexxsaa.h>
 }
 
+#ifndef CP_CREXX_MIN_CREXXSAA_ABI_VERSION
+#define CP_CREXX_MIN_CREXXSAA_ABI_VERSION 3
+#endif
+
+#ifndef CREXXSAA_ABI_VERSION
+#error "CREXX support requires a crexxsaa.h that defines CREXXSAA_ABI_VERSION"
+#elif CREXXSAA_ABI_VERSION < CP_CREXX_MIN_CREXXSAA_ABI_VERSION
+#error "CREXX support requires CREXXSAA_ABI_VERSION 3 or newer"
+#endif
+
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>

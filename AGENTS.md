@@ -29,6 +29,7 @@ This file is the source of truth for repository-specific agent guidance in `Cogn
 - Additional dependencies:
   - QtNodes via `FetchContent` (`paceholder/nodeeditor`, tag `3.0.12`)
   - bundled QuickJS under `third_party/quickjs`
+  - optional CREXX runtime artifacts with `CREXXSAA_ABI_VERSION >= 3` / RXBIN format 006 when CREXX scripting is enabled
   - Boost headers
   - `cpr`
   - OpenSSL
@@ -48,6 +49,8 @@ brew install python
 ```
 
 The Python script node defaults to `python3 -u`, so `/usr/bin/python3` is usually enough for local runs.
+
+When syncing a local CREXX checkout, rebuild CREXX first so `libcrexxsaa`, `rxc`, `rxas`, and all bundled `.rxbin` files come from the same ABI generation before rebuilding this project.
 
 ## CLion Guidance
 

@@ -54,7 +54,7 @@ Definitive dependencies come from [`CMakeLists.txt`](./CMakeLists.txt) and the s
   - `DBus`
 - QtNodes via CMake `FetchContent` (`paceholder/nodeeditor`, tag `3.0.12`)
 - Bundled QuickJS sources under `third_party/quickjs`
-- Optional CREXX scripting support through `crexxsaa.h`, `libcrexxsaa`, `rxc`, `rxas`, and `library.rxbin`. CMake searches `CREXX_ROOT`, `$CREXX_ROOT`, a sibling `../CREXX` checkout, and installed locations. If any runtime artifact is missing, the `crexx` engine is simply not registered.
+- Optional CREXX scripting support through `crexxsaa.h`, `libcrexxsaa`, `rxc`, `rxas`, and `library.rxbin`. CMake searches `CREXX_ROOT`, `$CREXX_ROOT`, a sibling `../CREXX` checkout, and installed locations. CREXXSAA ABI 3 or newer is required; if any compatible runtime artifact is missing, the `crexx` engine is simply not registered.
 - Optional DSLSH syntax highlighting. CMake searches `DSLSH_ROOT`, `$DSLSH_ROOT`, a sibling `../DSL-Syntax-Highlighter` checkout, and installed locations. If unavailable, the Universal Script editor quietly falls back to plain text. External DSLSH parser commands are configured under `Settings -> Syntax Highlighting Options...`; blank entries use the built-in fallback rules, and CREXX `rxc` commands automatically run in `--syntaxhighlight` mode.
 - Boost headers
 - `cpr`
@@ -106,13 +106,15 @@ cmake -S . -B build \
 cmake --build build --target CognitivePipelines -j 8
 ```
 
-CREXX is enabled automatically when the runtime artifacts are available. For CI or clean machines, point `CREXX_ROOT` at a prepared CREXX checkout/build:
+CREXX is enabled automatically when compatible runtime artifacts are available. For CI or clean machines, point `CREXX_ROOT` at a prepared CREXX checkout/build:
 
 ```bash
 cmake -S . -B build -DCREXX_ROOT=/path/to/CREXX
 ```
 
 `-DCP_FETCH_CREXX_FROM_GITHUB=ON` can fetch the CREXX source from GitHub `master`, but headers alone are not enough to enable execution; `libcrexxsaa`, `rxc`, `rxas`, and `library.rxbin` must also be present.
+
+Current CREXX integration expects `CREXXSAA_ABI_VERSION >= 3`, which corresponds to RXBIN format 006 and descriptor-based dynamic callable lookup. After updating CREXX locally, rebuild its runtime artifacts before rebuilding this project so bundled `.rxbin` files, `rxc`, `rxas`, and `libcrexxsaa` stay in sync.
 
 Syntax highlighting can also be built from a sibling or prepared checkout:
 

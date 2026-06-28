@@ -273,6 +273,7 @@ endif()
 option(CP_ENABLE_CREXX "Enable CREXX Universal Script support when a usable CREXX runtime is found" ON)
 option(CP_FETCH_CREXX_FROM_GITHUB "Fetch CREXX source from GitHub master when no local checkout is present; runtime artifacts are still required" OFF)
 set(CREXX_ROOT "" CACHE PATH "Path to a CREXX checkout or installation")
+set(CP_MIN_CREXXSAA_ABI_VERSION 3)
 
 set(CP_HAS_CREXX OFF)
 set(CP_CREXX_RUNTIME_SOURCES "")
@@ -344,11 +345,32 @@ if(CP_ENABLE_CREXX)
         NAMES library.rxbin
         HINTS ${_cp_crexx_runtime_hints})
 
+    set(CP_CREXXSAA_ABI_VERSION_VALUE 0)
+    if(CP_CREXX_INCLUDE_DIR)
+        set(_cp_crexxsaa_header "${CP_CREXX_INCLUDE_DIR}/crexxsaa.h")
+        if(EXISTS "${_cp_crexxsaa_header}")
+            file(STRINGS "${_cp_crexxsaa_header}" _cp_crexxsaa_abi_lines
+                REGEX "^[ \t]*#define[ \t]+CREXXSAA_ABI_VERSION[ \t]+[0-9]+")
+            foreach(_cp_crexxsaa_abi_line IN LISTS _cp_crexxsaa_abi_lines)
+                if(_cp_crexxsaa_abi_line MATCHES "CREXXSAA_ABI_VERSION[ \t]+([0-9]+)")
+                    set(CP_CREXXSAA_ABI_VERSION_VALUE "${CMAKE_MATCH_1}")
+                    break()
+                endif()
+            endforeach()
+        endif()
+    endif()
+
+    set(CP_CREXX_ABI_COMPATIBLE OFF)
+    if(CP_CREXXSAA_ABI_VERSION_VALUE GREATER_EQUAL CP_MIN_CREXXSAA_ABI_VERSION)
+        set(CP_CREXX_ABI_COMPATIBLE ON)
+    endif()
+
     if(CP_CREXX_INCLUDE_DIR
             AND CP_CREXX_LIBRARY_PATH
             AND CP_CREXX_RXC_PATH
             AND CP_CREXX_RXAS_PATH
-            AND CP_CREXX_LIBRARY_RXBIN)
+            AND CP_CREXX_LIBRARY_RXBIN
+            AND CP_CREXX_ABI_COMPATIBLE)
         set(CP_HAS_CREXX ON)
         get_filename_component(CP_CREXX_RUNTIME_DIR "${CP_CREXX_LIBRARY_RXBIN}" DIRECTORY)
         get_filename_component(CP_CREXX_LIBRARY_NAME "${CP_CREXX_LIBRARY_PATH}" NAME)
@@ -369,9 +391,11 @@ if(CP_ENABLE_CREXX)
         message(STATUS "  CREXX include: ${CP_CREXX_INCLUDE_DIR}")
         message(STATUS "  CREXX library: ${CP_CREXX_LIBRARY_PATH}")
         message(STATUS "  CREXX runtime: ${CP_CREXX_RUNTIME_DIR}")
+        message(STATUS "  CREXXSAA ABI: ${CP_CREXXSAA_ABI_VERSION_VALUE}")
     else()
-        message(STATUS "CREXX scripting disabled; missing one or more runtime artifacts")
+        message(STATUS "CREXX scripting disabled; missing one or more compatible runtime artifacts")
         message(STATUS "  crexxsaa.h: ${CP_CREXX_INCLUDE_DIR}")
+        message(STATUS "  CREXXSAA ABI: ${CP_CREXXSAA_ABI_VERSION_VALUE} (minimum ${CP_MIN_CREXXSAA_ABI_VERSION})")
         message(STATUS "  libcrexxsaa: ${CP_CREXX_LIBRARY_PATH}")
         message(STATUS "  rxc: ${CP_CREXX_RXC_PATH}")
         message(STATUS "  rxas: ${CP_CREXX_RXAS_PATH}")
@@ -403,11 +427,17 @@ function(cp_configure_crexx_target target_name)
     target_include_directories(${target_name} PRIVATE ${CP_CREXX_INCLUDE_DIR})
     target_compile_definitions(${target_name} PRIVATE
         CP_HAS_CREXX=1
+        CP_CREXX_MIN_CREXXSAA_ABI_VERSION=${CP_MIN_CREXXSAA_ABI_VERSION}
         CP_CREXX_RXC_PATH="${CP_CREXX_RXC_PATH_DEFINE}"
         CP_CREXX_RXAS_PATH="${CP_CREXX_RXAS_PATH_DEFINE}"
         CP_CREXX_LIBRARY_RXBIN="${CP_CREXX_LIBRARY_RXBIN_DEFINE}"
         CP_CREXX_RUNTIME_DIR="${CP_CREXX_RUNTIME_DIR_DEFINE}")
 
+    set_property(TARGET ${target_name} APPEND PROPERTY LINK_DEPENDS
+        "${CP_CREXX_LIBRARY_PATH}"
+        "${CP_CREXX_RXC_PATH}"
+        "${CP_CREXX_RXAS_PATH}"
+        ${CP_CREXX_RXBIN_FILES})
     set_property(TARGET ${target_name} APPEND PROPERTY BUILD_RPATH "${CP_CREXX_LIBRARY_DIR}")
     if(APPLE)
         set_property(TARGET ${target_name} APPEND PROPERTY INSTALL_RPATH "@executable_path/../Frameworks")
